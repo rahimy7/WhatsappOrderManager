@@ -59,6 +59,7 @@ export interface IStorage {
     longitude: string;
     address: string;
   }): Promise<Customer>;
+  updateCustomerName(id: number, name: string): Promise<Customer | undefined>;
 
   // Products
   getProduct(id: number): Promise<Product | undefined>;
@@ -554,6 +555,22 @@ export class MemStorage implements IStorage {
       lastContact: new Date()
     };
 
+    this.customers.set(id, updatedCustomer);
+    return updatedCustomer;
+  }
+
+  async updateCustomerName(id: number, name: string): Promise<Customer | undefined> {
+    const customer = this.customers.get(id);
+    if (!customer) {
+      return undefined;
+    }
+    
+    const updatedCustomer: Customer = {
+      ...customer,
+      name: name,
+      lastContact: new Date()
+    };
+    
     this.customers.set(id, updatedCustomer);
     return updatedCustomer;
   }
@@ -1102,6 +1119,14 @@ export class DatabaseStorage implements IStorage {
       lastContact: new Date()
     }).where(eq(customers.id, id)).returning();
     return customer;
+  }
+
+  async updateCustomerName(id: number, name: string): Promise<Customer | undefined> {
+    const [customer] = await db.update(customers).set({
+      name: name,
+      lastContact: new Date()
+    }).where(eq(customers.id, id)).returning();
+    return customer || undefined;
   }
 
   // Products

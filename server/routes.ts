@@ -1244,7 +1244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Store order in customer registration flow for data collection
       await storage.createRegistrationFlow({
         phoneNumber: phoneNumber,
-        currentStep: 'collect_delivery_data',
+        currentStep: 'collect_customer_name',
         collectedData: JSON.stringify({
           orderId: order.id,
           orderNumber: order.orderNumber,
@@ -1259,7 +1259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
       });
 
-      // Send order confirmation and request delivery data
+      // Send order confirmation and request customer name
       const confirmationMessage = 
         "✅ *¡Pedido Generado!*\n\n" +
         `🆔 Orden: ${order.orderNumber}\n` +
@@ -1267,10 +1267,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `💰 Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
         (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
         `*💳 Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
-        "📍 *Datos de Entrega*\n" +
-        "Para continuar con tu pedido, necesitamos algunos datos:\n\n" +
-        "Por favor comparte tu *dirección completa* de entrega:\n" +
-        "_(Ejemplo: Calle 123, Colonia Centro, Ciudad, CP 12345)_";
+        "👤 *Datos del Cliente*\n" +
+        "Para continuar con tu pedido, necesitamos tus datos:\n\n" +
+        "Por favor comparte tu *nombre completo*:\n" +
+        "_(Ejemplo: Juan Pérez López)_";
 
       await sendWhatsAppMessage(phoneNumber, confirmationMessage);
 
@@ -1898,6 +1898,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
             registrationCompleted: true 
           })
         });
+      }
+      
+      else if (registrationFlow.currentStep === 'collect_customer_name') {
+        // Validate customer name
+        const customerName = messageText.trim();
+        if (customerName.length < 3) {
+          await sendWhatsAppMessage(phoneNumber, 
+            "Por favor, proporciona tu nombre completo.\n\n" +
+            "Ejemplo: Juan Pérez López"
+          );
+          return;
+        }
+        
+        // Update customer in database with the complete name
+        const customer = await storage.getCustomerByPhone(phoneNumber);
+        if (customer) {
+          // Update existing customer with full name
+          const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
+            address: customer.address || "",
+            latitude: customer.latitude || "0",
+            longitude: customer.longitude || "0"
+          });
+          
+          // Update customer name in the database (we need to add this method)
+          try {
+            await storage.updateCustomerName(customer.id, customerName);
+          } catch (error) {
+            // If method doesn't exist, we'll log it
+            console.log("updateCustomerName method needs to be implemented");
+          }
+        }
+        
+        // Update flow to next step
+        const updatedData = { ...data, customerName: customerName };
+        await storage.updateRegistrationFlow(phoneNumber, {
+          currentStep: 'collect_delivery_data',
+          collectedData: JSON.stringify(updatedData)
+        });
+        
+        // Send delivery address request
+        const addressMessage = 
+          `✅ *Nombre registrado: ${customerName}*\n\n` +
+          "📍 *Dirección de Entrega*\n" +
+          "Ahora necesitamos tu dirección completa para la entrega:\n\n" +
+          "Por favor comparte tu *dirección completa*:\n" +
+          "_(Incluye calle, número, colonia, ciudad y código postal)_\n\n" +
+          "Ejemplo: Av. Reforma 123, Col. Centro, CDMX, CP 06000";
+        
+        await sendWhatsAppMessage(phoneNumber, addressMessage);
       }
       
       else if (registrationFlow.currentStep === 'collect_delivery_data') {
