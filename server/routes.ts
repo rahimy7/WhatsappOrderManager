@@ -496,10 +496,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             conversationId: conversation.id,
             content: messageText,
             senderId: null, // Customer message
-            isFromCustomer: true,
+            senderType: "customer",
             whatsappMessageId: messageId,
             messageType: messageType
           });
+
+          // Process customer message and respond
+          await processCustomerMessage(customer, conversation, message, from);
 
           await storage.addWhatsAppLog({
             type: 'info',
@@ -530,6 +533,428 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: 'Error procesando mensaje de WhatsApp',
         data: { error: error.message, value }
       });
+    }
+  }
+
+  // Function to process customer messages and respond with menu/orders
+  async function processCustomerMessage(customer: any, conversation: any, message: any, from: string) {
+    const messageType = message.type;
+    
+    if (messageType === 'text') {
+      const text = message.text.body.toLowerCase().trim();
+      
+      if (text.includes('hola') || text.includes('menu') || text.includes('catalogo') || text.includes('productos')) {
+        await sendProductMenu(from);
+      } else if (text.includes('pedido') || text.includes('order') || text.includes('estado')) {
+        await sendOrderStatus(customer, from);
+      } else if (text.includes('ubicacion') || text.includes('location') || text.includes('direccion')) {
+        await sendLocationRequest(from);
+      } else if (text.includes('ayuda') || text.includes('help')) {
+        await sendHelpMenu(from);
+      } else {
+        await sendWelcomeMessage(from);
+      }
+    } else if (messageType === 'location') {
+      await handleLocationMessage(customer, message.location, from);
+    } else if (messageType === 'interactive') {
+      await handleInteractiveMessage(customer, conversation, message.interactive, from);
+    }
+  }
+
+  async function sendProductMenu(phoneNumber: string) {
+    const products = await storage.getAllProducts();
+    const productItems = products.filter(p => p.category === 'product').slice(0, 5);
+    const serviceItems = products.filter(p => p.category === 'service').slice(0, 5);
+
+    const menuMessage = {
+      messaging_product: "whatsapp",
+      to: phoneNumber,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        header: {
+          type: "text",
+          text: "🛍️ Catálogo de Productos"
+        },
+        body: {
+          text: "Selecciona una categoría para ver nuestros productos disponibles:"
+        },
+        footer: {
+          text: "Precio incluye entrega basada en tu ubicación"
+        },
+        action: {
+          button: "Ver Productos",
+          sections: [
+            {
+              title: "🔧 Productos",
+              rows: productItems.map(product => ({
+                id: `product_${product.id}`,
+                title: product.name.substring(0, 24),
+                description: `$${parseFloat(product.price).toLocaleString('es-MX')}`
+              }))
+            },
+            {
+              title: "⚙️ Servicios",
+              rows: serviceItems.map(service => ({
+                id: `service_${service.id}`,
+                title: service.name.substring(0, 24),
+                description: `Desde $${parseFloat(service.price).toLocaleString('es-MX')}`
+              }))
+            },
+            {
+              title: "📍 Ubicación",
+              rows: [{
+                id: "request_location",
+                title: "Compartir Ubicación",
+                description: "Para calcular costo de entrega"
+              }]
+            }
+          ]
+        }
+      }
+    };
+
+    await sendWhatsAppInteractiveMessage(phoneNumber, menuMessage);
+  }
+
+  async function sendLocationRequest(phoneNumber: string) {
+    const locationMessage = 
+      "📍 *Necesitamos tu ubicación*\n\n" +
+      "Para calcular el costo de entrega exacto, por favor:\n\n" +
+      "1️⃣ Usa el botón de ubicación de WhatsApp\n" +
+      "2️⃣ O escribe tu dirección completa\n\n" +
+      "Esto nos ayuda a darte el precio más preciso.";
+
+    await sendWhatsAppMessage(phoneNumber, locationMessage);
+  }
+
+  async function handleLocationMessage(customer: any, location: any, phoneNumber: string) {
+    // Update customer with location data
+    const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
+      latitude: location.latitude.toString(),
+      longitude: location.longitude.toString(), 
+      address: location.name || location.address || `${location.latitude}, ${location.longitude}`
+    });
+
+    // Calculate delivery cost for sample
+    const deliveryInfo = await storage.calculateDeliveryCost(
+      location.latitude.toString(),
+      location.longitude.toString(),
+      "product"
+    );
+
+    const confirmMessage = 
+      "📍 *¡Ubicación guardada!*\n\n" +
+      `📍 ${updatedCustomer.address}\n` +
+      `🚛 Distancia: ${deliveryInfo.distance} km\n` +
+      `💰 Entrega desde: $${deliveryInfo.cost}\n` +
+      `⏱️ Tiempo estimado: ${deliveryInfo.estimatedTime} min\n\n` +
+      "Ahora puedes seleccionar productos para generar tu pedido.";
+
+    await sendWhatsAppMessage(phoneNumber, confirmMessage);
+    
+    // Send product menu after location confirmation
+    setTimeout(() => sendProductMenu(phoneNumber), 2000);
+  }
+
+  async function handleInteractiveMessage(customer: any, conversation: any, interactive: any, phoneNumber: string) {
+    if (interactive.type === 'list_reply') {
+      const selectedId = interactive.list_reply.id;
+      
+      if (selectedId.startsWith('product_') || selectedId.startsWith('service_')) {
+        const productId = parseInt(selectedId.split('_')[1]);
+        await handleProductSelection(customer, conversation, productId, phoneNumber);
+      } else if (selectedId === 'request_location') {
+        await sendLocationRequest(phoneNumber);
+      }
+    } else if (interactive.type === 'button_reply') {
+      const buttonId = interactive.button_reply.id;
+      
+      if (buttonId.startsWith('quantity_')) {
+        const [, productId, quantity] = buttonId.split('_');
+        await handleQuantitySelection(customer, parseInt(productId), parseInt(quantity), phoneNumber);
+      } else if (buttonId === 'confirm_order') {
+        await handleOrderConfirmation(customer, conversation, phoneNumber);
+      } else if (buttonId === 'cancel_order') {
+        await sendWelcomeMessage(phoneNumber);
+      }
+    }
+  }
+
+  async function handleProductSelection(customer: any, conversation: any, productId: number, phoneNumber: string) {
+    const product = await storage.getProduct(productId);
+    if (!product) return;
+
+    // Check if customer has location for delivery calculation
+    if (!customer.latitude || !customer.longitude) {
+      await sendWhatsAppMessage(phoneNumber, 
+        `📦 *${product.name}*\n\n` +
+        `💰 Precio base: $${parseFloat(product.price).toLocaleString('es-MX')}\n\n` +
+        "⚠️ *Necesitamos tu ubicación* para calcular el costo de entrega.\n\n" +
+        "Por favor comparte tu ubicación primero."
+      );
+      
+      setTimeout(() => sendLocationRequest(phoneNumber), 1000);
+      return;
+    }
+
+    // Calculate pricing with location
+    let pricingInfo;
+    if (product.category === 'service') {
+      pricingInfo = await storage.calculateServicePrice(
+        productId, 
+        2, // Default complexity
+        [],
+        customer.latitude,
+        customer.longitude
+      );
+    } else {
+      const deliveryInfo = await storage.calculateDeliveryCost(
+        customer.latitude,
+        customer.longitude,
+        product.category
+      );
+      pricingInfo = {
+        basePrice: parseFloat(product.price),
+        deliveryCost: deliveryInfo.cost,
+        totalPrice: parseFloat(product.price) + deliveryInfo.cost,
+        deliveryDistance: deliveryInfo.distance,
+        estimatedTime: deliveryInfo.estimatedTime
+      };
+    }
+
+    const quantityMessage = {
+      messaging_product: "whatsapp",
+      to: phoneNumber,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        header: {
+          type: "text",
+          text: `📦 ${product.name}`
+        },
+        body: {
+          text: 
+            `💰 Precio: $${pricingInfo.basePrice.toLocaleString('es-MX')}\n` +
+            `🚛 Entrega: $${pricingInfo.deliveryCost.toLocaleString('es-MX')}\n` +
+            `📍 Distancia: ${pricingInfo.deliveryDistance} km\n` +
+            `⏱️ Tiempo: ${pricingInfo.estimatedTime || 30} min\n\n` +
+            `*Total: $${pricingInfo.totalPrice.toLocaleString('es-MX')}*\n\n` +
+            "¿Cuántas unidades deseas?"
+        },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: {
+                id: `quantity_${productId}_1`,
+                title: "1 unidad"
+              }
+            },
+            {
+              type: "reply", 
+              reply: {
+                id: `quantity_${productId}_2`,
+                title: "2 unidades"
+              }
+            },
+            {
+              type: "reply",
+              reply: {
+                id: `quantity_${productId}_3`,
+                title: "3+ unidades"
+              }
+            }
+          ]
+        }
+      }
+    };
+
+    await sendWhatsAppInteractiveMessage(phoneNumber, quantityMessage);
+  }
+
+  async function handleQuantitySelection(customer: any, productId: number, quantity: number, phoneNumber: string) {
+    const product = await storage.getProduct(productId);
+    if (!product) return;
+
+    // Calculate final pricing
+    let pricingInfo;
+    if (product.category === 'service') {
+      pricingInfo = await storage.calculateServicePrice(
+        productId,
+        2, // Default complexity
+        [],
+        customer.latitude,
+        customer.longitude
+      );
+    } else {
+      const deliveryInfo = await storage.calculateDeliveryCost(
+        customer.latitude,
+        customer.longitude,
+        product.category
+      );
+      pricingInfo = {
+        basePrice: parseFloat(product.price) * quantity,
+        deliveryCost: deliveryInfo.cost,
+        totalPrice: (parseFloat(product.price) * quantity) + deliveryInfo.cost,
+        deliveryDistance: deliveryInfo.distance
+      };
+    }
+
+    // Create order automatically
+    const orderItems = [{
+      productId: productId,
+      quantity: quantity,
+      unitPrice: product.price,
+      totalPrice: pricingInfo.totalPrice.toString(),
+      deliveryCost: pricingInfo.deliveryCost.toString(),
+      deliveryDistance: pricingInfo.deliveryDistance.toString()
+    }];
+
+    const order = await storage.createOrder({
+      customerId: customer.id,
+      status: "pending",
+      totalAmount: pricingInfo.totalPrice.toString(),
+      notes: `Pedido generado desde WhatsApp`,
+      priority: "normal"
+    }, orderItems);
+
+    // Send order confirmation
+    const confirmationMessage = 
+      "✅ *¡Pedido Generado!*\n\n" +
+      `🆔 Orden: ${order.orderNumber}\n` +
+      `📦 ${product.name} x${quantity}\n` +
+      `💰 Subtotal: $${pricingInfo.basePrice.toLocaleString('es-MX')}\n` +
+      `🚛 Entrega: $${pricingInfo.deliveryCost.toLocaleString('es-MX')}\n` +
+      `*💳 Total: $${pricingInfo.totalPrice.toLocaleString('es-MX')}*\n\n` +
+      `📍 Entrega a: ${customer.address}\n\n` +
+      "📞 Te contactaremos pronto para confirmar detalles y coordinar la entrega.\n\n" +
+      "¡Gracias por tu pedido!";
+
+    await sendWhatsAppMessage(phoneNumber, confirmationMessage);
+
+    // Log the order creation
+    await storage.addWhatsAppLog({
+      type: 'info',
+      message: `Pedido automático creado: ${order.orderNumber}`,
+      data: { 
+        orderId: order.id, 
+        customerId: customer.id, 
+        total: pricingInfo.totalPrice,
+        productId: productId,
+        quantity: quantity
+      }
+    });
+  }
+
+  async function sendOrderStatus(customer: any, phoneNumber: string) {
+    const orders = await storage.getAllOrders();
+    const customerOrders = orders.filter(order => order.customer.id === customer.id);
+    
+    if (customerOrders.length === 0) {
+      await sendWhatsAppMessage(phoneNumber, 
+        "📋 *Estado de Pedidos*\n\n" +
+        "No tienes pedidos registrados.\n\n" +
+        "Escribe *menu* para ver nuestros productos."
+      );
+      return;
+    }
+
+    const recentOrder = customerOrders[0];
+    const statusMessage = 
+      `📋 *Tu Último Pedido*\n\n` +
+      `🆔 ${recentOrder.orderNumber}\n` +
+      `📦 ${recentOrder.items.map(item => `${item.product.name} x${item.quantity}`).join(', ')}\n` +
+      `💰 Total: $${parseFloat(recentOrder.totalAmount).toLocaleString('es-MX')}\n` +
+      `📊 Estado: ${getStatusEmoji(recentOrder.status)} ${recentOrder.status}\n\n` +
+      "📞 Para más información, nuestro equipo se comunicará contigo.";
+
+    await sendWhatsAppMessage(phoneNumber, statusMessage);
+  }
+
+  async function sendWelcomeMessage(phoneNumber: string) {
+    const welcomeMessage = 
+      "👋 *¡Bienvenido!*\n\n" +
+      "Soy tu asistente virtual para pedidos.\n\n" +
+      "*Comandos disponibles:*\n" +
+      "🛍️ *menu* - Ver catálogo\n" +
+      "📍 *ubicacion* - Compartir ubicación\n" +
+      "📋 *pedido* - Estado de pedidos\n" +
+      "❓ *ayuda* - Ver opciones\n\n" +
+      "¿En qué puedo ayudarte hoy?";
+
+    await sendWhatsAppMessage(phoneNumber, welcomeMessage);
+  }
+
+  async function sendHelpMenu(phoneNumber: string) {
+    const helpMessage = 
+      "❓ *Centro de Ayuda*\n\n" +
+      "*Comandos de texto:*\n" +
+      "• *menu* o *catalogo* - Ver productos\n" +
+      "• *ubicacion* - Compartir tu ubicación\n" +
+      "• *pedido* - Ver estado de pedidos\n" +
+      "• *ayuda* - Ver este menú\n\n" +
+      "*Botones interactivos:*\n" +
+      "• Usa los botones para navegar fácilmente\n" +
+      "• Selecciona productos del menú\n" +
+      "• Confirma cantidades\n\n" +
+      "💬 También puedes escribir cualquier pregunta.";
+
+    await sendWhatsAppMessage(phoneNumber, helpMessage);
+  }
+
+  function getStatusEmoji(status: string): string {
+    const statusEmojis = {
+      'pending': '⏳',
+      'confirmed': '✅', 
+      'in_progress': '🔄',
+      'completed': '✅',
+      'cancelled': '❌'
+    };
+    return statusEmojis[status] || '📋';
+  }
+
+  async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config || !config.accessToken || !config.phoneNumberId) {
+        throw new Error('WhatsApp configuration missing');
+      }
+
+      const response = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(message)
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      await storage.addWhatsAppLog({
+        type: 'outgoing',
+        message: 'Mensaje interactivo enviado',
+        data: {
+          to: phoneNumber,
+          messageId: result.messages?.[0]?.id,
+          messageType: message.type
+        }
+      });
+
+      return result;
+    } catch (error: any) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        message: 'Error enviando mensaje interactivo de WhatsApp',
+        data: { error: error.message, phoneNumber }
+      });
+      throw error;
     }
   }
 

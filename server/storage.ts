@@ -40,6 +40,11 @@ export interface IStorage {
   getCustomerByPhone(phone: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   getAllCustomers(): Promise<Customer[]>;
+  updateCustomerLocation(id: number, location: {
+    latitude: string;
+    longitude: string;
+    address: string;
+  }): Promise<Customer>;
 
   // Products
   getProduct(id: number): Promise<Product | undefined>;
@@ -500,6 +505,28 @@ export class MemStorage implements IStorage {
 
   async getAllCustomers(): Promise<Customer[]> {
     return Array.from(this.customers.values());
+  }
+
+  async updateCustomerLocation(id: number, location: {
+    latitude: string;
+    longitude: string;
+    address: string;
+  }): Promise<Customer> {
+    const customer = this.customers.get(id);
+    if (!customer) {
+      throw new Error(`Customer with id ${id} not found`);
+    }
+
+    const updatedCustomer = {
+      ...customer,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: location.address,
+      lastContact: new Date()
+    };
+
+    this.customers.set(id, updatedCustomer);
+    return updatedCustomer;
   }
 
   async getProduct(id: number): Promise<Product | undefined> {
