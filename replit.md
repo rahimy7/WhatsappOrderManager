@@ -177,6 +177,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Web panel message sending with proper endpoint structure and data validation
   - Complete integration tested and verified working with live WhatsApp interactions
   - System ready for production use with full conversation management capabilities
+- June 26, 2025. Critical fix for WhatsApp message sending from web panel:
+  - Resolved issue where messages from staff were saved to database but not sent to WhatsApp
+  - Added proper WhatsApp API integration to conversation message endpoint
+  - Messages now correctly sent via WhatsApp Business API with valid message IDs
+  - Fixed apiRequest parameter order inconsistencies across frontend components
+  - Comprehensive error handling and logging for WhatsApp message delivery
+  - Bidirectional messaging fully operational: WhatsApp ↔ Web Panel integration complete
 
 ## User Preferences
 
