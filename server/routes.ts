@@ -392,6 +392,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/settings/whatsapp", async (req, res) => {
+    try {
+      const configData = z.object({
+        accessToken: z.string(),
+        phoneNumberId: z.string(),
+        webhookVerifyToken: z.string(),
+        businessAccountId: z.string().optional(),
+        appId: z.string().optional(),
+        isActive: z.boolean().optional()
+      }).parse(req.body);
+
+      const config = await storage.updateWhatsAppConfig(configData);
+      res.json({ success: true, config });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid configuration data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update WhatsApp configuration" });
+    }
+  });
+
+  // Test WhatsApp Connection
+  app.post("/api/whatsapp/test-connection", async (req, res) => {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config?.accessToken || !config?.phoneNumberId) {
+        return res.json({ 
+          success: false, 
+          message: "Configuración incompleta. Falta token o Phone Number ID." 
+        });
+      }
+
+      // Test API call to verify token permissions
+      const testResponse = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${config.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (testResponse.ok) {
+        await storage.addWhatsAppLog({
+          type: 'success',
+          messageContent: 'Prueba de conexión exitosa',
+          rawData: JSON.stringify({ status: 'connected', timestamp: new Date().toISOString() })
+        });
+        
+        res.json({ 
+          success: true, 
+          message: "Conexión exitosa. Token y permisos correctos." 
+        });
+      } else {
+        const errorData = await testResponse.text();
+        await storage.addWhatsAppLog({
+          type: 'error',
+          messageContent: 'Error en prueba de conexión',
+          errorMessage: errorData,
+          rawData: JSON.stringify({ status: testResponse.status, response: errorData })
+        });
+        
+        res.json({ 
+          success: false, 
+          message: `Error de conexión: ${testResponse.status}. Verifica token y permisos.` 
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      await storage.addWhatsAppLog({
+        type: 'error',
+        messageContent: 'Error en prueba de conexión',
+        errorMessage: errorMessage,
+        rawData: JSON.stringify({ error: errorMessage, timestamp: new Date().toISOString() })
+      });
+      
+      res.json({ 
+        success: false, 
+        message: `Error: ${errorMessage}` 
+      });
+    }
+  });
+
   // WhatsApp Connection Status
   app.get("/api/whatsapp/status", async (req, res) => {
     try {
