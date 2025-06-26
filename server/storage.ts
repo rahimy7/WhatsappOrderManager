@@ -4,6 +4,7 @@ import {
   products,
   orders,
   orderItems,
+  orderHistory,
   conversations,
   messages,
   type User,
@@ -11,6 +12,7 @@ import {
   type Product,
   type Order,
   type OrderItem,
+  type OrderHistory,
   type Conversation,
   type Message,
   type InsertUser,
@@ -18,6 +20,7 @@ import {
   type InsertProduct,
   type InsertOrder,
   type InsertOrderItem,
+  type InsertOrderHistory,
   type InsertConversation,
   type InsertMessage,
   type OrderWithDetails,
@@ -46,10 +49,35 @@ export interface IStorage {
 
   // Orders
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: { productId: number; quantity: number; unitPrice: string; totalPrice: string; }[]): Promise<OrderWithDetails>;
+  createOrder(order: InsertOrder, items: Array<{
+    productId: number;
+    quantity: number;
+    unitPrice: string;
+    totalPrice: string;
+    installationCost?: string;
+    partsCost?: string;
+    laborHours?: string;
+    laborRate?: string;
+    notes?: string;
+  }>): Promise<OrderWithDetails>;
   getAllOrders(): Promise<OrderWithDetails[]>;
   updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined>;
   assignOrder(orderId: number, userId: number): Promise<Order | undefined>;
+  updateOrderStatus(orderId: number, status: string, userId?: number, notes?: string): Promise<Order | undefined>;
+  
+  // Order History
+  getOrderHistory(orderId: number): Promise<OrderHistory[]>;
+  addOrderHistory(history: InsertOrderHistory): Promise<OrderHistory>;
+  
+  // Service Pricing
+  calculateServicePrice(serviceId: number, installationComplexity: number, partsNeeded: Array<{productId: number; quantity: number}>): Promise<{
+    basePrice: number;
+    installationCost: number;
+    partsCost: number;
+    laborHours: number;
+    laborRate: number;
+    totalPrice: number;
+  }>;
 
   // Conversations
   getConversation(id: number): Promise<ConversationWithDetails | undefined>;
@@ -84,6 +112,7 @@ export class MemStorage implements IStorage {
   private products: Map<number, Product> = new Map();
   private orders: Map<number, Order> = new Map();
   private orderItems: Map<number, OrderItem> = new Map();
+  private orderHistory: Map<number, OrderHistory> = new Map();
   private conversations: Map<number, Conversation> = new Map();
   private messages: Map<number, Message> = new Map();
   private whatsappConfig: any = null;
@@ -94,6 +123,7 @@ export class MemStorage implements IStorage {
   private currentProductId = 1;
   private currentOrderId = 1;
   private currentOrderItemId = 1;
+  private currentOrderHistoryId = 1;
   private currentConversationId = 1;
   private currentMessageId = 1;
   private currentOrderNumber = 1000;
@@ -258,7 +288,7 @@ export class MemStorage implements IStorage {
     };
     this.orders.set(order3.id, order3);
 
-    // Seed order items
+    // Seed order items with service pricing components
     const item1: OrderItem = {
       id: this.currentOrderItemId++,
       orderId: order1.id,
@@ -266,6 +296,11 @@ export class MemStorage implements IStorage {
       quantity: 1,
       unitPrice: "1250.00",
       totalPrice: "1250.00",
+      installationCost: "350.00",
+      partsCost: "150.00",
+      laborHours: "4.0",
+      laborRate: "200.00",
+      notes: "Instalación compleja en edificio antiguo",
     };
     this.orderItems.set(item1.id, item1);
 
@@ -276,6 +311,11 @@ export class MemStorage implements IStorage {
       quantity: 1,
       unitPrice: "890.00",
       totalPrice: "890.00",
+      installationCost: "200.00",
+      partsCost: "90.00",
+      laborHours: "2.5",
+      laborRate: "180.00",
+      notes: "Mantenimiento preventivo estándar",
     };
     this.orderItems.set(item2.id, item2);
 
@@ -286,6 +326,11 @@ export class MemStorage implements IStorage {
       quantity: 1,
       unitPrice: "2150.00",
       totalPrice: "2150.00",
+      installationCost: "500.00",
+      partsCost: "350.00",
+      laborHours: "6.0",
+      laborRate: "220.00",
+      notes: "Equipo premium con instalación especializada",
     };
     this.orderItems.set(item3.id, item3);
 

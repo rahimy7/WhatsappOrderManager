@@ -51,6 +51,24 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull().default(1),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
+  // Service-specific pricing components
+  installationCost: decimal("installation_cost", { precision: 10, scale: 2 }).default("0"),
+  partsCost: decimal("parts_cost", { precision: 10, scale: 2 }).default("0"),
+  laborHours: decimal("labor_hours", { precision: 4, scale: 2 }).default("0"),
+  laborRate: decimal("labor_rate", { precision: 10, scale: 2 }).default("0"),
+  notes: text("notes"),
+});
+
+// Order workflow tracking
+export const orderHistory = pgTable("order_history", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").references(() => orders.id).notNull(),
+  userId: integer("user_id").references(() => users.id),
+  statusFrom: text("status_from"),
+  statusTo: text("status_to").notNull(),
+  action: text("action").notNull(), // 'created', 'assigned', 'started', 'completed', 'cancelled', 'notes_added'
+  notes: text("notes"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
 export const conversations = pgTable("conversations", {
@@ -98,6 +116,11 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
   id: true,
 });
 
+export const insertOrderHistorySchema = createInsertSchema(orderHistory).omit({
+  id: true,
+  timestamp: true,
+});
+
 export const insertConversationSchema = createInsertSchema(conversations).omit({
   id: true,
   lastMessageAt: true,
@@ -123,6 +146,9 @@ export type InsertOrder = z.infer<typeof insertOrderSchema>;
 
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
+
+export type OrderHistory = typeof orderHistory.$inferSelect;
+export type InsertOrderHistory = z.infer<typeof insertOrderHistorySchema>;
 
 export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
