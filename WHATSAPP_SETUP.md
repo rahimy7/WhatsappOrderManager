@@ -117,14 +117,31 @@ Verificar que el Phone Number ID es correcto:
 5. **Actualizar token** en el sistema usando la interfaz web
 6. **Probar envío** de mensaje
 
-## Pasos Inmediatos
+## ACTUALIZACIÓN: Token funciona correctamente ✅
 
-1. Ve a Meta Developer Console
-2. Busca tu aplicación de WhatsApp
-3. Ve a Configuración > Tokens de acceso
-4. Genera un nuevo token con TODOS los permisos
-5. Actualiza el token en la configuración del sistema
-6. El sistema comenzará a responder automáticamente
+**Estado actual:** El token tiene permisos correctos para enviar mensajes.
+
+**Último error:** "Recipient phone number not in allowed list" - Esto es normal en modo desarrollo.
+
+## Configuración actualizada:
+- Phone Number ID: `667993026397854` ✅
+- Business Account ID: `444239435931422` ✅
+- Token: Funcional con permisos correctos ✅
+
+## Próximos pasos para completar la configuración:
+
+1. **En Meta Developer Console > Enviar y recibir mensajes:**
+   - Ve a la sección "Para"
+   - Agrega tu número personal de WhatsApp a la lista de destinatarios
+   - Esto es requerido durante el modo de desarrollo
+
+2. **Probar envío:**
+   - Usa el botón "Enviar mensaje" en la consola
+   - O envía un mensaje a tu número de prueba desde WhatsApp
+
+3. **El sistema responderá automáticamente** una vez que:
+   - Tu número esté en la lista de destinatarios autorizados
+   - Reciba el primer mensaje desde WhatsApp
 
 ## Respuesta Automática Configurada
 
