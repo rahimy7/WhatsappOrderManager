@@ -31,10 +31,6 @@ export default function Products() {
 
   return (
     <div className="space-y-6">
-      <Header 
-        title="Gestión de Productos"
-        subtitle="Administra tu catálogo de productos y servicios"
-      />
 
       {/* Product Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

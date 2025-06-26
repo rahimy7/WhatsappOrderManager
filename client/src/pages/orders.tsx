@@ -21,7 +21,7 @@ export default function Orders() {
     <div className="space-y-6">
       
       <OrderTable 
-        orders={orders || []}
+        orders={Array.isArray(orders) ? orders : []}
         isLoading={isLoading}
         onAssignOrder={handleAssignOrder}
       />

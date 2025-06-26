@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, TrendingUp, Calendar, DollarSign } from "lucide-react";
@@ -14,19 +13,15 @@ export default function Reports() {
   });
 
   // Calculate report data
-  const totalOrders = orders?.length || 0;
-  const completedOrders = orders?.filter((order: any) => order.status === "completed").length || 0;
-  const totalRevenue = orders?.reduce((sum: number, order: any) => 
-    order.status === "completed" ? sum + parseFloat(order.totalAmount) : sum, 0) || 0;
+  const totalOrders = Array.isArray(orders) ? orders.length : 0;
+  const completedOrders = Array.isArray(orders) ? orders.filter((order: any) => order.status === "completed").length : 0;
+  const totalRevenue = Array.isArray(orders) ? orders.reduce((sum: number, order: any) => 
+    order.status === "completed" ? sum + parseFloat(order.totalAmount) : sum, 0) : 0;
   
   const completionRate = totalOrders > 0 ? (completedOrders / totalOrders * 100).toFixed(1) : "0";
 
   return (
     <div className="space-y-6">
-      <Header 
-        title="Reportes y Análisis"
-        subtitle="Monitorea el rendimiento de tu negocio"
-      />
 
       {/* Report Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
