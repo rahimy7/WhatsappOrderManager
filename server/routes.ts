@@ -1101,7 +1101,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       quantity: quantity,
       unitPrice: product.price,
       totalPrice: totalPrice.toString(),
-      deliveryCost: deliveryCost > 0 ? deliveryCost.toString() : undefined,
+      installationCost: "0",
+      partsCost: "0",
+      laborHours: "0",
+      laborRate: "0",
+      deliveryCost: deliveryCost > 0 ? deliveryCost.toString() : "0",
+      deliveryDistance: "0",
       notes: `Cantidad: ${quantity}`
     }];
 
@@ -1143,6 +1148,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       });
     } catch (error) {
+      console.error('Error en handleQuantitySelection:', error);
+      console.error('Datos del pedido:', {
+        customer: customer.id,
+        productId,
+        quantity,
+        orderItems,
+        totalPrice
+      });
+      
       await sendWhatsAppMessage(phoneNumber, 
         "❌ Hubo un error al procesar tu pedido. Por favor, intenta nuevamente o contacta a nuestro equipo."
       );
