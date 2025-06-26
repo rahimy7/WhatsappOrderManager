@@ -133,21 +133,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/services/:id/calculate-price", async (req, res) => {
     try {
       const serviceId = parseInt(req.params.id);
-      const { installationComplexity, partsNeeded } = z.object({
+      const { installationComplexity, partsNeeded, customerLatitude, customerLongitude } = z.object({
         installationComplexity: z.number().min(1).max(5),
         partsNeeded: z.array(z.object({
           productId: z.number(),
           quantity: z.number().min(1)
-        })).default([])
+        })).default([]),
+        customerLatitude: z.string().optional(),
+        customerLongitude: z.string().optional()
       }).parse(req.body);
 
-      const pricing = await storage.calculateServicePrice(serviceId, installationComplexity, partsNeeded);
+      const pricing = await storage.calculateServicePrice(
+        serviceId, 
+        installationComplexity, 
+        partsNeeded,
+        customerLatitude,
+        customerLongitude
+      );
       res.json(pricing);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid pricing request", details: error.errors });
       }
       res.status(500).json({ error: "Failed to calculate service price" });
+    }
+  });
+
+  app.post("/api/delivery/calculate-cost", async (req, res) => {
+    try {
+      const { customerLatitude, customerLongitude, productCategory } = z.object({
+        customerLatitude: z.string(),
+        customerLongitude: z.string(),
+        productCategory: z.enum(["product", "service"]).default("product")
+      }).parse(req.body);
+
+      const deliveryInfo = await storage.calculateDeliveryCost(
+        customerLatitude,
+        customerLongitude,
+        productCategory
+      );
+      res.json(deliveryInfo);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid delivery calculation request", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to calculate delivery cost" });
     }
   });
 

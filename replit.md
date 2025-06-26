@@ -143,6 +143,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Mobile-optimized conversations with back navigation
   - Adaptive tab layouts and component spacing
   - Improved responsive breakpoints (768px mobile, 1024px desktop)
+- June 26, 2025. Dynamic pricing system implemented:
+  - Products maintain fixed prices with location-based delivery calculation
+  - Services have dynamic pricing based on installation complexity and parts
+  - Customer location tracking with address, latitude, and longitude fields
+  - Delivery cost calculation using Haversine formula for distance
+  - Real-time pricing calculator showing itemized cost breakdown
+  - Location selector with current location, predefined locations, and manual entry
+  - Differentiated delivery rates for products vs services (equipment transport)
+  - Complete order workflow from creation to closure with enhanced pricing
 
 ## User Preferences
 

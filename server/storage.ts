@@ -58,6 +58,8 @@ export interface IStorage {
     partsCost?: string;
     laborHours?: string;
     laborRate?: string;
+    deliveryCost?: string;
+    deliveryDistance?: string;
     notes?: string;
   }>): Promise<OrderWithDetails>;
   getAllOrders(): Promise<OrderWithDetails[]>;
@@ -711,16 +713,68 @@ export class MemStorage implements IStorage {
     return history;
   }
 
+  async calculateDeliveryCost(
+    customerLatitude: string,
+    customerLongitude: string,
+    productCategory: string = "product"
+  ): Promise<{
+    distance: number;
+    cost: number;
+    estimatedTime: number;
+  }> {
+    // Base location (company headquarters)
+    const baseLatitude = 19.4326; // CDMX Centro
+    const baseLongitude = -99.1332;
+
+    // Calculate distance using Haversine formula
+    const customerLat = parseFloat(customerLatitude);
+    const customerLng = parseFloat(customerLongitude);
+    
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (customerLat - baseLatitude) * Math.PI / 180;
+    const dLng = (customerLng - baseLongitude) * Math.PI / 180;
+    
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(baseLatitude * Math.PI / 180) * Math.cos(customerLat * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+
+    // Calculate delivery cost based on distance and product type
+    let baseCost = 50; // Base delivery cost
+    let costPerKm = 8; // Cost per kilometer
+    
+    // Services have higher delivery cost due to equipment transport
+    if (productCategory === "service") {
+      baseCost = 100;
+      costPerKm = 12;
+    }
+    
+    const cost = Math.round((baseCost + (distance * costPerKm)) * 100) / 100;
+    const estimatedTime = Math.round((distance * 3) + 30); // 30 min base + 3 min per km
+    
+    return {
+      distance: Math.round(distance * 100) / 100,
+      cost,
+      estimatedTime
+    };
+  }
+
   async calculateServicePrice(
     serviceId: number, 
     installationComplexity: number, 
-    partsNeeded: Array<{productId: number; quantity: number}>
+    partsNeeded: Array<{productId: number; quantity: number}>,
+    customerLatitude?: string,
+    customerLongitude?: string
   ): Promise<{
     basePrice: number;
     installationCost: number;
     partsCost: number;
     laborHours: number;
     laborRate: number;
+    deliveryCost: number;
+    deliveryDistance: number;
     totalPrice: number;
   }> {
     const service = this.products.get(serviceId);
@@ -748,7 +802,21 @@ export class MemStorage implements IStorage {
     const laborHours = Math.round(baseLaborHours * 100) / 100;
     const laborRate = 200; // Base rate per hour
     
-    const totalPrice = basePrice + installationCost + partsCost + (laborHours * laborRate);
+    // Calculate delivery cost if customer location is provided
+    let deliveryCost = 0;
+    let deliveryDistance = 0;
+    
+    if (customerLatitude && customerLongitude) {
+      const deliveryInfo = await this.calculateDeliveryCost(
+        customerLatitude, 
+        customerLongitude, 
+        "service"
+      );
+      deliveryCost = deliveryInfo.cost;
+      deliveryDistance = deliveryInfo.distance;
+    }
+    
+    const totalPrice = basePrice + installationCost + partsCost + (laborHours * laborRate) + deliveryCost;
     
     return {
       basePrice,
@@ -756,6 +824,8 @@ export class MemStorage implements IStorage {
       partsCost,
       laborHours,
       laborRate,
+      deliveryCost,
+      deliveryDistance,
       totalPrice: Math.round(totalPrice * 100) / 100,
     };
   }
