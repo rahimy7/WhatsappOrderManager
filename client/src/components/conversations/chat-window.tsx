@@ -20,71 +20,58 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const { data: messages, isLoading } = useQuery({
-    queryKey: ["/api/conversations", conversation?.id, "messages"],
+  // Fetch messages for the current conversation
+  const { data: messages = [], isLoading } = useQuery({
+    queryKey: ["/api/messages", conversation?.id],
     enabled: !!conversation?.id,
   });
 
+  // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!conversation) throw new Error("No conversation selected");
-      
-      return apiRequest("POST", `/api/conversations/${conversation.id}/messages`, {
-        senderId: 1, // Assuming current user ID is 1 (admin)
-        senderType: "user",
-        messageType: "text",
+      return apiRequest("POST", "/api/messages", {
+        conversationId: conversation.id,
         content,
+        senderType: "staff",
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: ["/api/conversations", conversation?.id, "messages"] 
-      });
-      queryClient.invalidateQueries({ 
-        queryKey: ["/api/conversations"] 
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", conversation?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setNewMessage("");
       toast({
         title: "Mensaje enviado",
-        description: "Tu mensaje ha sido enviado al cliente.",
+        description: "El mensaje ha sido enviado exitosamente",
       });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
         title: "Error",
-        description: error.message || "No se pudo enviar el mensaje.",
+        description: "No se pudo enviar el mensaje",
         variant: "destructive",
       });
     },
   });
 
-  const markAsReadMutation = useMutation({
-    mutationFn: async () => {
-      if (!conversation) return;
-      return apiRequest("POST", `/api/conversations/${conversation.id}/mark-read`, {});
-    },
-    onSuccess: () => {
+  // Mark messages as read when conversation changes
+  useEffect(() => {
+    if (conversation?.id) {
+      apiRequest("POST", `/api/conversations/${conversation.id}/mark-read`, {});
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-    },
-  });
+    }
+  }, [conversation?.id]);
 
-  // Scroll to bottom when messages change
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Mark messages as read when conversation is selected
-  useEffect(() => {
-    if (conversation && conversation.unreadCount > 0) {
-      markAsReadMutation.mutate();
-    }
-  }, [conversation?.id]);
-
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !conversation) return;
-    
-    sendMessageMutation.mutate(newMessage.trim());
+    if (newMessage.trim()) {
+      sendMessageMutation.mutate(newMessage.trim());
+    }
   };
 
   const formatMessageTime = (date: string | Date) => {
@@ -113,126 +100,129 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
   }
 
   return (
-    <Card className="h-full flex flex-col">
-      {/* Chat Header */}
-      <CardHeader className="border-b border-gray-200 pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 whatsapp-bg rounded-full flex items-center justify-center">
-              <MessageCircle className="text-white h-5 w-5" />
-            </div>
-            <div>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                {conversation.customer.name}
-              </CardTitle>
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <Phone className="h-4 w-4" />
-                <span>{conversation.customer.phone}</span>
+    <div>
+      <Card className="h-full flex flex-col">
+        {/* Chat Header */}
+        <CardHeader className="border-b border-gray-200 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 whatsapp-bg rounded-full flex items-center justify-center">
+                <MessageCircle className="text-white h-5 w-5" />
               </div>
-              {conversation.order && (
-                <Badge variant="secondary" className="mt-1">
-                  {conversation.order.orderNumber}
-                </Badge>
-              )}
+              <div>
+                <CardTitle className="text-lg font-semibold text-gray-900">
+                  {conversation.customer.name}
+                </CardTitle>
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <Phone className="h-4 w-4" />
+                  <span>{conversation.customer.phone}</span>
+                </div>
+                {conversation.order && (
+                  <Badge variant="secondary" className="mt-1">
+                    {conversation.order.orderNumber}
+                  </Badge>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSendModal(true)}
-              className="whatsapp-bg text-white hover:bg-green-600"
-            >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Enviar WhatsApp
-            </Button>
             <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 success-bg rounded-full"></div>
-              <span className="text-sm text-gray-600">En línea</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSendModal(true)}
+                className="whatsapp-bg text-white hover:bg-green-600"
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Enviar WhatsApp
+              </Button>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 success-bg rounded-full"></div>
+                <span className="text-sm text-gray-600">En línea</span>
+              </div>
             </div>
           </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
 
-      {/* Messages Area */}
-      <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse">
-                <div className="h-12 bg-gray-200 rounded-lg"></div>
-              </div>
-            ))}
-          </div>
-        ) : messages && messages.length > 0 ? (
-          <>
-            {messages.map((message: Message) => (
+        {/* Messages Area */}
+        <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex space-x-3">
+                  <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded animate-pulse w-1/2"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : messages && Array.isArray(messages) && messages.length > 0 ? (
+            messages.map((message: Message) => (
               <div
                 key={message.id}
-                className={`flex ${
-                  message.senderType === "user" ? "justify-end" : "justify-start"
-                }`}
+                className={`flex ${message.senderType === "customer" ? "justify-start" : "justify-end"}`}
               >
                 <div
                   className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    message.senderType === "user"
-                      ? "bg-primary text-white"
-                      : "bg-gray-100 text-gray-900"
+                    message.senderType === "customer"
+                      ? "bg-gray-100 text-gray-900"
+                      : "whatsapp-bg text-white"
                   }`}
                 >
                   <p className="text-sm">{message.content}</p>
-                  <div className={`flex items-center justify-end mt-1 space-x-1 ${
-                    message.senderType === "user" ? "text-blue-100" : "text-gray-500"
-                  }`}>
-                    <span className="text-xs">
-                      {formatMessageTime(message.sentAt)}
-                    </span>
-                    {message.senderType === "user" && (
-                      <div className="flex space-x-1">
-                        <div className="w-1 h-1 bg-current rounded-full"></div>
-                        <div className="w-1 h-1 bg-current rounded-full"></div>
-                      </div>
-                    )}
-                  </div>
+                  <p
+                    className={`text-xs mt-1 ${
+                      message.senderType === "customer" ? "text-gray-500" : "text-green-100"
+                    }`}
+                  >
+                    {formatMessageTime(message.sentAt)}
+                  </p>
                 </div>
               </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </>
-        ) : (
-          <div className="text-center py-8">
-            <MessageCircle className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-gray-500">No hay mensajes en esta conversación</p>
-          </div>
-        )}
-      </CardContent>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500">No hay mensajes en esta conversación</p>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </CardContent>
 
-      {/* Message Input */}
-      <div className="border-t border-gray-200 p-4">
-        <form onSubmit={handleSendMessage} className="flex space-x-2">
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Escribe un mensaje..."
-            className="flex-1"
-            disabled={sendMessageMutation.isPending}
-          />
-          <Button
-            type="submit"
-            disabled={!newMessage.trim() || sendMessageMutation.isPending}
-            className="whatsapp-bg hover:bg-green-600"
-          >
-            {sendMessageMutation.isPending ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
-        </form>
-        <p className="text-xs text-gray-500 mt-2">
-          Los mensajes se enviarán a través de WhatsApp Business API
-        </p>
-      </div>
-    </Card>
+        {/* Message Input */}
+        <div className="border-t border-gray-200 p-4">
+          <form onSubmit={handleSendMessage} className="flex space-x-2">
+            <Input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Escribe un mensaje..."
+              className="flex-1"
+              disabled={sendMessageMutation.isPending}
+            />
+            <Button
+              type="submit"
+              disabled={!newMessage.trim() || sendMessageMutation.isPending}
+              className="whatsapp-bg hover:bg-green-600"
+            >
+              {sendMessageMutation.isPending ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </form>
+          <p className="text-xs text-gray-500 mt-2">
+            Los mensajes se enviarán a través de WhatsApp Business API
+          </p>
+        </div>
+      </Card>
+      
+      {/* Send WhatsApp Message Modal */}
+      <SendMessageModal
+        isOpen={showSendModal}
+        onClose={() => setShowSendModal(false)}
+        defaultPhone={conversation?.customer.phone || ""}
+      />
+    </div>
   );
 }
