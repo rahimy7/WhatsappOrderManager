@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AutoResponse, InsertAutoResponse } from "@shared/schema";
-import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot } from "lucide-react";
+import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw } from "lucide-react";
 
 interface MenuOption {
   label: string;
@@ -74,6 +74,27 @@ export default function AutoResponsesPage() {
       toast({
         title: "Respuesta eliminada",
         description: "La configuración se ha eliminado correctamente.",
+      });
+    },
+  });
+
+  // Reset to defaults mutation
+  const resetToDefaultsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("/api/auto-responses/reset-defaults", "POST");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
+      toast({
+        title: "Valores restaurados",
+        description: "Se han restaurado las respuestas automáticas por defecto.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudieron restaurar los valores por defecto.",
+        variant: "destructive",
       });
     },
   });
