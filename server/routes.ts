@@ -637,20 +637,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Find or create customer
           let customer = await storage.getCustomerByPhone(from);
+          let isNewCustomer = false;
+          
           if (!customer) {
-            customer = await storage.createCustomer({
-              name: `Cliente ${from}`,
-              phone: from,
-              whatsappId: from
-            });
+            // Check if there's an ongoing registration flow
+            const registrationFlow = await storage.getRegistrationFlow(from);
             
-            await storage.addWhatsAppLog({
-              type: 'info',
-              phoneNumber: from,
-              messageContent: `Nuevo cliente creado: ${from}`,
-              status: 'success',
-              rawData: JSON.stringify({ customerId: customer.id, phone: from })
-            });
+            if (!registrationFlow) {
+              // New customer, start registration flow
+              await storage.createRegistrationFlow({
+                phoneNumber: from,
+                step: 'awaiting_name',
+                data: JSON.stringify({ phone: from })
+              });
+              
+              await sendRegistrationWelcome(from);
+              return; // Don't process the message further, wait for name
+            } else {
+              // Handle registration flow
+              await handleRegistrationFlow(from, messageText, registrationFlow);
+              return;
+            }
+          } else {
+            // Existing customer - check if name is generic (needs completion)
+            if (customer.name.startsWith('Cliente ')) {
+              isNewCustomer = true;
+            }
           }
 
           // Find existing conversation or create new one
@@ -683,7 +695,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           // Process customer message and respond
-          await processCustomerMessage(customer, conversation, message, from);
+          await processCustomerMessage(customer, conversation, message, from, isNewCustomer);
 
           await storage.addWhatsAppLog({
             type: 'info',
@@ -718,7 +730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Function to process customer messages and respond with menu/orders
-  async function processCustomerMessage(customer: any, conversation: any, message: any, from: string) {
+  async function processCustomerMessage(customer: any, conversation: any, message: any, from: string, isNewCustomer: boolean = false) {
     try {
       const messageType = message.type;
       
@@ -758,6 +770,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         if (autoResponse) {
+          // Personalize message for existing customers
+          let personalizedMessage = autoResponse.messageText;
+          if (matchedTrigger === 'welcome' && !isNewCustomer && !customer.name.startsWith('Cliente ')) {
+            personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+          }
+          
           // Check if this response has menu options for interactive message
           if (autoResponse.menuOptions) {
             try {
@@ -775,7 +793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       text: "🔧 Aires Acondicionados"
                     },
                     body: {
-                      text: autoResponse.messageText
+                      text: personalizedMessage
                     },
                     action: {
                       buttons: menuOptions.slice(0, 3).map((option, index) => ({
@@ -1661,6 +1679,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete registration flow" });
     }
   });
+
+  // Registration flow functions
+  async function sendRegistrationWelcome(phoneNumber: string) {
+    const welcomeMessage = 
+      "👋 *¡Bienvenido a Aires Acondicionados!*\n\n" +
+      "Para brindarte el mejor servicio, necesito conocerte mejor.\n\n" +
+      "¿Podrías decirme tu nombre completo?";
+
+    await sendWhatsAppMessage(phoneNumber, welcomeMessage);
+    
+    await storage.addWhatsAppLog({
+      type: 'info',
+      phoneNumber: phoneNumber,
+      messageContent: 'Mensaje de registro enviado',
+      status: 'sent',
+      rawData: JSON.stringify({ step: 'awaiting_name' })
+    });
+  }
+
+  async function handleRegistrationFlow(phoneNumber: string, messageText: string, registrationFlow: any) {
+    try {
+      const data = JSON.parse(registrationFlow.data || '{}');
+      
+      if (registrationFlow.step === 'awaiting_name') {
+        // Validate name (should not be empty and should contain at least 2 words)
+        const name = messageText.trim();
+        if (name.length < 2 || !name.includes(' ')) {
+          await sendWhatsAppMessage(phoneNumber, 
+            "Por favor, ingresa tu nombre completo (nombre y apellido).\n\n" +
+            "Ejemplo: Juan Pérez"
+          );
+          return;
+        }
+        
+        // Create customer with the provided name
+        const customer = await storage.createCustomer({
+          name: name,
+          phone: phoneNumber,
+          whatsappId: phoneNumber
+        });
+        
+        // Delete registration flow
+        await storage.deleteRegistrationFlow(phoneNumber);
+        
+        // Send welcome message with name
+        const personalizedWelcome = 
+          `✅ *¡Perfecto, ${name}!*\n\n` +
+          "Tu registro ha sido completado exitosamente.\n\n" +
+          "Ahora puedes explorar nuestros servicios de aires acondicionados.\n\n" +
+          "Escribe *menu* para ver nuestro catálogo completo.";
+        
+        await sendWhatsAppMessage(phoneNumber, personalizedWelcome);
+        
+        await storage.addWhatsAppLog({
+          type: 'info',
+          phoneNumber: phoneNumber,
+          messageContent: `Cliente registrado exitosamente: ${name}`,
+          status: 'completed',
+          rawData: JSON.stringify({ 
+            customerId: customer.id, 
+            customerName: name,
+            registrationCompleted: true 
+          })
+        });
+      }
+    } catch (error) {
+      // If there's an error, reset registration flow
+      await storage.deleteRegistrationFlow(phoneNumber);
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error en el registro. Por favor, escribe *hola* para comenzar nuevamente."
+      );
+      
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error en flujo de registro',
+        status: 'error',
+        errorMessage: (error as Error).message,
+        rawData: JSON.stringify({ step: registrationFlow.step, error: (error as Error).message })
+      });
+    }
+  }
 
   const httpServer = createServer(app);
   return httpServer;
