@@ -221,7 +221,7 @@ export class MemStorage implements IStorage {
       id: this.currentOrderId++,
       orderNumber: `ORD-${this.currentOrderNumber++}`,
       customerId: customer2.id,
-      assignedUserId: undefined,
+      assignedUserId: null,
       status: "pending",
       priority: "normal",
       totalAmount: "890.00",
@@ -335,7 +335,13 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentUserId++;
-    const user: User = { ...insertUser, id };
+    const user: User = { 
+      ...insertUser, 
+      id,
+      status: insertUser.status || "active",
+      phone: insertUser.phone || null,
+      avatar: insertUser.avatar || null,
+    };
     this.users.set(id, user);
     return user;
   }
@@ -367,6 +373,7 @@ export class MemStorage implements IStorage {
     const customer: Customer = { 
       ...insertCustomer, 
       id,
+      whatsappId: insertCustomer.whatsappId || null,
       lastContact: new Date(),
     };
     this.customers.set(id, customer);
@@ -383,7 +390,12 @@ export class MemStorage implements IStorage {
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
     const id = this.currentProductId++;
-    const product: Product = { ...insertProduct, id };
+    const product: Product = { 
+      ...insertProduct, 
+      id,
+      status: insertProduct.status || "active",
+      description: insertProduct.description || null,
+    };
     this.products.set(id, product);
     return product;
   }
@@ -434,6 +446,11 @@ export class MemStorage implements IStorage {
       ...insertOrder,
       id: orderId,
       orderNumber,
+      status: insertOrder.status || "pending",
+      priority: insertOrder.priority || "normal",
+      assignedUserId: insertOrder.assignedUserId || null,
+      description: insertOrder.description || null,
+      notes: insertOrder.notes || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -447,6 +464,7 @@ export class MemStorage implements IStorage {
         ...insertItem,
         id: itemId,
         orderId,
+        quantity: insertItem.quantity || 1,
       };
       this.orderItems.set(itemId, orderItem);
     }
@@ -521,6 +539,8 @@ export class MemStorage implements IStorage {
     const conversation: Conversation = {
       ...insertConversation,
       id,
+      status: insertConversation.status || "active",
+      orderId: insertConversation.orderId || null,
       lastMessageAt: new Date(),
     };
     this.conversations.set(id, conversation);
@@ -538,6 +558,10 @@ export class MemStorage implements IStorage {
     const message: Message = {
       ...insertMessage,
       id,
+      senderId: insertMessage.senderId || null,
+      messageType: insertMessage.messageType || "text",
+      whatsappMessageId: insertMessage.whatsappMessageId || null,
+      isRead: insertMessage.isRead || false,
       sentAt: new Date(),
     };
     this.messages.set(id, message);
