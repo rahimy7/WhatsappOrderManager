@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import Header from "@/components/layout/header";
 import OrderTable from "@/components/orders/order-table";
 import AssignmentModal from "@/components/orders/assignment-modal";
 import { OrderWithDetails } from "@shared/schema";
@@ -20,10 +19,6 @@ export default function Orders() {
 
   return (
     <div className="space-y-6">
-      <Header 
-        title="Gestión de Pedidos"
-        subtitle="Administra y asigna pedidos a tu equipo de trabajo"
-      />
       
       <OrderTable 
         orders={orders || []}

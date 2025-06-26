@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,10 +13,6 @@ export default function Products() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Header 
-          title="Gestión de Productos"
-          subtitle="Administra tu catálogo de productos y servicios"
-        />
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">

@@ -1,6 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,10 +68,6 @@ export default function Team() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Header 
-          title="Gestión de Equipo"
-          subtitle="Administra el estado y disponibilidad de tu equipo"
-        />
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="animate-pulse">
@@ -92,10 +87,6 @@ export default function Team() {
 
   return (
     <div className="space-y-6">
-      <Header 
-        title="Gestión de Equipo"
-        subtitle="Administra el estado y disponibilidad de tu equipo"
-      />
 
       {/* Team Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
