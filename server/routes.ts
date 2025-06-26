@@ -1495,6 +1495,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/auto-responses/reset-defaults", async (req, res) => {
+    try {
+      // Clear existing auto responses
+      await storage.clearAllAutoResponses();
+      
+      // Re-seed default responses
+      const { seedAutoResponses } = await import("./seed-auto-responses");
+      await seedAutoResponses();
+      
+      res.json({ message: "Auto responses reset to defaults successfully" });
+    } catch (error) {
+      console.error("Error resetting auto responses:", error);
+      res.status(500).json({ error: "Failed to reset auto responses" });
+    }
+  });
+
   // Customer Registration Flows routes
   app.get("/api/registration-flows/:phoneNumber", async (req, res) => {
     try {
