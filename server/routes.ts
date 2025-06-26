@@ -7,6 +7,7 @@ import {
   insertCustomerSchema, 
   insertProductSchema,
   insertMessageSchema,
+  insertWebMessageSchema,
   insertUserSchema,
 } from "@shared/schema";
 
@@ -304,19 +305,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conversations/:id/messages", async (req, res) => {
     try {
       const conversationId = parseInt(req.params.id);
-      const webMessageData = insertWebMessageSchema.parse(req.body);
+      
+      // Create message data directly
       const messageData = {
-        ...webMessageData,
         conversationId,
+        content: req.body.content,
+        senderType: req.body.senderType || "staff",
+        messageType: req.body.messageType || "text",
+        senderId: null, // For now, we don't track specific staff members
+        whatsappMessageId: null,
+        isRead: false
       };
       
       const message = await storage.createMessage(messageData);
       res.status(201).json(message);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Invalid message data", details: error.errors });
-      }
-      res.status(500).json({ error: "Failed to send message" });
+      console.error("Error creating message:", error);
+      res.status(500).json({ error: "Failed to send message", details: error.message });
     }
   });
 
