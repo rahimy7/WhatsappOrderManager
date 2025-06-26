@@ -1179,7 +1179,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       finalMessage += 
         `*💳 Total: $${orderData.totalPrice.toLocaleString('es-MX')}*\n\n` +
         `💵 *Método de Pago:* ${paymentText}\n` +
-        `📍 *Dirección:* ${orderData.deliveryAddress}\n\n`;
+        `📍 *Dirección:* ${orderData.deliveryAddress}\n` +
+        `📞 *Contacto:* ${orderData.contactNumber || phoneNumber}\n\n`;
 
       // Add payment-specific instructions
       if (paymentMethod === 'card') {
@@ -2104,6 +2105,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         
         await sendWhatsAppInteractiveMessage(phoneNumber, contactMessage);
+      }
+      
+      else if (registrationFlow.currentStep === 'collect_different_number') {
+        // Validate phone number format
+        const contactNumber = messageText.trim().replace(/\D/g, ''); // Remove non-digits
+        if (contactNumber.length !== 10) {
+          await sendWhatsAppMessage(phoneNumber, 
+            "Por favor, proporciona un número de teléfono válido de 10 dígitos.\n\n" +
+            "Ejemplo: 5512345678"
+          );
+          return;
+        }
+        
+        // Format phone number
+        const formattedNumber = `+52 ${contactNumber.slice(0, 2)} ${contactNumber.slice(2, 6)} ${contactNumber.slice(6)}`;
+        
+        // Get customer for the phone number
+        let customer = await storage.getCustomerByPhone(phoneNumber);
+        if (!customer) {
+          await sendWhatsAppMessage(phoneNumber, 
+            "❌ Error: No se encontró información del cliente. Por favor, inicia un nuevo pedido escribiendo *menu*."
+          );
+          return;
+        }
+        
+        // Continue with contact number selection
+        await handleContactNumberSelection(customer, phoneNumber, formattedNumber);
       }
       
       else if (registrationFlow.currentStep === 'collect_payment_method') {
