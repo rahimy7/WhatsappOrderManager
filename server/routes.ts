@@ -306,7 +306,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const conversationId = parseInt(req.params.id);
       
-      // Create message data directly
+      // Get conversation details to get customer phone number
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      // Create message data
       const messageData = {
         conversationId,
         content: req.body.content,
@@ -316,6 +322,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         whatsappMessageId: null,
         isRead: false
       };
+      
+      // If message is from staff, send it to WhatsApp
+      if (messageData.senderType === "staff") {
+        try {
+          // Send message to WhatsApp
+          const whatsappResult = await sendWhatsAppMessage(conversation.customer.phone, messageData.content);
+          
+          // Update message with WhatsApp message ID if successful
+          if (whatsappResult && whatsappResult.messages && whatsappResult.messages[0]) {
+            messageData.whatsappMessageId = whatsappResult.messages[0].id;
+          }
+
+          await storage.addWhatsAppLog({
+            type: 'outgoing',
+            phoneNumber: conversation.customer.phone,
+            messageContent: `Mensaje enviado desde panel web: ${messageData.content.substring(0, 100)}`,
+            status: 'sent',
+            messageId: messageData.whatsappMessageId,
+            rawData: JSON.stringify({ 
+              conversationId, 
+              messageContent: messageData.content,
+              whatsappResult 
+            })
+          });
+        } catch (whatsappError) {
+          // Log the WhatsApp sending error but still save the message to database
+          await storage.addWhatsAppLog({
+            type: 'error',
+            phoneNumber: conversation.customer.phone,
+            messageContent: `Error enviando mensaje desde panel web: ${messageData.content.substring(0, 100)}`,
+            status: 'error',
+            errorMessage: whatsappError.message,
+            rawData: JSON.stringify({ 
+              conversationId, 
+              messageContent: messageData.content,
+              error: whatsappError.message 
+            })
+          });
+          
+          // Don't fail the entire request, just log the error
+          console.error("WhatsApp sending error:", whatsappError);
+        }
+      }
       
       const message = await storage.createMessage(messageData);
       res.status(201).json(message);
