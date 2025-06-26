@@ -21,7 +21,9 @@ import {
   XCircle, 
   RefreshCw,
   Eye,
-  EyeOff
+  EyeOff,
+  Globe,
+  Activity
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -32,6 +34,7 @@ const whatsappConfigSchema = z.object({
   whatsappPhoneNumberId: z.string().min(1, "WhatsApp Phone Number ID es requerido"),
   whatsappToken: z.string().min(1, "WhatsApp Token es requerido"),
   whatsappVerifyToken: z.string().min(1, "WhatsApp Verify Token es requerido"),
+  webhookUrl: z.string().url("URL del webhook debe ser válida"),
 });
 
 type WhatsAppConfig = z.infer<typeof whatsappConfigSchema>;
@@ -58,6 +61,7 @@ export default function Settings() {
       whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
       whatsappToken: config.whatsappToken || "",
       whatsappVerifyToken: config.whatsappVerifyToken || "",
+      webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
     },
   });
 
@@ -337,6 +341,26 @@ export default function Settings() {
                       {form.formState.errors.whatsappVerifyToken && (
                         <p className="text-sm text-red-600">{form.formState.errors.whatsappVerifyToken.message}</p>
                       )}
+                    </div>
+
+                    {/* Webhook URL */}
+                    <div className="space-y-2 col-span-2">
+                      <Label htmlFor="webhookUrl" className="flex items-center space-x-2">
+                        <Globe className="h-4 w-4" />
+                        <span>URL del Webhook</span>
+                      </Label>
+                      <Input
+                        id="webhookUrl"
+                        {...form.register("webhookUrl")}
+                        placeholder="https://whatsapp2-production-e205.up.railway.app/webhook"
+                        className="font-mono"
+                      />
+                      {form.formState.errors.webhookUrl && (
+                        <p className="text-sm text-red-600">{form.formState.errors.webhookUrl.message}</p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        Esta URL recibirá las notificaciones de mensajes de WhatsApp
+                      </p>
                     </div>
                   </div>
 

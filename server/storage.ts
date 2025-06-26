@@ -72,6 +72,10 @@ export interface IStorage {
   // WhatsApp Settings
   getWhatsAppConfig(): Promise<any>;
   updateWhatsAppConfig(config: any): Promise<any>;
+  
+  // WhatsApp Logs
+  getWhatsAppLogs(): Promise<any[]>;
+  addWhatsAppLog(log: any): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -83,6 +87,7 @@ export class MemStorage implements IStorage {
   private conversations: Map<number, Conversation> = new Map();
   private messages: Map<number, Message> = new Map();
   private whatsappConfig: any = null;
+  private whatsappLogs: any[] = [];
   
   private currentUserId = 1;
   private currentCustomerId = 1;
