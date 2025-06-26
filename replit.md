@@ -152,6 +152,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Location selector with current location, predefined locations, and manual entry
   - Differentiated delivery rates for products vs services (equipment transport)
   - Complete order workflow from creation to closure with enhanced pricing
+- June 26, 2025. WhatsApp Business API integration for customer order automation:
+  - Interactive product menu system with categories (products/services)
+  - Location sharing and automatic delivery cost calculation
+  - Automated order generation with real-time pricing
+  - Command-based navigation (menu, ubicacion, pedido, ayuda)
+  - Customer management with automatic profile creation
+  - Order status tracking and confirmation messages
+  - Comprehensive message logging and webhook processing
+  - Seamless integration with existing pricing and inventory systems
 
 ## User Preferences
 

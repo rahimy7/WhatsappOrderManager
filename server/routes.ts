@@ -332,16 +332,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WhatsApp Settings API
   app.get("/api/settings/whatsapp", async (req, res) => {
     try {
-      const config = await storage.getWhatsAppConfig();
+      let config = await storage.getWhatsAppConfig();
+      
+      // Initialize config with environment variables if not set
+      if (!config || !config.accessToken) {
+        const envConfig = {
+          accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+          phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+          whatsappVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+          webhookUrl: process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/webhook` : 'https://tu-dominio-replit.com/webhook',
+          isConfigured: !!(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
+        };
+        
+        config = await storage.updateWhatsAppConfig(envConfig);
+      }
+      
       // Don't send sensitive data to frontend
       const safeConfig = {
-        metaAppId: config.metaAppId ? "****" + config.metaAppId.slice(-4) : "",
-        metaAppSecret: config.metaAppSecret ? "****" + config.metaAppSecret.slice(-4) : "",
-        whatsappBusinessAccountId: config.whatsappBusinessAccountId,
-        whatsappPhoneNumberId: config.whatsappPhoneNumberId,
-        whatsappToken: config.whatsappToken ? "****" + config.whatsappToken.slice(-8) : "",
+        accessToken: config.accessToken ? "****" + config.accessToken.slice(-8) : "",
+        phoneNumberId: config.phoneNumberId || "",
         whatsappVerifyToken: config.whatsappVerifyToken ? "****" + config.whatsappVerifyToken.slice(-4) : "",
-        configured: !!(config.metaAppId && config.whatsappToken),
+        webhookUrl: config.webhookUrl || "",
+        isConfigured: config.isConfigured || false,
+        connectionStatus: config.accessToken && config.phoneNumberId ? 'connected' : 'not_configured'
       };
       res.json(safeConfig);
     } catch (error) {
@@ -904,7 +917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   function getStatusEmoji(status: string): string {
-    const statusEmojis = {
+    const statusEmojis: { [key: string]: string } = {
       'pending': '⏳',
       'confirmed': '✅', 
       'in_progress': '🔄',
@@ -912,6 +925,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       'cancelled': '❌'
     };
     return statusEmojis[status] || '📋';
+  }
+
+  async function sendWhatsAppMessage(phoneNumber: string, message: string) {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config || !config.accessToken || !config.phoneNumberId) {
+        throw new Error('WhatsApp configuration missing');
+      }
+
+      const messagePayload = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "text",
+        text: {
+          body: message
+        }
+      };
+
+      const response = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messagePayload)
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      await storage.addWhatsAppLog({
+        type: 'outgoing',
+        message: 'Mensaje enviado',
+        data: {
+          to: phoneNumber,
+          messageId: result.messages?.[0]?.id,
+          content: message.substring(0, 100)
+        }
+      });
+
+      return result;
+    } catch (error: any) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        message: 'Error enviando mensaje de WhatsApp',
+        data: { error: error.message, phoneNumber, content: message.substring(0, 100) }
+      });
+      throw error;
+    }
   }
 
   async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
