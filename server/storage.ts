@@ -144,6 +144,16 @@ export interface IStorage {
   createRegistrationFlow(flow: InsertCustomerRegistrationFlow): Promise<CustomerRegistrationFlow>;
   updateRegistrationFlow(phoneNumber: string, updates: Partial<InsertCustomerRegistrationFlow>): Promise<CustomerRegistrationFlow | undefined>;
   deleteRegistrationFlow(phoneNumber: string): Promise<void>;
+  
+  // Employee Profiles
+  getEmployeeProfile(userId: number): Promise<EmployeeProfile | undefined>;
+  getEmployeeProfileByEmployeeId(employeeId: string): Promise<EmployeeProfile | undefined>;
+  getAllEmployeeProfiles(): Promise<(EmployeeProfile & { user: User })[]>;
+  createEmployeeProfile(profile: InsertEmployeeProfile): Promise<EmployeeProfile>;
+  updateEmployeeProfile(id: number, updates: Partial<InsertEmployeeProfile>): Promise<EmployeeProfile | undefined>;
+  deleteEmployeeProfile(id: number): Promise<void>;
+  getEmployeesByDepartment(department: string): Promise<(EmployeeProfile & { user: User })[]>;
+  generateEmployeeId(department: string): Promise<string>;
 }
 
 export class MemStorage implements IStorage {

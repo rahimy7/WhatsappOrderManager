@@ -11,6 +11,7 @@ import {
   insertUserSchema,
   insertAutoResponseSchema,
   insertCustomerRegistrationFlowSchema,
+  insertEmployeeProfileSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {

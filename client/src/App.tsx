@@ -13,6 +13,7 @@ import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import WhatsAppSettings from "@/pages/whatsapp-settings";
 import AutoResponses from "@/pages/auto-responses";
+import Employees from "@/pages/employees";
 import AppLayout from "@/components/layout/app-layout";
 
 function Router() {
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/whatsapp-settings" component={WhatsAppSettings} />
       <Route path="/auto-responses" component={AutoResponses} />
+      <Route path="/employees" component={Employees} />
       <Route component={NotFound} />
     </Switch>
   );
