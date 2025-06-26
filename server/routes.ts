@@ -758,46 +758,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         if (autoResponse) {
-          // Build complete message with menu options if available
-          let completeMessage = autoResponse.messageText;
-          
+          // Check if this response has menu options for interactive message
           if (autoResponse.menuOptions) {
             try {
               const menuOptions = JSON.parse(autoResponse.menuOptions);
               if (Array.isArray(menuOptions) && menuOptions.length > 0) {
-                completeMessage += "\n\n📋 *Opciones disponibles:*\n";
-                menuOptions.forEach((option, index) => {
-                  completeMessage += `${index + 1}️⃣ ${option.label}\n`;
+                // Send interactive message with buttons
+                const interactiveMessage = {
+                  messaging_product: "whatsapp",
+                  to: from,
+                  type: "interactive",
+                  interactive: {
+                    type: "button",
+                    header: {
+                      type: "text",
+                      text: "🔧 Aires Acondicionados"
+                    },
+                    body: {
+                      text: autoResponse.messageText
+                    },
+                    action: {
+                      buttons: menuOptions.slice(0, 3).map((option, index) => ({
+                        type: "reply",
+                        reply: {
+                          id: option.value,
+                          title: option.label
+                        }
+                      }))
+                    }
+                  }
+                };
+                
+                await sendWhatsAppInteractiveMessage(from, interactiveMessage);
+                responseFound = true;
+                
+                // Log the interactive response
+                await storage.addWhatsAppLog({
+                  type: 'info',
+                  phoneNumber: from,
+                  messageContent: `Menú interactivo enviado: ${autoResponse.name}`,
+                  status: 'processed',
+                  rawData: JSON.stringify({ 
+                    customerMessage: text, 
+                    trigger: matchedTrigger,
+                    autoResponseId: autoResponse.id,
+                    interactiveMessage: interactiveMessage
+                  })
                 });
-                completeMessage += "\nEscribe el número de la opción que deseas o usa estos comandos:\n";
-                completeMessage += "📱 *menu* - Ver opciones\n";
-                completeMessage += "📦 *productos* - Ver catálogo\n"; 
-                completeMessage += "⚙️ *servicios* - Ver servicios\n";
-                completeMessage += "❓ *ayuda* - Obtener ayuda";
+              } else {
+                // No menu options, send regular text message
+                await sendWhatsAppMessage(from, autoResponse.messageText);
+                responseFound = true;
               }
             } catch (error) {
-              // If menu options parsing fails, just send the original message
+              // If menu options parsing fails, send regular text message
               console.log('Error parsing menu options:', error);
+              await sendWhatsAppMessage(from, autoResponse.messageText);
+              responseFound = true;
             }
+          } else {
+            // No menu options, send regular text message
+            await sendWhatsAppMessage(from, autoResponse.messageText);
+            responseFound = true;
           }
           
-          // Send auto response message with menu options
-          await sendWhatsAppMessage(from, completeMessage);
-          responseFound = true;
-          
-          // Log the auto response
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Respuesta automática enviada: ${autoResponse.name}`,
-            status: 'processed',
-            rawData: JSON.stringify({ 
-              customerMessage: text, 
-              trigger: matchedTrigger,
-              autoResponseId: autoResponse.id,
-              responseText: completeMessage
-            })
-          });
+          // Log the auto response if not already logged
+          if (responseFound && !autoResponse.menuOptions) {
+            await storage.addWhatsAppLog({
+              type: 'info',
+              phoneNumber: from,
+              messageContent: `Respuesta automática enviada: ${autoResponse.name}`,
+              status: 'processed',
+              rawData: JSON.stringify({ 
+                customerMessage: text, 
+                trigger: matchedTrigger,
+                autoResponseId: autoResponse.id,
+                responseText: autoResponse.messageText
+              })
+            });
+          }
         }
         
         // If no auto response found, send default welcome
@@ -941,7 +980,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } else if (interactive.type === 'button_reply') {
       const buttonId = interactive.button_reply.id;
       
-      if (buttonId.startsWith('quantity_')) {
+      // Handle menu buttons from welcome message
+      if (buttonId === 'products') {
+        await sendProductMenu(phoneNumber);
+      } else if (buttonId === 'services') {
+        await sendProductMenu(phoneNumber); // Same menu, but focuses on services
+      } else if (buttonId === 'help') {
+        await sendHelpMenu(phoneNumber);
+      } else if (buttonId.startsWith('quantity_')) {
         const [, productId, quantity] = buttonId.split('_');
         await handleQuantitySelection(customer, parseInt(productId), parseInt(quantity), phoneNumber);
       } else if (buttonId === 'confirm_order') {
