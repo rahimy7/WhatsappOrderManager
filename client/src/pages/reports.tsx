@@ -245,7 +245,7 @@ export default function Reports() {
       </Card>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
@@ -301,15 +301,15 @@ export default function Reports() {
 
       {/* Analytics Tabs */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Resumen</TabsTrigger>
-          <TabsTrigger value="performance">Rendimiento</TabsTrigger>
-          <TabsTrigger value="products">Productos</TabsTrigger>
-          <TabsTrigger value="trends">Tendencias</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
+          <TabsTrigger value="overview" className="text-xs md:text-sm">Resumen</TabsTrigger>
+          <TabsTrigger value="performance" className="text-xs md:text-sm">Rendimiento</TabsTrigger>
+          <TabsTrigger value="products" className="text-xs md:text-sm">Productos</TabsTrigger>
+          <TabsTrigger value="trends" className="text-xs md:text-sm">Tendencias</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="overview" className="space-y-4 md:space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             {/* Status Distribution Chart */}
             <Card>
               <CardHeader>

@@ -54,11 +54,11 @@ export default function OrderTable({ orders, isLoading, onAssignOrder }: OrderTa
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <CardTitle className="text-lg font-semibold text-gray-900">Todos los Pedidos</CardTitle>
           <div className="flex items-center space-x-2">
             <Select defaultValue="all">
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-full md:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -76,7 +76,8 @@ export default function OrderTable({ orders, isLoading, onAssignOrder }: OrderTa
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
@@ -101,7 +102,7 @@ export default function OrderTable({ orders, isLoading, onAssignOrder }: OrderTa
                       <div className="flex items-center">
                         <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center mr-3">
                           <span className="text-xs font-medium text-gray-600">
-                            {order.customer.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                            {order.customer.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                           </span>
                         </div>
                         <div>
@@ -156,6 +157,76 @@ export default function OrderTable({ orders, isLoading, onAssignOrder }: OrderTa
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-4">
+          {orders.map((order: OrderWithDetails) => {
+            const statusBadge = getStatusBadge(order.status);
+            return (
+              <div key={order.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        {order.customer.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{order.orderNumber}</div>
+                      <div className="text-xs text-gray-500">{formatTime(order.createdAt)}</div>
+                    </div>
+                  </div>
+                  <Badge className={statusBadge.className}>
+                    {statusBadge.label}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{order.customer.name}</div>
+                    <div className="text-xs text-gray-500">{order.customer.phone}</div>
+                  </div>
+                  
+                  {order.assignedUser ? (
+                    <div>
+                      <div className="text-sm text-gray-700">Asignado a: {order.assignedUser.name}</div>
+                      <div className="text-xs text-gray-500 capitalize">{order.assignedUser.role}</div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">Sin asignar</div>
+                  )}
+                  
+                  <div className="text-lg font-bold text-gray-900">
+                    ${parseFloat(order.totalAmount).toLocaleString('es-MX')}
+                  </div>
+                </div>
+
+                <div className="flex space-x-2">
+                  {!order.assignedUser && (
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="text-primary flex-1"
+                      onClick={() => onAssignOrder(order)}
+                    >
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      Asignar
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" className="text-primary">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="outline" className="whatsapp-text">
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-gray-400">
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
