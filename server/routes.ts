@@ -900,6 +900,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
       } else if (messageType === 'location') {
+        // Log the raw location data for debugging
+        await storage.addWhatsAppLog({
+          type: 'debug',
+          phoneNumber: from,
+          messageContent: `Procesando mensaje de ubicación - messageType: ${messageType}`,
+          status: 'processing',
+          rawData: JSON.stringify({ 
+            messageType: messageType,
+            fullMessage: message,
+            locationData: message.location,
+            customerId: customer.id
+          })
+        });
+        
         await handleLocationMessage(customer, message.location, from);
       } else if (messageType === 'interactive') {
         await handleInteractiveMessage(customer, conversation, message.interactive, from);
@@ -1035,23 +1049,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Handle location sharing during order completion flow
   async function handleLocationInOrderFlow(customer: any, location: any, phoneNumber: string, registrationFlow: any) {
-    // Generate address from GPS coordinates
-    const gpsAddress = location.name || location.address || 
-      `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+    try {
+      // Log detailed location processing for debugging
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: phoneNumber,
+        messageContent: `Iniciando procesamiento de ubicación en flujo de pedido`,
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          step: 'location_processing_start',
+          locationLatitude: location.latitude,
+          locationLongitude: location.longitude,
+          locationName: location.name,
+          locationAddress: location.address,
+          customerId: customer.id,
+          registrationFlowStep: registrationFlow.currentStep
+        })
+      });
 
-    // Update customer with location data
-    const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
-      latitude: location.latitude.toString(),
-      longitude: location.longitude.toString(), 
-      address: gpsAddress
-    });
+      // Validate location data
+      if (!location.latitude || !location.longitude) {
+        throw new Error(`Datos de ubicación inválidos: latitude=${location.latitude}, longitude=${location.longitude}`);
+      }
 
-    // Calculate delivery cost
-    const deliveryInfo = await storage.calculateDeliveryCost(
-      location.latitude.toString(),
-      location.longitude.toString(),
-      "product"
-    );
+      // Generate address from GPS coordinates
+      const gpsAddress = location.name || location.address || 
+        `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+
+      // Update customer with location data
+      const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
+        latitude: location.latitude.toString(),
+        longitude: location.longitude.toString(), 
+        address: gpsAddress
+      });
+
+      // Calculate delivery cost
+      const deliveryInfo = await storage.calculateDeliveryCost(
+        location.latitude.toString(),
+        location.longitude.toString(),
+        "product"
+      );
 
     // Get order data from registration flow
     const orderData = JSON.parse(registrationFlow.collectedData || '{}');
@@ -1107,18 +1144,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     await sendWhatsAppInteractiveMessage(phoneNumber, contactMessage);
 
-    await storage.addWhatsAppLog({
-      type: 'info',
-      phoneNumber: phoneNumber,
-      messageContent: `Ubicación GPS procesada en flujo de pedido: ${gpsAddress}`,
-      status: 'processed',
-      rawData: JSON.stringify({ 
-        orderId: orderData.orderId,
-        gpsCoordinates: { latitude: location.latitude, longitude: location.longitude },
-        deliveryCost: deliveryInfo.cost,
-        distance: deliveryInfo.distance
-      })
-    });
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: `Ubicación GPS procesada en flujo de pedido: ${gpsAddress}`,
+        status: 'processed',
+        rawData: JSON.stringify({ 
+          orderId: orderData.orderId,
+          gpsCoordinates: { latitude: location.latitude, longitude: location.longitude },
+          deliveryCost: deliveryInfo.cost,
+          distance: deliveryInfo.distance
+        })
+      });
+
+    } catch (error) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error en procesamiento de ubicación GPS en flujo de pedido',
+        status: 'error',
+        errorMessage: (error as Error).message,
+        rawData: JSON.stringify({ 
+          error: (error as Error).message, 
+          location: location,
+          registrationFlow: registrationFlow?.currentStep,
+          customerId: customer.id
+        })
+      });
+
+      throw error; // Re-throw to be caught by parent handler
+    }
   }
 
   // Handle general location sharing (outside of order flow)
