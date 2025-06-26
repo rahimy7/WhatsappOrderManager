@@ -46,7 +46,7 @@ export interface IStorage {
 
   // Orders
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
-  createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<OrderWithDetails>;
+  createOrder(order: InsertOrder, items: { productId: number; quantity: number; unitPrice: string; totalPrice: string; }[]): Promise<OrderWithDetails>;
   getAllOrders(): Promise<OrderWithDetails[]>;
   updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined>;
   assignOrder(orderId: number, userId: number): Promise<Order | undefined>;
@@ -438,7 +438,7 @@ export class MemStorage implements IStorage {
     };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: InsertOrderItem[]): Promise<OrderWithDetails> {
+  async createOrder(insertOrder: InsertOrder, items: { productId: number; quantity: number; unitPrice: string; totalPrice: string; }[]): Promise<OrderWithDetails> {
     const orderId = this.currentOrderId++;
     const orderNumber = `ORD-${this.currentOrderNumber++}`;
     
@@ -461,10 +461,12 @@ export class MemStorage implements IStorage {
     for (const insertItem of items) {
       const itemId = this.currentOrderItemId++;
       const orderItem: OrderItem = {
-        ...insertItem,
         id: itemId,
         orderId,
-        quantity: insertItem.quantity || 1,
+        productId: insertItem.productId,
+        quantity: insertItem.quantity,
+        unitPrice: insertItem.unitPrice,
+        totalPrice: insertItem.totalPrice,
       };
       this.orderItems.set(itemId, orderItem);
     }
