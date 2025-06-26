@@ -737,6 +737,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (messageType === 'text') {
         const text = message.text.body.toLowerCase().trim();
         
+        // FIRST CHECK: Handle registration flows (takes priority over auto responses)
+        const registrationFlow = await storage.getRegistrationFlow(from);
+        if (registrationFlow && !registrationFlow.isCompleted) {
+          await storage.addWhatsAppLog({
+            type: 'debug',
+            phoneNumber: from,
+            messageContent: `Procesando flujo de registro activo: ${registrationFlow.currentStep}`,
+            status: 'processing',
+            rawData: JSON.stringify({ 
+              step: registrationFlow.currentStep, 
+              messageReceived: message.text.body,
+              orderId: JSON.parse(registrationFlow.collectedData || '{}').orderId 
+            })
+          });
+          
+          await handleRegistrationFlow(from, message.text.body, registrationFlow);
+          return; // Exit early to prevent auto responses from interfering
+        }
+        
+        // Check if customer needs basic registration (new customer without name)
+        if (isNewCustomer || (customer && customer.name && customer.name.startsWith('Cliente '))) {
+          // Handle basic customer registration
+          await handleRegistrationFlow(from, message.text.body, {
+            currentStep: 'awaiting_name',
+            collectedData: JSON.stringify({}),
+            phoneNumber: from
+          });
+          return;
+        }
+        
         // Check for auto responses based on triggers
         const autoResponses = await storage.getAllAutoResponses();
         let responseFound = false;
@@ -1965,6 +1995,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   async function handleRegistrationFlow(phoneNumber: string, messageText: string, registrationFlow: any) {
     try {
       const data = JSON.parse(registrationFlow.collectedData || '{}');
+      
+      // Add detailed logging for debugging
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: phoneNumber,
+        messageContent: `Registration flow step: ${registrationFlow.currentStep}`,
+        status: 'info',
+        rawData: JSON.stringify({ step: registrationFlow.currentStep, message: messageText, data: data })
+      });
       
       if (registrationFlow.currentStep === 'awaiting_name') {
         // Validate name (should not be empty and should contain at least 2 words)

@@ -236,6 +236,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Contact number properly stored in order data and displayed in final confirmation message
   - Enhanced customer communication with primary contact number for delivery coordination
   - Comprehensive error handling and flow recovery for contact number collection failures
+- June 26, 2025. CRITICAL BUG FIX: Resolved competing registration flows causing name collection failures:
+  - Fixed issue where customers entering names were redirected to main menu instead of continuing order flow
+  - Implemented registration flow priority system: active flows now take precedence over auto-responses
+  - Added detailed logging to diagnose and prevent future flow conflicts between basic registration and order completion
+  - Separated handling of new customer registration vs existing customer order data collection
+  - Order completion flow now works correctly: customers can provide names and continue to address collection
+  - Enhanced message processing logic to properly distinguish between different flow contexts
 
 ## User Preferences
 
