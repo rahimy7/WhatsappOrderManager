@@ -11,6 +11,7 @@ import {
   whatsappLogs,
   autoResponses,
   customerRegistrationFlows,
+  employeeProfiles,
   type User,
   type Customer,
   type Product,
@@ -23,6 +24,7 @@ import {
   type WhatsAppLog,
   type AutoResponse,
   type CustomerRegistrationFlow,
+  type EmployeeProfile,
   type InsertUser,
   type InsertCustomer,
   type InsertProduct,
@@ -35,6 +37,7 @@ import {
   type InsertWhatsAppLog,
   type InsertAutoResponse,
   type InsertCustomerRegistrationFlow,
+  type InsertEmployeeProfile,
   type OrderWithDetails,
   type ConversationWithDetails,
 } from "@shared/schema";

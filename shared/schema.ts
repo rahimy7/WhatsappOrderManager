@@ -7,10 +7,16 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
-  role: text("role").notNull(), // 'admin', 'technician', 'seller'
+  role: text("role").notNull(), // 'admin', 'technician', 'seller', 'delivery', 'support', 'customer_service'
   status: text("status").notNull().default("active"), // 'active', 'busy', 'break', 'offline'
   phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
   avatar: text("avatar"),
+  hireDate: timestamp("hire_date").defaultNow(),
+  isActive: boolean("is_active").notNull().default(true),
+  department: text("department"), // 'technical', 'sales', 'delivery', 'support', 'admin'
+  permissions: text("permissions").array(), // Array of specific permissions
 });
 
 export const customers = pgTable("customers", {
@@ -147,6 +153,27 @@ export const customerRegistrationFlows = pgTable("customer_registration_flows", 
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Employee management for different roles
+export const employeeProfiles = pgTable("employee_profiles", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull().unique(),
+  employeeId: text("employee_id").notNull().unique(), // Format: EMP-001, TECH-001, DEL-001, etc.
+  department: text("department").notNull(), // 'technical', 'sales', 'delivery', 'support', 'admin'
+  position: text("position").notNull(), // 'Senior Technician', 'Delivery Driver', etc.
+  specializations: text("specializations").array(), // e.g., ['air_conditioning', 'electrical', 'plumbing']
+  workSchedule: text("work_schedule"), // JSON string with schedule
+  emergencyContact: text("emergency_contact"),
+  emergencyPhone: text("emergency_phone"),
+  vehicleInfo: text("vehicle_info"), // JSON for delivery personnel
+  certifications: text("certifications").array(), // Professional certifications
+  salary: decimal("salary", { precision: 10, scale: 2 }),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }), // For sales roles
+  territory: text("territory"), // Geographic assignment for delivery/sales
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -216,6 +243,12 @@ export const insertCustomerRegistrationFlowSchema = createInsertSchema(customerR
   updatedAt: true,
 });
 
+export const insertEmployeeProfileSchema = createInsertSchema(employeeProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -252,6 +285,9 @@ export type InsertAutoResponse = z.infer<typeof insertAutoResponseSchema>;
 
 export type CustomerRegistrationFlow = typeof customerRegistrationFlows.$inferSelect;
 export type InsertCustomerRegistrationFlow = z.infer<typeof insertCustomerRegistrationFlowSchema>;
+
+export type EmployeeProfile = typeof employeeProfiles.$inferSelect;
+export type InsertEmployeeProfile = z.infer<typeof insertEmployeeProfileSchema>;
 
 // Extended types for API responses
 export type OrderWithDetails = Order & {
