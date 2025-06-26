@@ -1640,6 +1640,150 @@ export class DatabaseStorage implements IStorage {
     await db.delete(customerRegistrationFlows)
       .where(eq(customerRegistrationFlows.phoneNumber, phoneNumber));
   }
+
+  // Employee Profiles
+  async getEmployeeProfile(userId: number): Promise<EmployeeProfile | undefined> {
+    const [profile] = await db.select().from(employeeProfiles)
+      .where(eq(employeeProfiles.userId, userId));
+    return profile || undefined;
+  }
+
+  async getEmployeeProfileByEmployeeId(employeeId: string): Promise<EmployeeProfile | undefined> {
+    const [profile] = await db.select().from(employeeProfiles)
+      .where(eq(employeeProfiles.employeeId, employeeId));
+    return profile || undefined;
+  }
+
+  async getAllEmployeeProfiles(): Promise<(EmployeeProfile & { user: User })[]> {
+    const result = await db.select({
+      id: employeeProfiles.id,
+      userId: employeeProfiles.userId,
+      employeeId: employeeProfiles.employeeId,
+      department: employeeProfiles.department,
+      position: employeeProfiles.position,
+      hireDate: employeeProfiles.hireDate,
+      salary: employeeProfiles.salary,
+      commissionRate: employeeProfiles.commissionRate,
+      specializations: employeeProfiles.specializations,
+      certifications: employeeProfiles.certifications,
+      emergencyContact: employeeProfiles.emergencyContact,
+      emergencyPhone: employeeProfiles.emergencyPhone,
+      vehicleInfo: employeeProfiles.vehicleInfo,
+      territory: employeeProfiles.territory,
+      notes: employeeProfiles.notes,
+      isActive: employeeProfiles.isActive,
+      createdAt: employeeProfiles.createdAt,
+      updatedAt: employeeProfiles.updatedAt,
+      user: {
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        role: users.role,
+        status: users.status,
+        phone: users.phone,
+        email: users.email,
+        address: users.address,
+        isActive: users.isActive,
+        department: users.department,
+        permissions: users.permissions,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        lastActive: users.lastActive,
+      }
+    })
+    .from(employeeProfiles)
+    .innerJoin(users, eq(employeeProfiles.userId, users.id))
+    .orderBy(employeeProfiles.createdAt);
+
+    return result;
+  }
+
+  async createEmployeeProfile(profile: InsertEmployeeProfile): Promise<EmployeeProfile> {
+    const [newProfile] = await db.insert(employeeProfiles).values(profile).returning();
+    return newProfile;
+  }
+
+  async updateEmployeeProfile(id: number, updates: Partial<InsertEmployeeProfile>): Promise<EmployeeProfile | undefined> {
+    const [updatedProfile] = await db.update(employeeProfiles)
+      .set(updates)
+      .where(eq(employeeProfiles.id, id))
+      .returning();
+    return updatedProfile || undefined;
+  }
+
+  async deleteEmployeeProfile(id: number): Promise<void> {
+    await db.delete(employeeProfiles).where(eq(employeeProfiles.id, id));
+  }
+
+  async getEmployeesByDepartment(department: string): Promise<(EmployeeProfile & { user: User })[]> {
+    const result = await db.select({
+      id: employeeProfiles.id,
+      userId: employeeProfiles.userId,
+      employeeId: employeeProfiles.employeeId,
+      department: employeeProfiles.department,
+      position: employeeProfiles.position,
+      hireDate: employeeProfiles.hireDate,
+      salary: employeeProfiles.salary,
+      commissionRate: employeeProfiles.commissionRate,
+      specializations: employeeProfiles.specializations,
+      certifications: employeeProfiles.certifications,
+      emergencyContact: employeeProfiles.emergencyContact,
+      emergencyPhone: employeeProfiles.emergencyPhone,
+      vehicleInfo: employeeProfiles.vehicleInfo,
+      territory: employeeProfiles.territory,
+      notes: employeeProfiles.notes,
+      isActive: employeeProfiles.isActive,
+      createdAt: employeeProfiles.createdAt,
+      updatedAt: employeeProfiles.updatedAt,
+      user: {
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        role: users.role,
+        status: users.status,
+        phone: users.phone,
+        email: users.email,
+        address: users.address,
+        isActive: users.isActive,
+        department: users.department,
+        permissions: users.permissions,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        lastActive: users.lastActive,
+      }
+    })
+    .from(employeeProfiles)
+    .innerJoin(users, eq(employeeProfiles.userId, users.id))
+    .where(eq(employeeProfiles.department, department))
+    .orderBy(employeeProfiles.createdAt);
+
+    return result;
+  }
+
+  async generateEmployeeId(department: string): Promise<string> {
+    // Get the department prefix
+    const prefixes: Record<string, string> = {
+      'admin': 'ADM',
+      'technical': 'TEC',
+      'sales': 'VEN',
+      'delivery': 'DEL',
+      'support': 'SUP',
+    };
+
+    const prefix = prefixes[department] || 'EMP';
+    
+    // Get the next number for this department
+    const existingProfiles = await db.select()
+      .from(employeeProfiles)
+      .where(eq(employeeProfiles.department, department));
+
+    const nextNumber = existingProfiles.length + 1;
+    
+    // Format with leading zeros
+    const formattedNumber = nextNumber.toString().padStart(3, '0');
+    
+    return `${prefix}-${formattedNumber}`;
+  }
 }
 
 export const storage = new DatabaseStorage();

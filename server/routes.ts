@@ -2424,6 +2424,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  // Employee routes
+  app.get("/api/employees", async (req, res) => {
+    try {
+      const employees = await storage.getAllEmployeeProfiles();
+      res.json(employees);
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+      res.status(500).json({ error: "Failed to fetch employees" });
+    }
+  });
+
+  app.post("/api/employees", async (req, res) => {
+    try {
+      const profileData = insertEmployeeProfileSchema.parse(req.body);
+      const employee = await storage.createEmployeeProfile(profileData);
+      res.json(employee);
+    } catch (error) {
+      console.error("Error creating employee:", error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create employee" });
+    }
+  });
+
+  app.post("/api/employees/generate-id", async (req, res) => {
+    try {
+      const { department } = req.body;
+      if (!department) {
+        return res.status(400).json({ error: "Department is required" });
+      }
+      const employeeId = await storage.generateEmployeeId(department);
+      res.json({ employeeId });
+    } catch (error) {
+      console.error("Error generating employee ID:", error);
+      res.status(500).json({ error: "Failed to generate employee ID" });
+    }
+  });
+
+  app.get("/api/employees/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const employee = await storage.getEmployeeProfile(id);
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      res.json(employee);
+    } catch (error) {
+      console.error("Error fetching employee:", error);
+      res.status(500).json({ error: "Failed to fetch employee" });
+    }
+  });
+
+  app.put("/api/employees/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const employee = await storage.updateEmployeeProfile(id, updates);
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+      res.json(employee);
+    } catch (error) {
+      console.error("Error updating employee:", error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update employee" });
+    }
+  });
+
+  app.delete("/api/employees/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteEmployeeProfile(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting employee:", error);
+      res.status(500).json({ error: "Failed to delete employee" });
+    }
+  });
+
+  app.get("/api/registration-flows", async (req, res) => {
+    try {
+      // For now, return empty array since this endpoint isn't fully implemented
+      res.json([]);
+    } catch (error) {
+      console.error("Error fetching registration flows:", error);
+      res.status(500).json({ error: "Failed to fetch registration flows" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
