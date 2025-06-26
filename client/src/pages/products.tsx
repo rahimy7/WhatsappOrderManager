@@ -26,8 +26,8 @@ export default function Products() {
     );
   }
 
-  const services = products?.filter((product: Product) => product.category === "service") || [];
-  const physicalProducts = products?.filter((product: Product) => product.category === "product") || [];
+  const services = Array.isArray(products) ? products.filter((product: Product) => product.category === "service") : [];
+  const physicalProducts = Array.isArray(products) ? products.filter((product: Product) => product.category === "product") : [];
 
   return (
     <div className="space-y-6">
@@ -39,7 +39,7 @@ export default function Products() {
             <CardTitle className="text-sm font-medium text-gray-600">Total Productos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{products?.length || 0}</div>
+            <div className="text-2xl font-bold">{Array.isArray(products) ? products.length : 0}</div>
             <p className="text-sm text-gray-500 mt-1">En catálogo</p>
           </CardContent>
         </Card>
@@ -72,7 +72,7 @@ export default function Products() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {products?.map((product: Product) => (
+            {Array.isArray(products) ? products.map((product: Product) => (
               <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center space-x-4">
                   <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -110,7 +110,7 @@ export default function Products() {
                   </div>
                 </div>
               </div>
-            ))}
+            )) : []}
           </div>
         </CardContent>
       </Card>

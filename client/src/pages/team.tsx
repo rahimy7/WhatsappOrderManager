@@ -81,9 +81,9 @@ export default function Team() {
     );
   }
 
-  const technicians = users?.filter((user: User) => user.role === "technician") || [];
-  const sellers = users?.filter((user: User) => user.role === "seller") || [];
-  const admins = users?.filter((user: User) => user.role === "admin") || [];
+  const technicians = Array.isArray(users) ? users.filter((user: User) => user.role === "technician") : [];
+  const sellers = Array.isArray(users) ? users.filter((user: User) => user.role === "seller") : [];
+  const admins = Array.isArray(users) ? users.filter((user: User) => user.role === "admin") : [];
 
   return (
     <div className="space-y-6">
@@ -134,7 +134,7 @@ export default function Team() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {users?.map((user: User) => (
+            {Array.isArray(users) ? users.map((user: User) => (
               <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center space-x-4">
                   <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
@@ -187,7 +187,7 @@ export default function Team() {
                   </div>
                 </div>
               </div>
-            ))}
+            )) : null}
           </div>
         </CardContent>
       </Card>
