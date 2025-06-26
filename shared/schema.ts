@@ -18,6 +18,9 @@ export const customers = pgTable("customers", {
   name: text("name").notNull(),
   phone: text("phone").notNull().unique(),
   whatsappId: text("whatsapp_id"),
+  address: text("address"),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
   lastContact: timestamp("last_contact"),
 });
 
@@ -51,11 +54,14 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull().default(1),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
-  // Service-specific pricing components
-  installationCost: decimal("installation_cost", { precision: 10, scale: 2 }).default("0"),
-  partsCost: decimal("parts_cost", { precision: 10, scale: 2 }).default("0"),
-  laborHours: decimal("labor_hours", { precision: 4, scale: 2 }).default("0"),
-  laborRate: decimal("labor_rate", { precision: 10, scale: 2 }).default("0"),
+  // Service-specific pricing components (only for services)
+  installationCost: decimal("installation_cost", { precision: 10, scale: 2 }),
+  partsCost: decimal("parts_cost", { precision: 10, scale: 2 }),
+  laborHours: decimal("labor_hours", { precision: 4, scale: 2 }),
+  laborRate: decimal("labor_rate", { precision: 10, scale: 2 }),
+  // Delivery/shipping cost (for products and services)
+  deliveryCost: decimal("delivery_cost", { precision: 10, scale: 2 }).default("0"),
+  deliveryDistance: decimal("delivery_distance", { precision: 8, scale: 2 }), // km
   notes: text("notes"),
 });
 

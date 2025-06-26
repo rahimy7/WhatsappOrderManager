@@ -189,6 +189,9 @@ export class MemStorage implements IStorage {
       name: "Juan López",
       phone: "+52 55 1234-5678",
       whatsappId: "521551234567",
+      address: "Av. Reforma 123, Col. Centro, CDMX",
+      latitude: "19.4326",
+      longitude: "-99.1332",
       lastContact: new Date(),
     };
     this.customers.set(customer1.id, customer1);
@@ -198,6 +201,9 @@ export class MemStorage implements IStorage {
       name: "María García",
       phone: "+52 55 8765-4321",
       whatsappId: "521558765432",
+      address: "Calle 5 de Mayo 456, Col. Roma Norte, CDMX",
+      latitude: "19.4195",
+      longitude: "-99.1570",
       lastContact: new Date(),
     };
     this.customers.set(customer2.id, customer2);
@@ -207,6 +213,9 @@ export class MemStorage implements IStorage {
       name: "Pedro Ramírez",
       phone: "+52 55 9876-5432",
       whatsappId: "521559876543",
+      address: "Av. Insurgentes Sur 789, Col. Del Valle, CDMX",
+      latitude: "19.3889",
+      longitude: "-99.1677",
       lastContact: new Date(),
     };
     this.customers.set(customer3.id, customer3);
@@ -588,6 +597,8 @@ export class MemStorage implements IStorage {
         partsCost: insertItem.partsCost || null,
         laborHours: insertItem.laborHours || null,
         laborRate: insertItem.laborRate || null,
+        deliveryCost: insertItem.deliveryCost || null,
+        deliveryDistance: insertItem.deliveryDistance || null,
         notes: insertItem.notes || null,
       };
       this.orderItems.set(itemId, orderItem);
