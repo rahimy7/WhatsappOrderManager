@@ -351,9 +351,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const safeConfig = {
         accessToken: config.accessToken ? "****" + config.accessToken.slice(-8) : "",
         phoneNumberId: config.phoneNumberId || "",
-        whatsappVerifyToken: config.whatsappVerifyToken ? "****" + config.whatsappVerifyToken.slice(-4) : "",
-        webhookUrl: config.webhookUrl || "",
-        isConfigured: config.isConfigured || false,
+        whatsappVerifyToken: config.webhookVerifyToken ? "****" + config.webhookVerifyToken.slice(-4) : "",
+        webhookUrl: process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/webhook` : 'https://tu-dominio-replit.com/webhook',
+        isConfigured: !!(config.accessToken && config.phoneNumberId),
         connectionStatus: config.accessToken && config.phoneNumberId ? 'connected' : 'not_configured'
       };
       res.json(safeConfig);
@@ -374,7 +374,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         webhookUrl: z.string().url(),
       }).parse(req.body);
 
-      const config = await storage.updateWhatsAppConfig(configData);
+      const dbConfig = {
+        accessToken: configData.whatsappToken,
+        phoneNumberId: configData.whatsappPhoneNumberId,
+        webhookVerifyToken: configData.whatsappVerifyToken,
+        businessAccountId: configData.whatsappBusinessAccountId,
+        appId: configData.metaAppId
+      };
+
+      const config = await storage.updateWhatsAppConfig(dbConfig);
       res.json({ success: true, updatedAt: config.updatedAt });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -389,7 +397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const config = await storage.getWhatsAppConfig();
       
-      if (!config.metaAppId || !config.whatsappToken) {
+      if (!config || !config.accessToken || !config.phoneNumberId) {
         return res.json({
           connected: false,
           configured: false,
@@ -459,15 +467,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Log the received message
           await storage.addWhatsAppLog({
             type: 'incoming',
-            message: `Mensaje recibido de ${from}`,
-            data: {
+            phoneNumber: from,
+            messageContent: `Mensaje recibido de ${from}`,
+            messageId: messageId,
+            status: 'received',
+            rawData: JSON.stringify({
               from,
               messageId,
               timestamp,
               messageType,
               content: messageText,
               rawMessage: message
-            }
+            })
           });
 
           // Find or create customer
