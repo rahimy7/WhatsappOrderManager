@@ -1,8 +1,14 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Radio, Download } from "lucide-react";
+import CreateOrderModal from "@/components/orders/create-order-modal";
+import BulkMessageModal from "@/components/whatsapp/bulk-message-modal";
 
 export default function QuickActions() {
+  const [isCreateOrderModalOpen, setIsCreateOrderModalOpen] = useState(false);
+  const [isBulkMessageModalOpen, setIsBulkMessageModalOpen] = useState(false);
+
   return (
     <Card>
       <CardHeader>
@@ -13,6 +19,7 @@ export default function QuickActions() {
           <Button 
             variant="ghost" 
             className="w-full justify-start h-auto p-3 hover:bg-gray-50"
+            onClick={() => setIsCreateOrderModalOpen(true)}
           >
             <div className="w-8 h-8 bg-primary bg-opacity-10 rounded-lg flex items-center justify-center mr-3">
               <Plus className="text-primary h-4 w-4" />
@@ -23,6 +30,7 @@ export default function QuickActions() {
           <Button 
             variant="ghost" 
             className="w-full justify-start h-auto p-3 hover:bg-gray-50"
+            onClick={() => setIsBulkMessageModalOpen(true)}
           >
             <div className="w-8 h-8 whatsapp-bg bg-opacity-10 rounded-lg flex items-center justify-center mr-3">
               <Radio className="whatsapp-text h-4 w-4" />
@@ -40,6 +48,16 @@ export default function QuickActions() {
             <span className="text-sm font-medium text-gray-900">Exportar Reportes</span>
           </Button>
         </div>
+
+        <CreateOrderModal
+          isOpen={isCreateOrderModalOpen}
+          onClose={() => setIsCreateOrderModalOpen(false)}
+        />
+
+        <BulkMessageModal
+          isOpen={isBulkMessageModalOpen}
+          onClose={() => setIsBulkMessageModalOpen(false)}
+        />
       </CardContent>
     </Card>
   );

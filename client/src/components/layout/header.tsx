@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Plus, Bell, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import CreateOrderModal from "@/components/orders/create-order-modal";
 
 interface HeaderProps {
   title?: string;
@@ -11,6 +13,8 @@ export default function Header({
   title = "Dashboard Principal", 
   subtitle = "Gestión de pedidos y conversaciones de WhatsApp" 
 }: HeaderProps) {
+  const [isCreateOrderModalOpen, setIsCreateOrderModalOpen] = useState(false);
+
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
@@ -19,7 +23,10 @@ export default function Header({
           <p className="text-gray-600">{subtitle}</p>
         </div>
         <div className="flex items-center space-x-4">
-          <Button className="whatsapp-bg hover:bg-green-600 text-white">
+          <Button 
+            className="whatsapp-bg hover:bg-green-600 text-white"
+            onClick={() => setIsCreateOrderModalOpen(true)}
+          >
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Pedido
           </Button>
@@ -36,6 +43,11 @@ export default function Header({
           </div>
         </div>
       </div>
+
+      <CreateOrderModal
+        isOpen={isCreateOrderModalOpen}
+        onClose={() => setIsCreateOrderModalOpen(false)}
+      />
     </header>
   );
 }
