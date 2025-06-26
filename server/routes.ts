@@ -1012,7 +1012,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await handleOrderConfirmation(customer, conversation, phoneNumber);
       } else if (buttonId === 'cancel_order') {
         await sendWelcomeMessage(phoneNumber);
+      } else if (buttonId.startsWith('payment_')) {
+        const paymentMethod = buttonId.split('_')[1];
+        await handlePaymentMethodSelection(customer, paymentMethod, phoneNumber);
       }
+    }
+  }
+
+  // Function to handle payment method selection
+  async function handlePaymentMethodSelection(customer: any, paymentMethod: string, phoneNumber: string) {
+    try {
+      // Get registration flow to retrieve order data
+      const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+      if (!registrationFlow || registrationFlow.currentStep !== 'collect_payment_method') {
+        await sendWhatsAppMessage(phoneNumber, 
+          "❌ Error: No se encontró información del pedido. Por favor, inicia un nuevo pedido escribiendo *menu*."
+        );
+        return;
+      }
+
+      const orderData = JSON.parse(registrationFlow.collectedData || '{}');
+      
+      // Map payment method to display text
+      const paymentMethods: { [key: string]: string } = {
+        'card': '💳 Tarjeta de Crédito/Débito',
+        'transfer': '🏦 Transferencia Bancaria',
+        'cash': '💵 Efectivo al Recibir'
+      };
+
+      const paymentText = paymentMethods[paymentMethod] || 'Método seleccionado';
+      
+      // Update order with payment method in notes
+      if (orderData.orderId) {
+        await storage.updateOrder(orderData.orderId, {
+          notes: `Pedido generado desde WhatsApp - ${orderData.productName} x${orderData.quantity} - ${paymentText}`
+        });
+        
+        // Update order status to confirmed
+        await storage.updateOrderStatus(orderData.orderId, 'confirmed', undefined, `Método de pago: ${paymentText}`);
+      }
+
+      // Delete registration flow as process is complete
+      await storage.deleteRegistrationFlow(phoneNumber);
+
+      // Send final confirmation message
+      let finalMessage = 
+        `🎉 *¡Pedido Confirmado!*\n\n` +
+        `📦 *Resumen del Pedido:*\n` +
+        `🆔 Orden: ${orderData.orderNumber}\n` +
+        `📱 Producto: ${orderData.productName}\n` +
+        `📊 Cantidad: ${orderData.quantity} unidad${orderData.quantity > 1 ? 'es' : ''}\n` +
+        `💰 Subtotal: $${orderData.basePrice.toLocaleString('es-MX')}\n`;
+
+      if (orderData.deliveryCost > 0) {
+        finalMessage += `🚛 Entrega: $${orderData.deliveryCost.toLocaleString('es-MX')}\n`;
+      }
+
+      finalMessage += 
+        `*💳 Total: $${orderData.totalPrice.toLocaleString('es-MX')}*\n\n` +
+        `💵 *Método de Pago:* ${paymentText}\n` +
+        `📍 *Dirección:* ${orderData.deliveryAddress}\n\n`;
+
+      // Add payment-specific instructions
+      if (paymentMethod === 'card') {
+        finalMessage += 
+          `💳 *Instrucciones de Pago:*\n` +
+          `• Te contactaremos para procesar el pago con tarjeta\n` +
+          `• Acepta toda tarjeta de crédito y débito\n` +
+          `• Pago seguro y protegido\n\n`;
+      } else if (paymentMethod === 'transfer') {
+        finalMessage += 
+          `🏦 *Datos para Transferencia:*\n` +
+          `• Cuenta: 1234567890\n` +
+          `• CLABE: 012345678901234567\n` +
+          `• Banco: Ejemplo Bank\n` +
+          `• Beneficiario: Aires Acondicionados\n` +
+          `• Envía comprobante por WhatsApp\n\n`;
+      } else if (paymentMethod === 'cash') {
+        finalMessage += 
+          `💵 *Pago en Efectivo:*\n` +
+          `• Paga al momento de la entrega\n` +
+          `• Ten el monto exacto listo\n` +
+          `• El técnico llevará cambio limitado\n\n`;
+      }
+
+      finalMessage += 
+        `⏰ *Próximos Pasos:*\n` +
+        `1️⃣ Te contactaremos en las próximas 2 horas\n` +
+        `2️⃣ Confirmaremos fecha y hora de entrega\n` +
+        `3️⃣ Coordinaremos la instalación si aplica\n\n` +
+        `📞 Para dudas, responde este mensaje\n` +
+        `🛍️ Para nuevo pedido, escribe *menu*\n\n` +
+        `¡Gracias por confiar en nosotros! 🙏`;
+
+      await sendWhatsAppMessage(phoneNumber, finalMessage);
+
+      // Log successful order completion
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: `Pedido completado: ${orderData.orderNumber} - Método: ${paymentText}`,
+        status: 'completed',
+        rawData: JSON.stringify({
+          orderId: orderData.orderId,
+          orderNumber: orderData.orderNumber,
+          paymentMethod: paymentText,
+          totalAmount: orderData.totalPrice,
+          deliveryAddress: orderData.deliveryAddress
+        })
+      });
+
+    } catch (error) {
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error procesando tu método de pago. Por favor, inténtalo nuevamente escribiendo *menu*."
+      );
+      
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error en selección de método de pago',
+        status: 'error',
+        errorMessage: (error as Error).message,
+        rawData: JSON.stringify({ paymentMethod, error: (error as Error).message })
+      });
     }
   }
 
@@ -1119,7 +1241,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         priority: "normal"
       }, orderItems);
 
-      // Send order confirmation
+      // Store order in customer registration flow for data collection
+      await storage.createRegistrationFlow({
+        phoneNumber: phoneNumber,
+        currentStep: 'collect_delivery_data',
+        collectedData: JSON.stringify({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          productName: product.name,
+          quantity: quantity,
+          basePrice: basePrice,
+          deliveryCost: deliveryCost,
+          totalPrice: totalPrice
+        }),
+        requestedService: 'order_completion',
+        isCompleted: false,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      });
+
+      // Send order confirmation and request delivery data
       const confirmationMessage = 
         "✅ *¡Pedido Generado!*\n\n" +
         `🆔 Orden: ${order.orderNumber}\n` +
@@ -1127,9 +1267,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `💰 Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
         (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
         `*💳 Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
-        (customer.address ? `📍 Entrega a: ${customer.address}\n\n` : '') +
-        "📞 Te contactaremos pronto para confirmar detalles y coordinar la entrega.\n\n" +
-        "¡Gracias por tu pedido!";
+        "📍 *Datos de Entrega*\n" +
+        "Para continuar con tu pedido, necesitamos algunos datos:\n\n" +
+        "Por favor comparte tu *dirección completa* de entrega:\n" +
+        "_(Ejemplo: Calle 123, Colonia Centro, Ciudad, CP 12345)_";
 
       await sendWhatsAppMessage(phoneNumber, confirmationMessage);
 
@@ -1714,9 +1855,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   async function handleRegistrationFlow(phoneNumber: string, messageText: string, registrationFlow: any) {
     try {
-      const data = JSON.parse(registrationFlow.data || '{}');
+      const data = JSON.parse(registrationFlow.collectedData || '{}');
       
-      if (registrationFlow.step === 'awaiting_name') {
+      if (registrationFlow.currentStep === 'awaiting_name') {
         // Validate name (should not be empty and should contain at least 2 words)
         const name = messageText.trim();
         if (name.length < 2 || !name.includes(' ')) {
@@ -1758,20 +1899,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
         });
       }
+      
+      else if (registrationFlow.currentStep === 'collect_delivery_data') {
+        // Validate delivery address
+        const address = messageText.trim();
+        if (address.length < 10) {
+          await sendWhatsAppMessage(phoneNumber, 
+            "Por favor, proporciona una dirección completa con calle, número, colonia y código postal.\n\n" +
+            "Ejemplo: Av. Reforma 123, Colonia Centro, CDMX, CP 06000"
+          );
+          return;
+        }
+        
+        // Update customer with delivery address
+        const customer = await storage.getCustomerByPhone(phoneNumber);
+        if (customer) {
+          await storage.updateCustomerLocation(customer.id, {
+            address: address,
+            latitude: "0", // Could be enhanced with geocoding
+            longitude: "0"
+          });
+        }
+        
+        // Update flow to next step
+        const updatedData = { ...data, deliveryAddress: address };
+        await storage.updateRegistrationFlow(phoneNumber, {
+          currentStep: 'collect_payment_method',
+          collectedData: JSON.stringify(updatedData)
+        });
+        
+        // Send payment method selection
+        const paymentMessage = {
+          messaging_product: "whatsapp",
+          to: phoneNumber,
+          type: "interactive",
+          interactive: {
+            type: "button",
+            body: {
+              text: `✅ *Dirección registrada*\n📍 ${address}\n\n*Método de Pago*\nSelecciona tu método de pago preferido:`
+            },
+            action: {
+              buttons: [
+                {
+                  type: "reply",
+                  reply: {
+                    id: "payment_card",
+                    title: "💳 Tarjeta"
+                  }
+                },
+                {
+                  type: "reply",
+                  reply: {
+                    id: "payment_transfer",
+                    title: "🏦 Transferencia"
+                  }
+                },
+                {
+                  type: "reply",
+                  reply: {
+                    id: "payment_cash",
+                    title: "💵 Efectivo"
+                  }
+                }
+              ]
+            }
+          }
+        };
+        
+        await sendWhatsAppInteractiveMessage(phoneNumber, paymentMessage);
+      }
+      
+      else if (registrationFlow.currentStep === 'collect_payment_method') {
+        // This will be handled by interactive message handler
+        return;
+      }
+      
     } catch (error) {
       // If there's an error, reset registration flow
       await storage.deleteRegistrationFlow(phoneNumber);
       await sendWhatsAppMessage(phoneNumber, 
-        "❌ Hubo un error en el registro. Por favor, escribe *hola* para comenzar nuevamente."
+        "❌ Hubo un error en el proceso. Por favor, escribe *hola* para comenzar nuevamente."
       );
       
       await storage.addWhatsAppLog({
         type: 'error',
         phoneNumber: phoneNumber,
-        messageContent: 'Error en flujo de registro',
+        messageContent: 'Error en flujo de registro/pedido',
         status: 'error',
         errorMessage: (error as Error).message,
-        rawData: JSON.stringify({ step: registrationFlow.step, error: (error as Error).message })
+        rawData: JSON.stringify({ step: registrationFlow.currentStep, error: (error as Error).message })
       });
     }
   }
