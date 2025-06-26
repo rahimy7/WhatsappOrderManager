@@ -35,7 +35,7 @@ export default function BulkMessageModal({ isOpen, onClose }: BulkMessageModalPr
   const [selectAll, setSelectAll] = useState(false);
   const { toast } = useToast();
 
-  const { data: customers } = useQuery({
+  const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 

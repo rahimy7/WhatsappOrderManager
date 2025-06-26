@@ -46,11 +46,11 @@ export default function CreateOrderModal({ isOpen, onClose }: CreateOrderModalPr
   const [newCustomerMode, setNewCustomerMode] = useState(false);
   const { toast } = useToast();
 
-  const { data: products } = useQuery({
+  const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
 
-  const { data: customers } = useQuery({
+  const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 
@@ -65,11 +65,12 @@ export default function CreateOrderModal({ isOpen, onClose }: CreateOrderModalPr
   });
 
   const createCustomerMutation = useMutation({
-    mutationFn: async (customerData: { name: string; phone: string }) => {
-      return apiRequest("POST", "/api/customers", {
+    mutationFn: async (customerData: { name: string; phone: string }): Promise<Customer> => {
+      const response = await apiRequest("POST", "/api/customers", {
         ...customerData,
         whatsappId: customerData.phone.replace(/\D/g, ''),
       });
+      return response as Customer;
     },
     onSuccess: (newCustomer: Customer) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
