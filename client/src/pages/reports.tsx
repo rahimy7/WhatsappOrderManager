@@ -203,11 +203,11 @@ export default function Reports() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-col md:flex-row gap-3 md:gap-4">
             <div className="flex items-center space-x-2">
               <Filter className="h-4 w-4" />
               <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-full md:w-40">
                   <SelectValue placeholder="Período" />
                 </SelectTrigger>
                 <SelectContent>
@@ -221,7 +221,7 @@ export default function Reports() {
 
             <div className="flex items-center space-x-2">
               <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-full md:w-40">
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
                 <SelectContent>
@@ -235,9 +235,10 @@ export default function Reports() {
               </Select>
             </div>
 
-            <Button variant="outline" className="ml-auto">
+            <Button variant="outline" className="w-full md:w-auto md:ml-auto">
               <Download className="h-4 w-4 mr-2" />
-              Exportar Datos
+              <span className="hidden sm:inline">Exportar Datos</span>
+              <span className="sm:hidden">Exportar</span>
             </Button>
           </div>
         </CardContent>

@@ -9,11 +9,11 @@ export default function MetricsCards() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
         {[1, 2, 3, 4].map((i) => (
           <Card key={i} className="animate-pulse">
-            <CardContent className="p-6">
-              <div className="h-20 bg-gray-200 rounded"></div>
+            <CardContent className="p-3 md:p-6">
+              <div className="h-16 md:h-20 bg-gray-200 rounded"></div>
             </CardContent>
           </Card>
         ))}
@@ -57,23 +57,23 @@ export default function MetricsCards() {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
       {cards.map((card, index) => {
         const Icon = card.icon;
         return (
           <Card key={index} className="border border-gray-200 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{card.title}</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{card.value}</p>
-                  <p className="text-sm text-green-600 mt-1 flex items-center">
-                    <TrendingUp className="h-3 w-3 mr-1" />
+            <CardContent className="p-3 md:p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div className="flex-1">
+                  <p className="text-xs md:text-sm font-medium text-gray-600">{card.title}</p>
+                  <p className="text-lg md:text-3xl font-bold text-gray-900 mt-1">{card.value}</p>
+                  <p className="text-xs md:text-sm text-green-600 mt-1 flex items-center">
+                    <TrendingUp className="h-2 md:h-3 w-2 md:w-3 mr-1" />
                     {card.change}
                   </p>
                 </div>
-                <div className={`w-12 h-12 ${card.iconBg} rounded-lg flex items-center justify-center`}>
-                  <Icon className={`${card.iconColor} h-6 w-6`} />
+                <div className={`w-8 h-8 md:w-12 md:h-12 ${card.iconBg} rounded-lg flex items-center justify-center mt-2 md:mt-0 self-end md:self-auto`}>
+                  <Icon className={`${card.iconColor} h-4 md:h-6 w-4 md:w-6`} />
                 </div>
               </div>
             </CardContent>
