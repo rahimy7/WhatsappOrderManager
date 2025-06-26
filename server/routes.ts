@@ -979,19 +979,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const locationMessage = 
       "📍 *Necesitamos tu ubicación*\n\n" +
       "Para calcular el costo de entrega exacto, por favor:\n\n" +
-      "1️⃣ Usa el botón de ubicación de WhatsApp\n" +
-      "2️⃣ O escribe tu dirección completa\n\n" +
-      "Esto nos ayuda a darte el precio más preciso.";
+      "🎯 *Recomendado - Ubicación GPS:*\n" +
+      "📱 Botón 📎 → Ubicación → Enviar ubicación actual\n" +
+      "_(Más preciso y rápido)_\n\n" +
+      "📝 *O escribe tu dirección:*\n" +
+      "Incluye calle, número, colonia y código postal\n\n" +
+      "💡 La ubicación GPS nos permite calcular la distancia exacta y darte el precio más preciso.";
 
     await sendWhatsAppMessage(phoneNumber, locationMessage);
   }
 
   async function handleLocationMessage(customer: any, location: any, phoneNumber: string) {
+    try {
+      // Log received location for debugging
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: `Ubicación GPS recibida: ${location.latitude}, ${location.longitude}`,
+        status: 'received',
+        rawData: JSON.stringify({ 
+          latitude: location.latitude,
+          longitude: location.longitude,
+          name: location.name,
+          address: location.address,
+          customerId: customer.id
+        })
+      });
+
+      // Check if customer is in an active registration flow (order completion)
+      const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+      if (registrationFlow && registrationFlow.currentStep === 'collect_delivery_address') {
+        // Handle location during order flow
+        await handleLocationInOrderFlow(customer, location, phoneNumber, registrationFlow);
+        return;
+      }
+
+      // Handle general location sharing (outside of order flow)
+      await handleGeneralLocationSharing(customer, location, phoneNumber);
+
+    } catch (error) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error procesando ubicación GPS',
+        status: 'error',
+        errorMessage: (error as Error).message,
+        rawData: JSON.stringify({ error: (error as Error).message, location })
+      });
+
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error procesando tu ubicación. Por favor, inténtalo nuevamente o envía tu dirección como texto."
+      );
+    }
+  }
+
+  // Handle location sharing during order completion flow
+  async function handleLocationInOrderFlow(customer: any, location: any, phoneNumber: string, registrationFlow: any) {
+    // Generate address from GPS coordinates
+    const gpsAddress = location.name || location.address || 
+      `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+
     // Update customer with location data
     const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
       latitude: location.latitude.toString(),
       longitude: location.longitude.toString(), 
-      address: location.name || location.address || `${location.latitude}, ${location.longitude}`
+      address: gpsAddress
+    });
+
+    // Calculate delivery cost
+    const deliveryInfo = await storage.calculateDeliveryCost(
+      location.latitude.toString(),
+      location.longitude.toString(),
+      "product"
+    );
+
+    // Get order data from registration flow
+    const orderData = JSON.parse(registrationFlow.collectedData || '{}');
+    
+    // Update flow to next step - collect contact number
+    const updatedData = { ...orderData, deliveryAddress: gpsAddress, gpsLocation: { latitude: location.latitude, longitude: location.longitude } };
+    await storage.updateRegistrationFlow(phoneNumber, {
+      currentStep: 'collect_contact_number',
+      collectedData: JSON.stringify(updatedData)
+    });
+
+    const confirmMessage = 
+      "📍 *¡Ubicación GPS guardada!*\n\n" +
+      `📍 ${gpsAddress}\n` +
+      `🚛 Distancia: ${deliveryInfo.distance} km\n` +
+      `💰 Costo de entrega: $${deliveryInfo.cost}\n` +
+      `⏱️ Tiempo estimado: ${deliveryInfo.estimatedTime} min\n\n` +
+      "📞 *Número de Contacto*\n" +
+      "Necesitamos un número para coordinar la entrega:";
+
+    await sendWhatsAppMessage(phoneNumber, confirmMessage);
+
+    // Send contact number selection with option to use WhatsApp number
+    const contactMessage = {
+      messaging_product: "whatsapp",
+      to: phoneNumber,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: {
+          text: "Selecciona tu número de contacto para la entrega:"
+        },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: {
+                id: "use_whatsapp_number",
+                title: "📱 Usar este WhatsApp"
+              }
+            },
+            {
+              type: "reply",
+              reply: {
+                id: "provide_different_number",
+                title: "📞 Otro número"
+              }
+            }
+          ]
+        }
+      }
+    };
+
+    await sendWhatsAppInteractiveMessage(phoneNumber, contactMessage);
+
+    await storage.addWhatsAppLog({
+      type: 'info',
+      phoneNumber: phoneNumber,
+      messageContent: `Ubicación GPS procesada en flujo de pedido: ${gpsAddress}`,
+      status: 'processed',
+      rawData: JSON.stringify({ 
+        orderId: orderData.orderId,
+        gpsCoordinates: { latitude: location.latitude, longitude: location.longitude },
+        deliveryCost: deliveryInfo.cost,
+        distance: deliveryInfo.distance
+      })
+    });
+  }
+
+  // Handle general location sharing (outside of order flow)
+  async function handleGeneralLocationSharing(customer: any, location: any, phoneNumber: string) {
+    // Generate address from GPS coordinates
+    const gpsAddress = location.name || location.address || 
+      `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+
+    // Update customer with location data
+    const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
+      latitude: location.latitude.toString(),
+      longitude: location.longitude.toString(), 
+      address: gpsAddress
     });
 
     // Calculate delivery cost for sample
@@ -1002,17 +1142,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     );
 
     const confirmMessage = 
-      "📍 *¡Ubicación guardada!*\n\n" +
-      `📍 ${updatedCustomer.address}\n` +
+      "📍 *¡Ubicación GPS guardada!*\n\n" +
+      `📍 ${gpsAddress}\n` +
       `🚛 Distancia: ${deliveryInfo.distance} km\n` +
       `💰 Entrega desde: $${deliveryInfo.cost}\n` +
       `⏱️ Tiempo estimado: ${deliveryInfo.estimatedTime} min\n\n` +
-      "Ahora puedes seleccionar productos para generar tu pedido.";
+      "Ahora puedes seleccionar productos para generar tu pedido.\n\n" +
+      "Escribe *menu* para ver nuestro catálogo.";
 
     await sendWhatsAppMessage(phoneNumber, confirmMessage);
-    
-    // Send product menu after location confirmation
-    setTimeout(() => sendProductMenu(phoneNumber), 2000);
+
+    await storage.addWhatsAppLog({
+      type: 'info',
+      phoneNumber: phoneNumber,
+      messageContent: `Ubicación GPS guardada para uso general: ${gpsAddress}`,
+      status: 'processed',
+      rawData: JSON.stringify({ 
+        customerId: customer.id,
+        gpsCoordinates: { latitude: location.latitude, longitude: location.longitude },
+        deliveryCost: deliveryInfo.cost,
+        distance: deliveryInfo.distance
+      })
+    });
   }
 
   async function handleInteractiveMessage(customer: any, conversation: any, interactive: any, phoneNumber: string) {
@@ -2072,14 +2223,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           collectedData: JSON.stringify(updatedData)
         });
         
-        // Send delivery address request
+        // Send delivery address request with GPS option
         const addressMessage = 
           `✅ *Nombre registrado: ${customerName}*\n\n` +
           "📍 *Dirección de Entrega*\n" +
-          "Ahora necesitamos tu dirección completa para la entrega:\n\n" +
-          "Por favor comparte tu *dirección completa*:\n" +
+          "Necesitamos tu ubicación para calcular el costo de entrega:\n\n" +
+          "🎯 *Opción Recomendada:*\n" +
+          "📱 Comparte tu ubicación GPS desde WhatsApp\n" +
+          "_(Botón 📎 → Ubicación → Enviar ubicación actual)_\n\n" +
+          "📝 *O escribe tu dirección completa:*\n" +
           "_(Incluye calle, número, colonia, ciudad y código postal)_\n\n" +
-          "Ejemplo: Av. Reforma 123, Col. Centro, CDMX, CP 06000";
+          "Ejemplo: Av. Reforma 123, Col. Centro, CDMX, CP 06000\n\n" +
+          "💡 *La ubicación GPS nos da la distancia exacta y el costo de entrega más preciso.*";
         
         await sendWhatsAppMessage(phoneNumber, addressMessage);
       }
