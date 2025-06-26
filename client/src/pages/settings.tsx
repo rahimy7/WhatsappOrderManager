@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
-  Settings, 
+  Settings as SettingsIcon, 
   Key, 
   Phone, 
   Shield, 
@@ -41,23 +41,23 @@ export default function Settings() {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const { toast } = useToast();
 
-  const { data: config, isLoading } = useQuery({
+  const { data: config = {}, isLoading } = useQuery<any>({
     queryKey: ["/api/settings/whatsapp"],
   });
 
-  const { data: connectionStatus } = useQuery({
+  const { data: connectionStatus = {} } = useQuery<any>({
     queryKey: ["/api/whatsapp/status"],
   });
 
   const form = useForm<WhatsAppConfig>({
     resolver: zodResolver(whatsappConfigSchema),
     defaultValues: {
-      metaAppId: config?.metaAppId || "",
-      metaAppSecret: config?.metaAppSecret || "",
-      whatsappBusinessAccountId: config?.whatsappBusinessAccountId || "",
-      whatsappPhoneNumberId: config?.whatsappPhoneNumberId || "",
-      whatsappToken: config?.whatsappToken || "",
-      whatsappVerifyToken: config?.whatsappVerifyToken || "",
+      metaAppId: config.metaAppId || "",
+      metaAppSecret: config.metaAppSecret || "",
+      whatsappBusinessAccountId: config.whatsappBusinessAccountId || "",
+      whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
+      whatsappToken: config.whatsappToken || "",
+      whatsappVerifyToken: config.whatsappVerifyToken || "",
     },
   });
 
@@ -161,7 +161,7 @@ export default function Settings() {
               <span>Seguridad</span>
             </TabsTrigger>
             <TabsTrigger value="general" className="flex items-center space-x-2">
-              <Settings className="h-4 w-4" />
+              <SettingsIcon className="h-4 w-4" />
               <span>General</span>
             </TabsTrigger>
           </TabsList>

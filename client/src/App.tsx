@@ -23,6 +23,7 @@ function Router() {
       <Route path="/team" component={Team} />
       <Route path="/products" component={Products} />
       <Route path="/reports" component={Reports} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
