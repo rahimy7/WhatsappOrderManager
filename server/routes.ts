@@ -758,8 +758,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         if (autoResponse) {
-          // Send auto response message
-          await sendWhatsAppMessage(from, autoResponse.messageText);
+          // Build complete message with menu options if available
+          let completeMessage = autoResponse.messageText;
+          
+          if (autoResponse.menuOptions) {
+            try {
+              const menuOptions = JSON.parse(autoResponse.menuOptions);
+              if (Array.isArray(menuOptions) && menuOptions.length > 0) {
+                completeMessage += "\n\n📋 *Opciones disponibles:*\n";
+                menuOptions.forEach((option, index) => {
+                  completeMessage += `${index + 1}️⃣ ${option.label}\n`;
+                });
+                completeMessage += "\nEscribe el número de la opción que deseas o usa estos comandos:\n";
+                completeMessage += "📱 *menu* - Ver opciones\n";
+                completeMessage += "📦 *productos* - Ver catálogo\n"; 
+                completeMessage += "⚙️ *servicios* - Ver servicios\n";
+                completeMessage += "❓ *ayuda* - Obtener ayuda";
+              }
+            } catch (error) {
+              // If menu options parsing fails, just send the original message
+              console.log('Error parsing menu options:', error);
+            }
+          }
+          
+          // Send auto response message with menu options
+          await sendWhatsAppMessage(from, completeMessage);
           responseFound = true;
           
           // Log the auto response
@@ -772,7 +795,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               customerMessage: text, 
               trigger: matchedTrigger,
               autoResponseId: autoResponse.id,
-              responseText: autoResponse.messageText
+              responseText: completeMessage
             })
           });
         }
