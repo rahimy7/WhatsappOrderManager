@@ -689,8 +689,8 @@ export class MemStorage implements IStorage {
     const history: OrderHistory = {
       id,
       orderId: insertHistory.orderId,
-      userId: insertHistory.userId,
-      statusFrom: insertHistory.statusFrom,
+      userId: insertHistory.userId ?? null,
+      statusFrom: insertHistory.statusFrom ?? null,
       statusTo: insertHistory.statusTo,
       action: insertHistory.action,
       notes: insertHistory.notes || null,
