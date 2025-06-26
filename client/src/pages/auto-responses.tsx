@@ -191,7 +191,7 @@ export default function AutoResponsesPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="trigger">Disparador</Label>
-                  <Select value={formData.trigger} onValueChange={(value) => setFormData({ ...formData, trigger: value })}>
+                  <Select value={formData.trigger || ""} onValueChange={(value) => setFormData({ ...formData, trigger: value })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -222,7 +222,7 @@ export default function AutoResponsesPage() {
                 <Label htmlFor="menuOptions">Opciones del Menú (JSON)</Label>
                 <Textarea
                   id="menuOptions"
-                  value={formData.menuOptions}
+                  value={formData.menuOptions || ""}
                   onChange={(e) => setFormData({ ...formData, menuOptions: e.target.value })}
                   placeholder='[{"label": "Ver Productos", "value": "products", "action": "show_products"}]'
                   rows={3}
@@ -235,7 +235,7 @@ export default function AutoResponsesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="nextAction">Acción Siguiente</Label>
-                  <Select value={formData.nextAction} onValueChange={(value) => setFormData({ ...formData, nextAction: value })}>
+                  <Select value={formData.nextAction || ""} onValueChange={(value) => setFormData({ ...formData, nextAction: value })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -253,7 +253,7 @@ export default function AutoResponsesPage() {
                   <Input
                     id="priority"
                     type="number"
-                    value={formData.priority}
+                    value={formData.priority || 1}
                     onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
                     min="1"
                     max="10"
@@ -265,7 +265,7 @@ export default function AutoResponsesPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="isActive"
-                    checked={formData.isActive}
+                    checked={formData.isActive ?? true}
                     onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
                   />
                   <Label htmlFor="isActive">Activo</Label>
@@ -273,7 +273,7 @@ export default function AutoResponsesPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="requiresRegistration"
-                    checked={formData.requiresRegistration}
+                    checked={formData.requiresRegistration ?? false}
                     onCheckedChange={(checked) => setFormData({ ...formData, requiresRegistration: checked })}
                   />
                   <Label htmlFor="requiresRegistration">Requiere Registro</Label>

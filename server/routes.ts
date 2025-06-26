@@ -9,6 +9,8 @@ import {
   insertMessageSchema,
   insertWebMessageSchema,
   insertUserSchema,
+  insertAutoResponseSchema,
+  insertCustomerRegistrationFlowSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1427,6 +1429,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid message data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to send WhatsApp message" });
+    }
+  });
+
+  // Auto Responses routes
+  app.get("/api/auto-responses", async (req, res) => {
+    try {
+      const responses = await storage.getAllAutoResponses();
+      res.json(responses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch auto responses" });
+    }
+  });
+
+  app.get("/api/auto-responses/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const response = await storage.getAutoResponse(id);
+      if (!response) {
+        return res.status(404).json({ error: "Auto response not found" });
+      }
+      res.json(response);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch auto response" });
+    }
+  });
+
+  app.post("/api/auto-responses", async (req, res) => {
+    try {
+      const responseData = insertAutoResponseSchema.parse(req.body);
+      const newResponse = await storage.createAutoResponse(responseData);
+      res.status(201).json(newResponse);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid auto response data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create auto response" });
+    }
+  });
+
+  app.put("/api/auto-responses/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = insertAutoResponseSchema.partial().parse(req.body);
+      const updatedResponse = await storage.updateAutoResponse(id, updates);
+      if (!updatedResponse) {
+        return res.status(404).json({ error: "Auto response not found" });
+      }
+      res.json(updatedResponse);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid update data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update auto response" });
+    }
+  });
+
+  app.delete("/api/auto-responses/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteAutoResponse(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete auto response" });
+    }
+  });
+
+  // Customer Registration Flows routes
+  app.get("/api/registration-flows/:phoneNumber", async (req, res) => {
+    try {
+      const phoneNumber = req.params.phoneNumber;
+      const flow = await storage.getRegistrationFlow(phoneNumber);
+      if (!flow) {
+        return res.status(404).json({ error: "Registration flow not found" });
+      }
+      res.json(flow);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch registration flow" });
+    }
+  });
+
+  app.post("/api/registration-flows", async (req, res) => {
+    try {
+      const flowData = insertCustomerRegistrationFlowSchema.parse(req.body);
+      const newFlow = await storage.createRegistrationFlow(flowData);
+      res.status(201).json(newFlow);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid registration flow data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create registration flow" });
+    }
+  });
+
+  app.put("/api/registration-flows/:phoneNumber", async (req, res) => {
+    try {
+      const phoneNumber = req.params.phoneNumber;
+      const updates = insertCustomerRegistrationFlowSchema.partial().parse(req.body);
+      const updatedFlow = await storage.updateRegistrationFlow(phoneNumber, updates);
+      if (!updatedFlow) {
+        return res.status(404).json({ error: "Registration flow not found" });
+      }
+      res.json(updatedFlow);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid update data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update registration flow" });
+    }
+  });
+
+  app.delete("/api/registration-flows/:phoneNumber", async (req, res) => {
+    try {
+      const phoneNumber = req.params.phoneNumber;
+      await storage.deleteRegistrationFlow(phoneNumber);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete registration flow" });
     }
   });
 
