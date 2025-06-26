@@ -1360,6 +1360,54 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async calculateDeliveryCost(
+    customerLatitude: string,
+    customerLongitude: string,
+    productCategory: string = "product"
+  ): Promise<{
+    distance: number;
+    cost: number;
+    estimatedTime: number;
+  }> {
+    // Base location (company headquarters)
+    const baseLatitude = 19.4326; // CDMX Centro
+    const baseLongitude = -99.1332;
+
+    // Calculate distance using Haversine formula
+    const customerLat = parseFloat(customerLatitude);
+    const customerLng = parseFloat(customerLongitude);
+    
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (customerLat - baseLatitude) * Math.PI / 180;
+    const dLng = (customerLng - baseLongitude) * Math.PI / 180;
+    
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(baseLatitude * Math.PI / 180) * Math.cos(customerLat * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+
+    // Calculate delivery cost based on distance and product type
+    let baseCost = 50; // Base delivery cost
+    let costPerKm = 8; // Cost per kilometer
+    
+    // Services have higher delivery cost due to equipment transport
+    if (productCategory === "service") {
+      baseCost = 100;
+      costPerKm = 12;
+    }
+    
+    const cost = Math.round((baseCost + (distance * costPerKm)) * 100) / 100;
+    const estimatedTime = Math.round((distance * 3) + 30); // 30 min base + 3 min per km
+    
+    return {
+      distance: Math.round(distance * 100) / 100,
+      cost,
+      estimatedTime
+    };
+  }
+
   // Conversations
   async getConversation(id: number): Promise<ConversationWithDetails | undefined> {
     const conversationData = await db.select({
