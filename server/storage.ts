@@ -7,6 +7,8 @@ import {
   orderHistory,
   conversations,
   messages,
+  whatsappSettings,
+  whatsappLogs,
   type User,
   type Customer,
   type Product,
@@ -15,6 +17,8 @@ import {
   type OrderHistory,
   type Conversation,
   type Message,
+  type WhatsAppSettings,
+  type WhatsAppLog,
   type InsertUser,
   type InsertCustomer,
   type InsertProduct,
@@ -23,9 +27,13 @@ import {
   type InsertOrderHistory,
   type InsertConversation,
   type InsertMessage,
+  type InsertWhatsAppSettings,
+  type InsertWhatsAppLog,
   type OrderWithDetails,
   type ConversationWithDetails,
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and, count } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -105,12 +113,12 @@ export interface IStorage {
   }>;
 
   // WhatsApp Settings
-  getWhatsAppConfig(): Promise<any>;
-  updateWhatsAppConfig(config: any): Promise<any>;
+  getWhatsAppConfig(): Promise<WhatsAppSettings | null>;
+  updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings>;
   
   // WhatsApp Logs
-  getWhatsAppLogs(): Promise<any[]>;
-  addWhatsAppLog(log: any): Promise<void>;
+  getWhatsAppLogs(): Promise<WhatsAppLog[]>;
+  addWhatsAppLog(log: InsertWhatsAppLog): Promise<WhatsAppLog>;
 }
 
 export class MemStorage implements IStorage {
@@ -1012,4 +1020,450 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database Storage Implementation
+export class DatabaseStorage implements IStorage {
+  // Users
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  async updateUserStatus(id: number, status: string): Promise<User | undefined> {
+    const [user] = await db.update(users).set({ status }).where(eq(users.id, id)).returning();
+    return user || undefined;
+  }
+
+  // Customers
+  async getCustomer(id: number): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    return customer || undefined;
+  }
+
+  async getCustomerByPhone(phone: string): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.phone, phone));
+    return customer || undefined;
+  }
+
+  async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
+    const [customer] = await db.insert(customers).values(insertCustomer).returning();
+    return customer;
+  }
+
+  async getAllCustomers(): Promise<Customer[]> {
+    return await db.select().from(customers);
+  }
+
+  async updateCustomerLocation(id: number, location: {
+    latitude: string;
+    longitude: string;
+    address: string;
+  }): Promise<Customer> {
+    const [customer] = await db.update(customers).set({
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: location.address,
+      lastContact: new Date()
+    }).where(eq(customers.id, id)).returning();
+    return customer;
+  }
+
+  // Products
+  async getProduct(id: number): Promise<Product | undefined> {
+    const [product] = await db.select().from(products).where(eq(products.id, id));
+    return product || undefined;
+  }
+
+  async createProduct(insertProduct: InsertProduct): Promise<Product> {
+    const [product] = await db.insert(products).values(insertProduct).returning();
+    return product;
+  }
+
+  async getAllProducts(): Promise<Product[]> {
+    return await db.select().from(products);
+  }
+
+  async updateProduct(id: number, updates: Partial<InsertProduct>): Promise<Product | undefined> {
+    const [product] = await db.update(products).set(updates).where(eq(products.id, id)).returning();
+    return product || undefined;
+  }
+
+  // Orders - Implementation with joins for OrderWithDetails
+  async getOrder(id: number): Promise<OrderWithDetails | undefined> {
+    const orderData = await db.select({
+      order: orders,
+      customer: customers,
+      assignedUser: users
+    })
+    .from(orders)
+    .leftJoin(customers, eq(orders.customerId, customers.id))
+    .leftJoin(users, eq(orders.assignedUserId, users.id))
+    .where(eq(orders.id, id));
+
+    if (orderData.length === 0) return undefined;
+
+    const { order, customer, assignedUser } = orderData[0];
+    if (!customer) return undefined;
+
+    // Get order items with products
+    const itemsData = await db.select({
+      item: orderItems,
+      product: products
+    })
+    .from(orderItems)
+    .leftJoin(products, eq(orderItems.productId, products.id))
+    .where(eq(orderItems.orderId, id));
+
+    const items = itemsData.map(({ item, product }) => ({
+      ...item,
+      product: product!
+    }));
+
+    return {
+      ...order,
+      customer,
+      assignedUser: assignedUser || undefined,
+      items
+    };
+  }
+
+  async createOrder(insertOrder: InsertOrder, items: Array<{
+    productId: number;
+    quantity: number;
+    unitPrice: string;
+    totalPrice: string;
+    installationCost?: string;
+    partsCost?: string;
+    laborHours?: string;
+    laborRate?: string;
+    deliveryCost?: string;
+    deliveryDistance?: string;
+    notes?: string;
+  }>): Promise<OrderWithDetails> {
+    // Generate order number
+    const orderCount = await db.select({ count: count() }).from(orders);
+    const orderNumber = `ORD-${1000 + orderCount[0].count}`;
+
+    const [order] = await db.insert(orders).values({
+      ...insertOrder,
+      orderNumber
+    }).returning();
+
+    // Insert order items
+    for (const item of items) {
+      await db.insert(orderItems).values({
+        orderId: order.id,
+        ...item
+      });
+    }
+
+    // Add to order history
+    await db.insert(orderHistory).values({
+      orderId: order.id,
+      statusFrom: null,
+      statusTo: order.status,
+      action: 'created'
+    });
+
+    const orderWithDetails = await this.getOrder(order.id);
+    return orderWithDetails!;
+  }
+
+  async getAllOrders(): Promise<OrderWithDetails[]> {
+    const ordersData = await db.select({
+      order: orders,
+      customer: customers,
+      assignedUser: users
+    })
+    .from(orders)
+    .leftJoin(customers, eq(orders.customerId, customers.id))
+    .leftJoin(users, eq(orders.assignedUserId, users.id))
+    .orderBy(desc(orders.createdAt));
+
+    const ordersWithDetails = await Promise.all(
+      ordersData.map(async ({ order }) => {
+        return await this.getOrder(order.id);
+      })
+    );
+
+    return ordersWithDetails.filter(order => order !== undefined) as OrderWithDetails[];
+  }
+
+  async updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined> {
+    const [order] = await db.update(orders).set({
+      ...updates,
+      updatedAt: new Date()
+    }).where(eq(orders.id, id)).returning();
+    return order || undefined;
+  }
+
+  async assignOrder(orderId: number, userId: number): Promise<Order | undefined> {
+    const [order] = await db.update(orders).set({
+      assignedUserId: userId,
+      status: 'assigned',
+      updatedAt: new Date()
+    }).where(eq(orders.id, orderId)).returning();
+
+    if (order) {
+      await db.insert(orderHistory).values({
+        orderId,
+        userId,
+        statusFrom: 'pending',
+        statusTo: 'assigned',
+        action: 'assigned'
+      });
+    }
+
+    return order || undefined;
+  }
+
+  async updateOrderStatus(orderId: number, status: string, userId?: number, notes?: string): Promise<Order | undefined> {
+    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (currentOrder.length === 0) return undefined;
+
+    const [order] = await db.update(orders).set({
+      status,
+      updatedAt: new Date()
+    }).where(eq(orders.id, orderId)).returning();
+
+    if (order) {
+      await db.insert(orderHistory).values({
+        orderId,
+        userId,
+        statusFrom: currentOrder[0].status,
+        statusTo: status,
+        action: this.getActionFromStatus(status),
+        notes
+      });
+    }
+
+    return order || undefined;
+  }
+
+  private getActionFromStatus(status: string): string {
+    switch (status) {
+      case 'assigned': return 'assigned';
+      case 'in_progress': return 'started';
+      case 'completed': return 'completed';
+      case 'cancelled': return 'cancelled';
+      default: return 'updated';
+    }
+  }
+
+  async getOrderHistory(orderId: number): Promise<OrderHistory[]> {
+    return await db.select().from(orderHistory)
+      .where(eq(orderHistory.orderId, orderId))
+      .orderBy(desc(orderHistory.timestamp));
+  }
+
+  async addOrderHistory(insertHistory: InsertOrderHistory): Promise<OrderHistory> {
+    const [history] = await db.insert(orderHistory).values(insertHistory).returning();
+    return history;
+  }
+
+  async calculateServicePrice(serviceId: number, installationComplexity: number, partsNeeded: Array<{productId: number; quantity: number}>): Promise<{
+    basePrice: number;
+    installationCost: number;
+    partsCost: number;
+    laborHours: number;
+    laborRate: number;
+    totalPrice: number;
+  }> {
+    const service = await this.getProduct(serviceId);
+    if (!service || service.category !== 'service') {
+      throw new Error('Invalid service ID');
+    }
+
+    const basePrice = parseFloat(service.price);
+    const laborRate = 150; // $150 per hour
+    const laborHours = Math.max(1, installationComplexity * 0.5);
+    const installationCost = laborHours * laborRate;
+
+    let partsCost = 0;
+    for (const part of partsNeeded) {
+      const product = await this.getProduct(part.productId);
+      if (product) {
+        partsCost += parseFloat(product.price) * part.quantity;
+      }
+    }
+
+    const totalPrice = basePrice + installationCost + partsCost;
+
+    return {
+      basePrice,
+      installationCost: Math.round(installationCost * 100) / 100,
+      partsCost,
+      laborHours,
+      laborRate,
+      totalPrice: Math.round(totalPrice * 100) / 100,
+    };
+  }
+
+  // Conversations
+  async getConversation(id: number): Promise<ConversationWithDetails | undefined> {
+    const conversationData = await db.select({
+      conversation: conversations,
+      customer: customers,
+      order: orders
+    })
+    .from(conversations)
+    .leftJoin(customers, eq(conversations.customerId, customers.id))
+    .leftJoin(orders, eq(conversations.orderId, orders.id))
+    .where(eq(conversations.id, id));
+
+    if (conversationData.length === 0) return undefined;
+
+    const { conversation, customer, order } = conversationData[0];
+    if (!customer) return undefined;
+
+    // Get last message and unread count
+    const messagesData = await db.select().from(messages)
+      .where(eq(messages.conversationId, id))
+      .orderBy(desc(messages.sentAt));
+
+    const lastMessage = messagesData[0] || undefined;
+    const unreadCount = messagesData.filter(msg => !msg.isRead && msg.senderType === "customer").length;
+
+    return {
+      ...conversation,
+      customer,
+      order: order || undefined,
+      lastMessage,
+      unreadCount
+    };
+  }
+
+  async getActiveConversations(): Promise<ConversationWithDetails[]> {
+    const conversationsData = await db.select().from(conversations)
+      .where(eq(conversations.status, "active"))
+      .orderBy(desc(conversations.lastMessageAt));
+
+    const conversationsWithDetails = await Promise.all(
+      conversationsData.map(async (conv) => {
+        return await this.getConversation(conv.id);
+      })
+    );
+
+    return conversationsWithDetails.filter(conv => conv !== undefined) as ConversationWithDetails[];
+  }
+
+  async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
+    const [conversation] = await db.insert(conversations).values(insertConversation).returning();
+    return conversation;
+  }
+
+  // Messages
+  async getMessages(conversationId: number): Promise<Message[]> {
+    return await db.select().from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(messages.sentAt);
+  }
+
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const [message] = await db.insert(messages).values(insertMessage).returning();
+
+    // Update conversation's lastMessageAt
+    await db.update(conversations).set({
+      lastMessageAt: new Date()
+    }).where(eq(conversations.id, insertMessage.conversationId));
+
+    return message;
+  }
+
+  async markMessagesAsRead(conversationId: number): Promise<void> {
+    await db.update(messages).set({
+      isRead: true
+    }).where(and(
+      eq(messages.conversationId, conversationId),
+      eq(messages.senderType, "customer")
+    ));
+  }
+
+  // Dashboard metrics
+  async getDashboardMetrics(): Promise<{
+    ordersToday: number;
+    activeConversations: number;
+    activeTechnicians: number;
+    dailyRevenue: number;
+  }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [ordersToday] = await db.select({ count: count() }).from(orders)
+      .where(eq(orders.createdAt, today));
+
+    const [activeConversations] = await db.select({ count: count() }).from(conversations)
+      .where(eq(conversations.status, "active"));
+
+    const [activeTechnicians] = await db.select({ count: count() }).from(users)
+      .where(and(
+        eq(users.status, "active"),
+        eq(users.role, "technician")
+      ));
+
+    const completedOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, "completed"),
+        eq(orders.createdAt, today)
+      ));
+
+    const dailyRevenue = completedOrders.reduce((sum, order) => 
+      sum + parseFloat(order.totalAmount), 0);
+
+    return {
+      ordersToday: ordersToday.count,
+      activeConversations: activeConversations.count,
+      activeTechnicians: activeTechnicians.count,
+      dailyRevenue,
+    };
+  }
+
+  // WhatsApp Settings with PostgreSQL
+  async getWhatsAppConfig(): Promise<WhatsAppSettings | null> {
+    const [config] = await db.select().from(whatsappSettings)
+      .where(eq(whatsappSettings.isActive, true))
+      .orderBy(desc(whatsappSettings.createdAt));
+    
+    return config || null;
+  }
+
+  async updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings> {
+    // Deactivate existing configs
+    await db.update(whatsappSettings).set({ isActive: false });
+    
+    // Insert new config
+    const [newConfig] = await db.insert(whatsappSettings).values({
+      ...config,
+      isActive: true
+    }).returning();
+    
+    return newConfig;
+  }
+
+  // WhatsApp Logs with PostgreSQL
+  async getWhatsAppLogs(): Promise<WhatsAppLog[]> {
+    return await db.select().from(whatsappLogs)
+      .orderBy(desc(whatsappLogs.timestamp))
+      .limit(100);
+  }
+
+  async addWhatsAppLog(log: InsertWhatsAppLog): Promise<WhatsAppLog> {
+    const [logEntry] = await db.insert(whatsappLogs).values(log).returning();
+    return logEntry;
+  }
+}
+
+export const storage = new DatabaseStorage();

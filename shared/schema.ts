@@ -97,6 +97,30 @@ export const messages = pgTable("messages", {
   isRead: boolean("is_read").default(false),
 });
 
+export const whatsappSettings = pgTable("whatsapp_settings", {
+  id: serial("id").primaryKey(),
+  accessToken: text("access_token").notNull(),
+  phoneNumberId: text("phone_number_id").notNull(),
+  webhookVerifyToken: text("webhook_verify_token").notNull(),
+  businessAccountId: text("business_account_id"),
+  appId: text("app_id"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const whatsappLogs = pgTable("whatsapp_logs", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull(), // 'incoming', 'outgoing', 'webhook', 'error'
+  phoneNumber: text("phone_number"),
+  messageContent: text("message_content"),
+  messageId: text("message_id"),
+  status: text("status"), // 'sent', 'delivered', 'read', 'failed'
+  errorMessage: text("error_message"),
+  rawData: text("raw_data"), // JSON string
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -137,6 +161,17 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   sentAt: true,
 });
 
+export const insertWhatsAppSettingsSchema = createInsertSchema(whatsappSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWhatsAppLogSchema = createInsertSchema(whatsappLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -161,6 +196,12 @@ export type InsertConversation = z.infer<typeof insertConversationSchema>;
 
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export type WhatsAppSettings = typeof whatsappSettings.$inferSelect;
+export type InsertWhatsAppSettings = z.infer<typeof insertWhatsAppSettingsSchema>;
+
+export type WhatsAppLog = typeof whatsappLogs.$inferSelect;
+export type InsertWhatsAppLog = z.infer<typeof insertWhatsAppLogSchema>;
 
 // Extended types for API responses
 export type OrderWithDetails = Order & {
