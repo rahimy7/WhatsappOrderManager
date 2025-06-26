@@ -132,6 +132,7 @@ export interface IStorage {
   createAutoResponse(response: InsertAutoResponse): Promise<AutoResponse>;
   updateAutoResponse(id: number, updates: Partial<InsertAutoResponse>): Promise<AutoResponse | undefined>;
   deleteAutoResponse(id: number): Promise<void>;
+  clearAllAutoResponses(): Promise<void>;
   getAutoResponsesByTrigger(trigger: string): Promise<AutoResponse[]>;
   
   // Customer Registration Flows
@@ -1512,6 +1513,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAutoResponse(id: number): Promise<void> {
     await db.delete(autoResponses).where(eq(autoResponses.id, id));
+  }
+
+  async clearAllAutoResponses(): Promise<void> {
+    await db.delete(autoResponses);
   }
 
   async getAutoResponsesByTrigger(trigger: string): Promise<AutoResponse[]> {

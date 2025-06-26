@@ -185,42 +185,267 @@ export default function AutoResponsesPage() {
             Configure respuestas automáticas y menús interactivos para WhatsApp
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Respuesta
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
-                {editingResponse ? "Editar Respuesta Automática" : "Nueva Respuesta Automática"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => resetToDefaultsMutation.mutate()}
+            disabled={resetToDefaultsMutation.isPending}
+            className="border-blue-200 text-blue-700 hover:bg-blue-50"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            {resetToDefaultsMutation.isPending ? "Restaurando..." : "Restaurar Valores"}
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={resetForm} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Nueva Respuesta
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingResponse ? "Editar Respuesta Automática" : "Nueva Respuesta Automática"}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nombre</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="Ej: Menú Principal"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="trigger">Disparador</Label>
+                    <Select
+                      value={formData.trigger}
+                      onValueChange={(value) => setFormData({ ...formData, trigger: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione un disparador" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {triggerOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nombre</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Ej: Menú Principal"
+                  <Label htmlFor="content">Contenido del Mensaje</Label>
+                  <Textarea
+                    id="content"
+                    value={formData.content}
+                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                    placeholder="Mensaje que se enviará automáticamente..."
+                    rows={4}
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="trigger">Disparador</Label>
-                  <Select value={formData.trigger || ""} onValueChange={(value) => setFormData({ ...formData, trigger: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {triggerOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="menuOptions">Opciones de Menú (JSON)</Label>
+                    <Textarea
+                      id="menuOptions"
+                      value={formData.menuOptions}
+                      onChange={(e) => setFormData({ ...formData, menuOptions: e.target.value })}
+                      placeholder='[{"label": "Opción 1", "value": "1", "action": "next"}]'
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="nextAction">Siguiente Acción</Label>
+                    <Select
+                      value={formData.nextAction}
+                      onValueChange={(value) => setFormData({ ...formData, nextAction: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione acción" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {nextActionOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="isActive"
+                    checked={formData.isActive}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                  />
+                  <Label htmlFor="isActive">Respuesta activa</Label>
+                </div>
+
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsDialogOpen(false);
+                      resetForm();
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={createResponseMutation.isPending || updateResponseMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {createResponseMutation.isPending || updateResponseMutation.isPending
+                      ? "Guardando..."
+                      : editingResponse
+                      ? "Actualizar"
+                      : "Crear"}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Lista de respuestas automáticas */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {responses?.map((response: AutoResponse) => (
+          <Card key={response.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-500">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-blue-600" />
+                  {response.name}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {response.isActive ? (
+                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                      Activo
+                    </span>
+                  ) : (
+                    <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
+                      Inactivo
+                    </span>
+                  )}
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(response)}
+                      className="h-8 w-8 p-0 hover:bg-blue-50"
+                    >
+                      <Edit className="h-4 w-4 text-blue-600" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteResponseMutation.mutate(response.id)}
+                      disabled={deleteResponseMutation.isPending}
+                      className="h-8 w-8 p-0 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-medium">
+                  {response.trigger}
+                </span>
+                {response.priority && (
+                  <span className="text-xs">
+                    Prioridad: {response.priority}
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-3 line-clamp-3">
+                {response.messageText}
+              </p>
+              
+              {response.menuOptions && (
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-gray-500 mb-1">
+                    Opciones de menú:
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {JSON.parse(response.menuOptions).map((option: MenuOption, index: number) => (
+                      <span key={index} className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">
+                        {option.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {response.nextAction && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <Settings className="h-3 w-3" />
+                  <span>Siguiente: {response.nextAction}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Documentación */}
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-gray-600" />
+            Configuración de Respuestas Automáticas
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4 text-sm text-gray-600">
+            <p>
+              Las respuestas automáticas permiten configurar mensajes que se envían automáticamente 
+              cuando los clientes interactúan con WhatsApp usando palabras clave específicas.
+            </p>
+            
+            <div>
+              <h4 className="font-medium text-gray-800 mb-2">Ejemplo de configuración de menú:</h4>
+              <pre className="bg-gray-50 p-3 rounded text-xs overflow-x-auto">
+{`[
+  {
+    "label": "Ver productos",
+    "value": "products",
+    "action": "show_products"
+  },
+  {
+    "label": "Contactar técnico",
+    "value": "technician",
+    "action": "assign_technician"
+  }
+]`}
+              </pre>
+              <p className="mt-2">
+                <strong>Disparadores disponibles:</strong> welcome (bienvenida), menu (menú), 
+                product_inquiry (productos), service_inquiry (servicios), contact_request (contacto)
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
                       ))}
                     </SelectContent>
                   </Select>
