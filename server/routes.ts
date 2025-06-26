@@ -725,17 +725,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (messageType === 'text') {
         const text = message.text.body.toLowerCase().trim();
         
-        // Always respond with welcome message for any text
-        await sendWelcomeMessage(from);
+        // Check for auto responses based on triggers
+        const autoResponses = await storage.getAllAutoResponses();
+        let responseFound = false;
         
-        // Log the response
-        await storage.addWhatsAppLog({
-          type: 'info',
-          phoneNumber: from,
-          messageContent: `Respuesta automática enviada a ${from}`,
-          status: 'processed',
-          rawData: JSON.stringify({ customerMessage: text, response: 'welcome_menu' })
-        });
+        // Check common triggers
+        const triggers = [
+          { keywords: ['hola', 'hello', 'hi', 'buenos dias', 'buenas tardes'], trigger: 'welcome' },
+          { keywords: ['menu', 'menú', 'opciones', 'catalogo', 'catálogo'], trigger: 'menu' },
+          { keywords: ['productos', 'product', 'comprar'], trigger: 'product_inquiry' },
+          { keywords: ['servicios', 'service', 'reparacion', 'reparación'], trigger: 'service_inquiry' },
+          { keywords: ['ayuda', 'help', 'contacto', 'soporte'], trigger: 'contact_request' }
+        ];
+        
+        // Find matching trigger
+        let matchedTrigger = null;
+        for (const triggerGroup of triggers) {
+          if (triggerGroup.keywords.some(keyword => text.includes(keyword))) {
+            matchedTrigger = triggerGroup.trigger;
+            break;
+          }
+        }
+        
+        // If no specific trigger found, use welcome as default
+        if (!matchedTrigger) {
+          matchedTrigger = 'welcome';
+        }
+        
+        // Find active auto response for the trigger
+        const autoResponse = autoResponses.find(ar => 
+          ar.trigger === matchedTrigger && ar.isActive
+        );
+        
+        if (autoResponse) {
+          // Send auto response message
+          await sendWhatsAppMessage(from, autoResponse.messageText);
+          responseFound = true;
+          
+          // Log the auto response
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Respuesta automática enviada: ${autoResponse.name}`,
+            status: 'processed',
+            rawData: JSON.stringify({ 
+              customerMessage: text, 
+              trigger: matchedTrigger,
+              autoResponseId: autoResponse.id,
+              responseText: autoResponse.messageText
+            })
+          });
+        }
+        
+        // If no auto response found, send default welcome
+        if (!responseFound) {
+          await sendWelcomeMessage(from);
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Mensaje de bienvenida por defecto enviado a ${from}`,
+            status: 'processed',
+            rawData: JSON.stringify({ customerMessage: text, response: 'default_welcome' })
+          });
+        }
         
       } else if (messageType === 'location') {
         await handleLocationMessage(customer, message.location, from);
@@ -751,8 +803,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phoneNumber: from,
         messageContent: 'Error procesando mensaje del cliente',
         status: 'error',
-        errorMessage: error.message,
-        rawData: JSON.stringify({ error: error.message, messageType: message.type })
+        errorMessage: (error as Error).message,
+        rawData: JSON.stringify({ error: (error as Error).message, messageType: message.type })
       });
     }
   }
