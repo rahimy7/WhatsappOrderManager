@@ -68,6 +68,10 @@ export interface IStorage {
     activeTechnicians: number;
     dailyRevenue: number;
   }>;
+
+  // WhatsApp Settings
+  getWhatsAppConfig(): Promise<any>;
+  updateWhatsAppConfig(config: any): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
@@ -78,6 +82,7 @@ export class MemStorage implements IStorage {
   private orderItems: Map<number, OrderItem> = new Map();
   private conversations: Map<number, Conversation> = new Map();
   private messages: Map<number, Message> = new Map();
+  private whatsappConfig: any = null;
   
   private currentUserId = 1;
   private currentCustomerId = 1;
@@ -616,6 +621,25 @@ export class MemStorage implements IStorage {
       activeTechnicians,
       dailyRevenue,
     };
+  }
+
+  async getWhatsAppConfig(): Promise<any> {
+    return this.whatsappConfig || {
+      metaAppId: "",
+      metaAppSecret: "",
+      whatsappBusinessAccountId: "",
+      whatsappPhoneNumberId: "",
+      whatsappToken: "",
+      whatsappVerifyToken: "",
+    };
+  }
+
+  async updateWhatsAppConfig(config: any): Promise<any> {
+    this.whatsappConfig = {
+      ...config,
+      updatedAt: new Date(),
+    };
+    return this.whatsappConfig;
   }
 }
 

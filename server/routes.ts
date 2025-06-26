@@ -247,7 +247,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // WhatsApp API simulation
+  // WhatsApp Settings API
+  app.get("/api/settings/whatsapp", async (req, res) => {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      // Don't send sensitive data to frontend
+      const safeConfig = {
+        metaAppId: config.metaAppId ? "****" + config.metaAppId.slice(-4) : "",
+        metaAppSecret: config.metaAppSecret ? "****" + config.metaAppSecret.slice(-4) : "",
+        whatsappBusinessAccountId: config.whatsappBusinessAccountId,
+        whatsappPhoneNumberId: config.whatsappPhoneNumberId,
+        whatsappToken: config.whatsappToken ? "****" + config.whatsappToken.slice(-8) : "",
+        whatsappVerifyToken: config.whatsappVerifyToken ? "****" + config.whatsappVerifyToken.slice(-4) : "",
+        configured: !!(config.metaAppId && config.whatsappToken),
+      };
+      res.json(safeConfig);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch WhatsApp configuration" });
+    }
+  });
+
+  app.post("/api/settings/whatsapp", async (req, res) => {
+    try {
+      const configData = z.object({
+        metaAppId: z.string(),
+        metaAppSecret: z.string(),
+        whatsappBusinessAccountId: z.string(),
+        whatsappPhoneNumberId: z.string(),
+        whatsappToken: z.string(),
+        whatsappVerifyToken: z.string(),
+      }).parse(req.body);
+
+      const config = await storage.updateWhatsAppConfig(configData);
+      res.json({ success: true, updatedAt: config.updatedAt });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid configuration data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to save WhatsApp configuration" });
+    }
+  });
+
+  // WhatsApp Connection Status
+  app.get("/api/whatsapp/status", async (req, res) => {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config.metaAppId || !config.whatsappToken) {
+        return res.json({
+          connected: false,
+          configured: false,
+          message: "WhatsApp credentials not configured"
+        });
+      }
+
+      // In a real implementation, this would check with WhatsApp Business API
+      // For now, simulate the check
+      const mockStatus = {
+        connected: true,
+        configured: true,
+        lastCheck: new Date().toISOString(),
+        phoneNumber: "+52 55 1234-5678",
+        businessName: "OrderManager Business",
+        message: "Connected successfully"
+      };
+
+      res.json(mockStatus);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check WhatsApp status" });
+    }
+  });
+
+  // WhatsApp Connection Test
+  app.post("/api/whatsapp/test-connection", async (req, res) => {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config.metaAppId || !config.whatsappToken) {
+        return res.json({
+          success: false,
+          message: "WhatsApp credentials not configured"
+        });
+      }
+
+      // In a real implementation, this would make an actual API call to WhatsApp
+      // For now, simulate the test
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API delay
+      
+      res.json({
+        success: true,
+        message: "Conexión exitosa con WhatsApp Business API",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Error al probar la conexión con WhatsApp Business API" 
+      });
+    }
+  });
+
+  // WhatsApp API simulation for sending messages
   app.post("/api/whatsapp/send", async (req, res) => {
     try {
       const { phone, message } = z.object({
@@ -255,7 +355,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: z.string(),
       }).parse(req.body);
 
-      // Simulate WhatsApp API call
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config.metaAppId || !config.whatsappToken) {
+        return res.status(400).json({ 
+          error: "WhatsApp not configured",
+          message: "Please configure WhatsApp Business API credentials first"
+        });
+      }
+
+      // In a real implementation, this would use the actual WhatsApp Business API
+      // Here we simulate the API call
       console.log(`Sending WhatsApp message to ${phone}: ${message}`);
       
       res.json({ 

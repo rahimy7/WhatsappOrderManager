@@ -10,6 +10,7 @@ import Conversations from "@/pages/conversations";
 import Team from "@/pages/team";
 import Products from "@/pages/products";
 import Reports from "@/pages/reports";
+import Settings from "@/pages/settings";
 import AppLayout from "@/components/layout/app-layout";
 
 function Router() {
