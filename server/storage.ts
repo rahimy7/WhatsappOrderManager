@@ -564,7 +564,7 @@ export class MemStorage implements IStorage {
     
     this.orders.set(orderId, order);
 
-    // Create order items
+    // Create order items with enhanced service pricing
     for (const insertItem of items) {
       const itemId = this.currentOrderItemId++;
       const orderItem: OrderItem = {
@@ -574,9 +574,24 @@ export class MemStorage implements IStorage {
         quantity: insertItem.quantity,
         unitPrice: insertItem.unitPrice,
         totalPrice: insertItem.totalPrice,
+        installationCost: insertItem.installationCost || "0",
+        partsCost: insertItem.partsCost || "0",
+        laborHours: insertItem.laborHours || "0",
+        laborRate: insertItem.laborRate || "0",
+        notes: insertItem.notes || null,
       };
       this.orderItems.set(itemId, orderItem);
     }
+
+    // Add initial order history entry
+    await this.addOrderHistory({
+      orderId,
+      userId: null,
+      statusFrom: null,
+      statusTo: order.status,
+      action: "created",
+      notes: "Pedido creado en el sistema",
+    });
 
     return (await this.getOrder(orderId))!;
   }
@@ -603,10 +618,120 @@ export class MemStorage implements IStorage {
   }
 
   async assignOrder(orderId: number, userId: number): Promise<Order | undefined> {
-    return this.updateOrder(orderId, { 
+    const order = await this.updateOrder(orderId, { 
       assignedUserId: userId,
       status: "assigned",
     });
+    
+    if (order) {
+      await this.addOrderHistory({
+        orderId,
+        userId,
+        statusFrom: "pending",
+        statusTo: "assigned",
+        action: "assigned",
+        notes: "Pedido asignado a técnico",
+      });
+    }
+    
+    return order;
+  }
+
+  async updateOrderStatus(orderId: number, status: string, userId?: number, notes?: string): Promise<Order | undefined> {
+    const currentOrder = this.orders.get(orderId);
+    if (!currentOrder) return undefined;
+
+    const updatedOrder = await this.updateOrder(orderId, { status });
+    
+    if (updatedOrder) {
+      await this.addOrderHistory({
+        orderId,
+        userId: userId || null,
+        statusFrom: currentOrder.status,
+        statusTo: status,
+        action: this.getActionFromStatus(status),
+        notes: notes || `Estado cambiado a ${status}`,
+      });
+    }
+    
+    return updatedOrder;
+  }
+
+  private getActionFromStatus(status: string): string {
+    const actionMap: Record<string, string> = {
+      'pending': 'created',
+      'assigned': 'assigned',
+      'in_progress': 'started',
+      'completed': 'completed',
+      'cancelled': 'cancelled',
+    };
+    return actionMap[status] || 'updated';
+  }
+
+  async getOrderHistory(orderId: number): Promise<OrderHistory[]> {
+    return Array.from(this.orderHistory.values())
+      .filter(history => history.orderId === orderId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+
+  async addOrderHistory(insertHistory: InsertOrderHistory): Promise<OrderHistory> {
+    const id = this.currentOrderHistoryId++;
+    const history: OrderHistory = {
+      ...insertHistory,
+      id,
+      timestamp: new Date(),
+    };
+    this.orderHistory.set(id, history);
+    return history;
+  }
+
+  async calculateServicePrice(
+    serviceId: number, 
+    installationComplexity: number, 
+    partsNeeded: Array<{productId: number; quantity: number}>
+  ): Promise<{
+    basePrice: number;
+    installationCost: number;
+    partsCost: number;
+    laborHours: number;
+    laborRate: number;
+    totalPrice: number;
+  }> {
+    const service = this.products.get(serviceId);
+    if (!service || service.category !== "service") {
+      throw new Error("Servicio no encontrado");
+    }
+
+    const basePrice = parseFloat(service.price);
+    
+    // Calculate installation cost based on complexity (1-5 scale)
+    const complexityMultiplier = Math.max(1, installationComplexity / 3);
+    const installationCost = basePrice * 0.3 * complexityMultiplier;
+    
+    // Calculate parts cost
+    let partsCost = 0;
+    for (const part of partsNeeded) {
+      const product = this.products.get(part.productId);
+      if (product) {
+        partsCost += parseFloat(product.price) * part.quantity;
+      }
+    }
+    
+    // Calculate labor based on complexity and service type
+    const baseLaborHours = 2 + (installationComplexity * 0.5);
+    const laborHours = Math.round(baseLaborHours * 100) / 100;
+    const laborRate = 200; // Base rate per hour
+    
+    const totalPrice = basePrice + installationCost + partsCost + (laborHours * laborRate);
+    
+    return {
+      basePrice,
+      installationCost: Math.round(installationCost * 100) / 100,
+      partsCost,
+      laborHours,
+      laborRate,
+      totalPrice: Math.round(totalPrice * 100) / 100,
+    };
   }
 
   async getConversation(id: number): Promise<ConversationWithDetails | undefined> {

@@ -37,6 +37,21 @@ interface OrderItem {
   productId: number;
   quantity: number;
   product?: Product;
+  installationComplexity?: number;
+  installationCost?: number;
+  partsCost?: number;
+  laborHours?: number;
+  laborRate?: number;
+  notes?: string;
+}
+
+interface ServicePricing {
+  basePrice: number;
+  installationCost: number;
+  partsCost: number;
+  laborHours: number;
+  laborRate: number;
+  totalPrice: number;
 }
 
 export default function CreateOrderModal({ isOpen, onClose }: CreateOrderModalProps) {
@@ -44,6 +59,7 @@ export default function CreateOrderModal({ isOpen, onClose }: CreateOrderModalPr
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [searchCustomer, setSearchCustomer] = useState("");
   const [newCustomerMode, setNewCustomerMode] = useState(false);
+  const [servicePricing, setServicePricing] = useState<Map<number, ServicePricing>>(new Map());
   const { toast } = useToast();
 
   const { data: products = [] } = useQuery<Product[]>({
