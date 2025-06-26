@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, User, CheckCheck } from "lucide-react";
 import { ConversationWithDetails } from "@shared/schema";
 
 interface ConversationListProps {
@@ -44,55 +44,84 @@ export default function ConversationList({
   }
 
   return (
-    <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold text-gray-900">Conversaciones</CardTitle>
+    <Card className="h-full border-r border-gray-200">
+      <CardHeader className="bg-green-50 border-b border-green-100">
+        <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <MessageCircle className="h-5 w-5 text-green-600" />
+          Conversaciones
+        </CardTitle>
       </CardHeader>
-      <CardContent className="h-[500px] overflow-y-auto">
-        <div className="space-y-2">
+      <CardContent className="h-[500px] overflow-y-auto p-0">
+        <div className="divide-y divide-gray-100">
           {conversations.map((conversation: ConversationWithDetails) => (
             <div 
               key={conversation.id}
               onClick={() => onSelectConversation(conversation)}
-              className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors ${
+              className={`flex items-center space-x-3 p-4 cursor-pointer transition-all duration-200 hover:bg-gray-50 ${
                 selectedConversation?.id === conversation.id 
-                  ? "bg-primary bg-opacity-10 border border-primary" 
+                  ? "bg-green-50 border-r-4 border-green-500" 
                   : conversation.unreadCount > 0 
-                    ? "bg-gray-50 hover:bg-gray-100" 
-                    : "hover:bg-gray-50"
+                    ? "bg-blue-50" 
+                    : ""
               }`}
             >
-              <div className="w-10 h-10 whatsapp-bg rounded-full flex items-center justify-center">
-                <MessageCircle className="text-white h-5 w-5" />
+              {/* Avatar with status indicator */}
+              <div className="relative flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+                  <User className="text-white h-6 w-6" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
               </div>
+              
               <div className="flex-1 min-w-0">
-                <p className={`text-sm truncate ${
-                  conversation.unreadCount > 0 ? "font-semibold text-gray-900" : "font-medium text-gray-900"
-                }`}>
-                  {conversation.customer.name}
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {conversation.lastMessage?.content?.slice(0, 40) || "Sin mensajes"}
-                  {conversation.lastMessage?.content && conversation.lastMessage.content.length > 40 ? "..." : ""}
-                </p>
-                {conversation.order && (
-                  <p className="text-xs text-primary mt-1">
-                    {conversation.order.orderNumber}
+                <div className="flex items-center justify-between mb-1">
+                  <p className={`text-sm truncate ${
+                    conversation.unreadCount > 0 ? "font-bold text-gray-900" : "font-semibold text-gray-900"
+                  }`}>
+                    {conversation.customer.name}
                   </p>
-                )}
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-400">
-                  {conversation.lastMessageAt ? formatTime(conversation.lastMessageAt) : ""}
-                </p>
-                {conversation.unreadCount > 0 && (
-                  <span className="inline-flex items-center justify-center w-5 h-5 bg-red-500 text-white text-xs rounded-full mt-1">
-                    {conversation.unreadCount}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {conversation.lastMessageAt && (
+                      <p className="text-xs text-gray-400">
+                        {formatTime(conversation.lastMessageAt)}
+                      </p>
+                    )}
+                    {conversation.unreadCount > 0 && (
+                      <span className="inline-flex items-center justify-center w-5 h-5 bg-green-500 text-white text-xs rounded-full font-bold">
+                        {conversation.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-1 mb-1">
+                  {conversation.lastMessage?.senderType === "staff" && (
+                    <CheckCheck className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                  )}
+                  <p className={`text-xs truncate flex-1 ${
+                    conversation.unreadCount > 0 ? "text-gray-700 font-medium" : "text-gray-500"
+                  }`}>
+                    {conversation.lastMessage?.content || "Sin mensajes"}
+                  </p>
+                </div>
+                
+                {conversation.order && (
+                  <div className="flex items-center gap-1">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {conversation.order.orderNumber}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
           ))}
+          
+          {conversations.length === 0 && (
+            <div className="text-center py-8 px-4">
+              <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 text-sm">No hay conversaciones activas</p>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
