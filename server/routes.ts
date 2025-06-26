@@ -1015,7 +1015,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (buttonId.startsWith('payment_')) {
         const paymentMethod = buttonId.split('_')[1];
         await handlePaymentMethodSelection(customer, paymentMethod, phoneNumber);
+      } else if (buttonId === 'use_whatsapp_number') {
+        await handleContactNumberSelection(customer, phoneNumber, phoneNumber);
+      } else if (buttonId === 'provide_different_number') {
+        await handleContactNumberRequest(customer, phoneNumber);
       }
+    }
+  }
+
+  // Function to handle contact number selection
+  async function handleContactNumberSelection(customer: any, phoneNumber: string, contactNumber: string) {
+    try {
+      // Get registration flow to retrieve order data
+      const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+      if (!registrationFlow || registrationFlow.currentStep !== 'collect_contact_number') {
+        await sendWhatsAppMessage(phoneNumber, 
+          "❌ Error: No se encontró información del pedido. Por favor, inicia un nuevo pedido escribiendo *menu*."
+        );
+        return;
+      }
+
+      const orderData = JSON.parse(registrationFlow.collectedData || '{}');
+      
+      // Update flow to next step - collect payment method
+      const updatedData = { ...orderData, contactNumber: contactNumber };
+      await storage.updateRegistrationFlow(phoneNumber, {
+        currentStep: 'collect_payment_method',
+        collectedData: JSON.stringify(updatedData)
+      });
+      
+      // Send payment method selection
+      const paymentMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: `✅ *Número de contacto: ${contactNumber}*\n\n💳 *Método de Pago*\nSelecciona tu método de pago preferido:`
+          },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: "payment_card",
+                  title: "💳 Tarjeta"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "payment_transfer", 
+                  title: "🏦 Transferencia"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "payment_cash",
+                  title: "💵 Efectivo"
+                }
+              }
+            ]
+          }
+        }
+      };
+      
+      await sendWhatsAppInteractiveMessage(phoneNumber, paymentMessage);
+      
+    } catch (error) {
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error procesando el número de contacto. Por favor, inténtalo nuevamente."
+      );
+    }
+  }
+
+  // Function to handle request for different contact number
+  async function handleContactNumberRequest(customer: any, phoneNumber: string) {
+    try {
+      // Get registration flow to retrieve order data
+      const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+      if (!registrationFlow || registrationFlow.currentStep !== 'collect_contact_number') {
+        await sendWhatsAppMessage(phoneNumber, 
+          "❌ Error: No se encontró información del pedido. Por favor, inicia un nuevo pedido escribiendo *menu*."
+        );
+        return;
+      }
+
+      const orderData = JSON.parse(registrationFlow.collectedData || '{}');
+      
+      // Update flow to collect different number
+      await storage.updateRegistrationFlow(phoneNumber, {
+        currentStep: 'collect_different_number',
+        collectedData: registrationFlow.collectedData
+      });
+      
+      const numberMessage = 
+        "📞 *Número de Contacto Alternativo*\n\n" +
+        "Por favor, comparte el número de teléfono donde podemos contactarte para coordinar la entrega:\n\n" +
+        "Formato: 10 dígitos\n" +
+        "Ejemplo: 5512345678";
+        
+      await sendWhatsAppMessage(phoneNumber, numberMessage);
+      
+    } catch (error) {
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error procesando tu solicitud. Por favor, inténtalo nuevamente."
+      );
     }
   }
 
@@ -1915,26 +2022,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Update customer in database with the complete name
         const customer = await storage.getCustomerByPhone(phoneNumber);
         if (customer) {
-          // Update existing customer with full name
-          const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
-            address: customer.address || "",
-            latitude: customer.latitude || "0",
-            longitude: customer.longitude || "0"
-          });
-          
-          // Update customer name in the database (we need to add this method)
-          try {
-            await storage.updateCustomerName(customer.id, customerName);
-          } catch (error) {
-            // If method doesn't exist, we'll log it
-            console.log("updateCustomerName method needs to be implemented");
-          }
+          await storage.updateCustomerName(customer.id, customerName);
         }
         
-        // Update flow to next step
+        // Update flow to next step - collect delivery address
         const updatedData = { ...data, customerName: customerName };
         await storage.updateRegistrationFlow(phoneNumber, {
-          currentStep: 'collect_delivery_data',
+          currentStep: 'collect_delivery_address',
           collectedData: JSON.stringify(updatedData)
         });
         
@@ -1950,7 +2044,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await sendWhatsAppMessage(phoneNumber, addressMessage);
       }
       
-      else if (registrationFlow.currentStep === 'collect_delivery_data') {
+      else if (registrationFlow.currentStep === 'collect_delivery_address') {
         // Validate delivery address
         const address = messageText.trim();
         if (address.length < 10) {
@@ -1971,44 +2065,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        // Update flow to next step
+        // Update flow to next step - collect contact number
         const updatedData = { ...data, deliveryAddress: address };
         await storage.updateRegistrationFlow(phoneNumber, {
-          currentStep: 'collect_payment_method',
+          currentStep: 'collect_contact_number',
           collectedData: JSON.stringify(updatedData)
         });
         
-        // Send payment method selection
-        const paymentMessage = {
+        // Send contact number selection with option to use WhatsApp number
+        const contactMessage = {
           messaging_product: "whatsapp",
           to: phoneNumber,
           type: "interactive",
           interactive: {
             type: "button",
             body: {
-              text: `✅ *Dirección registrada*\n📍 ${address}\n\n*Método de Pago*\nSelecciona tu método de pago preferido:`
+              text: `✅ *Dirección registrada*\n📍 ${address}\n\n📞 *Número de Contacto*\nNecesitamos un número para coordinar la entrega:`
             },
             action: {
               buttons: [
                 {
                   type: "reply",
                   reply: {
-                    id: "payment_card",
-                    title: "💳 Tarjeta"
+                    id: "use_whatsapp_number",
+                    title: "📱 Usar este WhatsApp"
                   }
                 },
                 {
                   type: "reply",
                   reply: {
-                    id: "payment_transfer",
-                    title: "🏦 Transferencia"
-                  }
-                },
-                {
-                  type: "reply",
-                  reply: {
-                    id: "payment_cash",
-                    title: "💵 Efectivo"
+                    id: "provide_different_number",
+                    title: "📞 Otro número"
                   }
                 }
               ]
@@ -2016,7 +2103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         };
         
-        await sendWhatsAppInteractiveMessage(phoneNumber, paymentMessage);
+        await sendWhatsAppInteractiveMessage(phoneNumber, contactMessage);
       }
       
       else if (registrationFlow.currentStep === 'collect_payment_method') {
