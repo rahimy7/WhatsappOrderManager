@@ -737,9 +737,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (messageType === 'text') {
         const text = message.text.body.toLowerCase().trim();
         
-        // FIRST CHECK: Handle registration flows (takes priority over auto responses)
+        // Check for priority global commands first (before registration flow)
+        const priorityCommands = ['menu', 'menú', 'hola', 'hello', 'ayuda', 'help'];
+        const isPriorityCommand = priorityCommands.some(cmd => text === cmd);
+        
+        // FIRST CHECK: Handle registration flows (but allow priority commands to override)
         const registrationFlow = await storage.getRegistrationFlow(from);
-        if (registrationFlow && !registrationFlow.isCompleted) {
+        if (registrationFlow && !registrationFlow.isCompleted && !isPriorityCommand) {
           await storage.addWhatsAppLog({
             type: 'debug',
             phoneNumber: from,
@@ -754,6 +758,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           await handleRegistrationFlow(from, message.text.body, registrationFlow);
           return; // Exit early to prevent auto responses from interfering
+        } else if (registrationFlow && isPriorityCommand) {
+          // Clear the registration flow for priority commands
+          await storage.deleteRegistrationFlow(from);
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Flujo de registro cancelado por comando prioritario: ${message.text.body}`,
+            status: 'cancelled',
+            rawData: JSON.stringify({ 
+              previousStep: registrationFlow.currentStep,
+              command: message.text.body
+            })
+          });
         }
         
         // Check if customer needs basic registration (new customer without name)
