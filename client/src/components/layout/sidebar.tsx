@@ -1,21 +1,21 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3 } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 
 export default function Sidebar() {
   const [location] = useLocation();
   
-  const { data: orders } = useQuery({
+  const { data: orders = [] } = useQuery({
     queryKey: ["/api/orders"],
   });
 
-  const { data: conversations } = useQuery({
+  const { data: conversations = [] } = useQuery({
     queryKey: ["/api/conversations"],
   });
 
-  const pendingOrders = orders?.filter((order: any) => order.status === "pending").length || 0;
-  const activeConversations = conversations?.filter((conv: any) => conv.unreadCount > 0).length || 0;
+  const pendingOrders = orders.filter((order: any) => order.status === "pending").length || 0;
+  const activeConversations = conversations.filter((conv: any) => conv.unreadCount > 0).length || 0;
 
   const navItems = [
     {
@@ -52,6 +52,12 @@ export default function Sidebar() {
       href: "/reports",
       icon: BarChart3,
       label: "Reportes",
+      badge: null,
+    },
+    {
+      href: "/settings",
+      icon: Settings,
+      label: "Configuración",
       badge: null,
     },
   ];
