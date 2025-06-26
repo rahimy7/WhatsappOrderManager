@@ -121,6 +121,32 @@ export const whatsappLogs = pgTable("whatsapp_logs", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
+export const autoResponses = pgTable("auto_responses", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  trigger: text("trigger").notNull(), // welcome, menu, product_inquiry, service_inquiry, contact_request
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(1),
+  messageText: text("message_text").notNull(),
+  requiresRegistration: boolean("requires_registration").default(false),
+  menuOptions: text("menu_options"), // JSON array of menu options
+  nextAction: text("next_action"), // next_menu, collect_data, create_order, assign_technician
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const customerRegistrationFlows = pgTable("customer_registration_flows", {
+  id: serial("id").primaryKey(),
+  phoneNumber: text("phone_number").notNull(),
+  currentStep: text("current_step").notNull(), // name, email, address, location, confirmation
+  collectedData: text("collected_data"), // JSON object with collected information
+  requestedService: text("requested_service"),
+  isCompleted: boolean("is_completed").default(false),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -178,6 +204,18 @@ export const insertWhatsAppLogSchema = createInsertSchema(whatsappLogs).omit({
   timestamp: true,
 });
 
+export const insertAutoResponseSchema = createInsertSchema(autoResponses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCustomerRegistrationFlowSchema = createInsertSchema(customerRegistrationFlows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -208,6 +246,12 @@ export type InsertWhatsAppSettings = z.infer<typeof insertWhatsAppSettingsSchema
 
 export type WhatsAppLog = typeof whatsappLogs.$inferSelect;
 export type InsertWhatsAppLog = z.infer<typeof insertWhatsAppLogSchema>;
+
+export type AutoResponse = typeof autoResponses.$inferSelect;
+export type InsertAutoResponse = z.infer<typeof insertAutoResponseSchema>;
+
+export type CustomerRegistrationFlow = typeof customerRegistrationFlows.$inferSelect;
+export type InsertCustomerRegistrationFlow = z.infer<typeof insertCustomerRegistrationFlowSchema>;
 
 // Extended types for API responses
 export type OrderWithDetails = Order & {

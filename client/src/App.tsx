@@ -12,6 +12,7 @@ import Products from "@/pages/products";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import WhatsAppSettings from "@/pages/whatsapp-settings";
+import AutoResponses from "@/pages/auto-responses";
 import AppLayout from "@/components/layout/app-layout";
 
 function Router() {
