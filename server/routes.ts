@@ -1015,30 +1015,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return;
     }
 
-    // Calculate pricing with location
-    let pricingInfo;
-    if (product.category === 'service') {
-      pricingInfo = await storage.calculateServicePrice(
-        productId, 
-        2, // Default complexity
-        [],
-        customer.latitude,
-        customer.longitude
-      );
-    } else {
-      const deliveryInfo = await storage.calculateDeliveryCost(
-        customer.latitude,
-        customer.longitude,
-        product.category
-      );
-      pricingInfo = {
-        basePrice: parseFloat(product.price),
-        deliveryCost: deliveryInfo.cost,
-        totalPrice: parseFloat(product.price) + deliveryInfo.cost,
-        deliveryDistance: deliveryInfo.distance,
-        estimatedTime: deliveryInfo.estimatedTime
-      };
-    }
+    // Calculate basic pricing (simplified)
+    const basePrice = parseFloat(product.price);
+    const deliveryCost = product.category === 'service' ? 0 : 150; // Basic delivery fee
+    const totalPrice = basePrice + deliveryCost;
 
     const quantityMessage = {
       messaging_product: "whatsapp",
@@ -1052,11 +1032,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         body: {
           text: 
-            `💰 Precio: $${pricingInfo.basePrice.toLocaleString('es-MX')}\n` +
-            `🚛 Entrega: $${pricingInfo.deliveryCost.toLocaleString('es-MX')}\n` +
-            `📍 Distancia: ${pricingInfo.deliveryDistance} km\n` +
-            `⏱️ Tiempo: ${pricingInfo.estimatedTime || 30} min\n\n` +
-            `*Total: $${pricingInfo.totalPrice.toLocaleString('es-MX')}*\n\n` +
+            `💰 Precio: $${basePrice.toLocaleString('es-MX')}\n` +
+            (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
+            `*Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
             "¿Cuántas unidades deseas?"
         },
         action: {
@@ -1094,74 +1072,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const product = await storage.getProduct(productId);
     if (!product) return;
 
-    // Calculate final pricing
-    let pricingInfo;
-    if (product.category === 'service') {
-      pricingInfo = await storage.calculateServicePrice(
-        productId,
-        2, // Default complexity
-        [],
-        customer.latitude,
-        customer.longitude
-      );
-    } else {
-      const deliveryInfo = await storage.calculateDeliveryCost(
-        customer.latitude,
-        customer.longitude,
-        product.category
-      );
-      pricingInfo = {
-        basePrice: parseFloat(product.price) * quantity,
-        deliveryCost: deliveryInfo.cost,
-        totalPrice: (parseFloat(product.price) * quantity) + deliveryInfo.cost,
-        deliveryDistance: deliveryInfo.distance
-      };
-    }
+    // Calculate final pricing (simplified)
+    const basePrice = parseFloat(product.price) * quantity;
+    const deliveryCost = product.category === 'service' ? 0 : 150; // Basic delivery fee
+    const totalPrice = basePrice + deliveryCost;
 
     // Create order automatically
     const orderItems = [{
       productId: productId,
       quantity: quantity,
       unitPrice: product.price,
-      totalPrice: pricingInfo.totalPrice.toString(),
-      deliveryCost: pricingInfo.deliveryCost.toString(),
-      deliveryDistance: pricingInfo.deliveryDistance.toString()
+      totalPrice: totalPrice.toString(),
+      deliveryCost: deliveryCost > 0 ? deliveryCost.toString() : undefined,
+      notes: `Cantidad: ${quantity}`
     }];
 
-    const order = await storage.createOrder({
-      customerId: customer.id,
-      status: "pending",
-      totalAmount: pricingInfo.totalPrice.toString(),
-      notes: `Pedido generado desde WhatsApp`,
-      priority: "normal"
-    }, orderItems);
+    try {
+      const order = await storage.createOrder({
+        customerId: customer.id,
+        status: "pending",
+        totalAmount: totalPrice.toString(),
+        notes: `Pedido generado desde WhatsApp - ${product.name} x${quantity}`,
+        priority: "normal"
+      }, orderItems);
 
-    // Send order confirmation
-    const confirmationMessage = 
-      "✅ *¡Pedido Generado!*\n\n" +
-      `🆔 Orden: ${order.orderNumber}\n` +
-      `📦 ${product.name} x${quantity}\n` +
-      `💰 Subtotal: $${pricingInfo.basePrice.toLocaleString('es-MX')}\n` +
-      `🚛 Entrega: $${pricingInfo.deliveryCost.toLocaleString('es-MX')}\n` +
-      `*💳 Total: $${pricingInfo.totalPrice.toLocaleString('es-MX')}*\n\n` +
-      `📍 Entrega a: ${customer.address}\n\n` +
-      "📞 Te contactaremos pronto para confirmar detalles y coordinar la entrega.\n\n" +
-      "¡Gracias por tu pedido!";
+      // Send order confirmation
+      const confirmationMessage = 
+        "✅ *¡Pedido Generado!*\n\n" +
+        `🆔 Orden: ${order.orderNumber}\n` +
+        `📦 ${product.name} x${quantity}\n` +
+        `💰 Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
+        (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
+        `*💳 Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
+        (customer.address ? `📍 Entrega a: ${customer.address}\n\n` : '') +
+        "📞 Te contactaremos pronto para confirmar detalles y coordinar la entrega.\n\n" +
+        "¡Gracias por tu pedido!";
 
-    await sendWhatsAppMessage(phoneNumber, confirmationMessage);
+      await sendWhatsAppMessage(phoneNumber, confirmationMessage);
 
-    // Log the order creation
-    await storage.addWhatsAppLog({
-      type: 'info',
-      message: `Pedido automático creado: ${order.orderNumber}`,
-      data: { 
-        orderId: order.id, 
-        customerId: customer.id, 
-        total: pricingInfo.totalPrice,
-        productId: productId,
-        quantity: quantity
-      }
-    });
+      // Log the order creation
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: `Pedido automático creado: ${order.orderNumber}`,
+        status: 'processed',
+        rawData: JSON.stringify({ 
+          orderId: order.id, 
+          customerId: customer.id, 
+          total: totalPrice,
+          productId: productId,
+          quantity: quantity
+        })
+      });
+    } catch (error) {
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error al procesar tu pedido. Por favor, intenta nuevamente o contacta a nuestro equipo."
+      );
+      
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error creando orden automática',
+        status: 'error',
+        errorMessage: (error as Error).message,
+        rawData: JSON.stringify({ productId, quantity, error: (error as Error).message })
+      });
+    }
   }
 
   async function sendOrderStatus(customer: any, phoneNumber: string) {
