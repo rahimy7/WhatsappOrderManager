@@ -340,6 +340,273 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Function to process incoming WhatsApp messages
+  async function processWhatsAppMessage(value: any) {
+    try {
+      if (value.messages && value.messages.length > 0) {
+        for (const message of value.messages) {
+          const from = message.from;
+          const messageId = message.id;
+          const timestamp = message.timestamp;
+          const messageType = message.type;
+          
+          let messageText = '';
+          if (messageType === 'text') {
+            messageText = message.text.body;
+          } else if (messageType === 'image') {
+            messageText = `[Imagen recibida] ${message.image.caption || ''}`;
+          } else if (messageType === 'document') {
+            messageText = `[Documento recibido] ${message.document.filename || ''}`;
+          } else {
+            messageText = `[${messageType}] Mensaje no soportado`;
+          }
+
+          // Log the received message
+          await storage.addWhatsAppLog({
+            type: 'incoming',
+            message: `Mensaje recibido de ${from}`,
+            data: {
+              from,
+              messageId,
+              timestamp,
+              messageType,
+              content: messageText,
+              rawMessage: message
+            }
+          });
+
+          // Find or create customer
+          let customer = await storage.getCustomerByPhone(from);
+          if (!customer) {
+            customer = await storage.createCustomer({
+              name: `Cliente ${from}`,
+              phone: from,
+              whatsappId: from
+            });
+            
+            await storage.addWhatsAppLog({
+              type: 'info',
+              message: `Nuevo cliente creado: ${from}`,
+              data: { customerId: customer.id, phone: from }
+            });
+          }
+
+          // Find existing conversation or create new one
+          const conversations = await storage.getActiveConversations();
+          let conversation = conversations.find(c => c.customer.phone === from);
+          
+          if (!conversation) {
+            conversation = await storage.createConversation({
+              customerId: customer.id,
+              status: "active",
+              channel: "whatsapp"
+            });
+            
+            await storage.addWhatsAppLog({
+              type: 'info',
+              message: `Nueva conversación creada para ${from}`,
+              data: { conversationId: conversation.id, customerId: customer.id }
+            });
+          }
+
+          // Create message in conversation
+          await storage.createMessage({
+            conversationId: conversation.id,
+            content: messageText,
+            senderId: null, // Customer message
+            isFromCustomer: true,
+            whatsappMessageId: messageId,
+            messageType: messageType
+          });
+
+          await storage.addWhatsAppLog({
+            type: 'info',
+            message: `Mensaje guardado en conversación ${conversation.id}`,
+            data: { conversationId: conversation.id, messageId }
+          });
+        }
+      }
+
+      // Process status updates (message delivery, read receipts)
+      if (value.statuses && value.statuses.length > 0) {
+        for (const status of value.statuses) {
+          await storage.addWhatsAppLog({
+            type: 'info',
+            message: `Estado de mensaje actualizado: ${status.status}`,
+            data: {
+              messageId: status.id,
+              status: status.status,
+              timestamp: status.timestamp,
+              recipient: status.recipient_id
+            }
+          });
+        }
+      }
+    } catch (error: any) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        message: 'Error procesando mensaje de WhatsApp',
+        data: { error: error.message, value }
+      });
+    }
+  }
+
+  // WhatsApp Business API Webhook
+  app.get("/webhook", (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    // Check the mode and token sent by WhatsApp
+    if (mode === "subscribe") {
+      // Verify the verify token matches the one set in webhook configuration
+      storage.getWhatsAppConfig().then(config => {
+        if (token === config.whatsappVerifyToken) {
+          console.log("Webhook verified successfully!");
+          storage.addWhatsAppLog({
+            type: 'info',
+            message: 'Webhook verificado correctamente',
+            data: { mode, token: '***', challenge }
+          });
+          res.status(200).send(challenge);
+        } else {
+          console.log("Webhook verification failed - invalid token");
+          storage.addWhatsAppLog({
+            type: 'error',
+            message: 'Verificación de webhook fallida - token inválido',
+            data: { mode, token: '***' }
+          });
+          res.status(403).send("Forbidden");
+        }
+      });
+    } else {
+      res.status(400).send("Bad Request");
+    }
+  });
+
+  app.post("/webhook", async (req, res) => {
+    try {
+      const body = req.body;
+      
+      // Log incoming webhook
+      await storage.addWhatsAppLog({
+        type: 'incoming',
+        message: 'Webhook recibido de WhatsApp',
+        data: body
+      });
+
+      // Check if it's a WhatsApp API POST request
+      if (body.object === "whatsapp_business_account") {
+        if (body.entry && body.entry.length > 0) {
+          for (const entry of body.entry) {
+            if (entry.changes && entry.changes.length > 0) {
+              for (const change of entry.changes) {
+                if (change.field === "messages") {
+                  await processWhatsAppMessage(change.value);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      res.status(200).send("EVENT_RECEIVED");
+    } catch (error: any) {
+      console.error("Webhook error:", error);
+      await storage.addWhatsAppLog({
+        type: 'error',
+        message: 'Error procesando webhook',
+        data: { error: error.message }
+      });
+      res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // WhatsApp send message API
+  app.post("/api/whatsapp/send-message", async (req, res) => {
+    try {
+      const { to, message, type = "text" } = req.body;
+      
+      if (!to || !message) {
+        return res.status(400).json({ error: "Número de teléfono y mensaje son requeridos" });
+      }
+
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config.whatsappToken || !config.whatsappPhoneNumberId) {
+        return res.status(400).json({ error: "Configuración de WhatsApp incompleta" });
+      }
+
+      const messageData = {
+        messaging_product: "whatsapp",
+        to: to.replace(/\D/g, ''), // Remove non-digits
+        type: type,
+        text: {
+          body: message
+        }
+      };
+
+      // Send message to WhatsApp Business API
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${config.whatsappPhoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${config.whatsappToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(messageData)
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Log successful message
+        await storage.addWhatsAppLog({
+          type: 'outgoing',
+          message: 'Mensaje enviado exitosamente',
+          data: {
+            to,
+            message,
+            messageId: result.messages?.[0]?.id,
+            response: result
+          }
+        });
+
+        res.json({ 
+          success: true, 
+          messageId: result.messages?.[0]?.id,
+          data: result 
+        });
+      } else {
+        // Log failed message
+        await storage.addWhatsAppLog({
+          type: 'error',
+          message: 'Error enviando mensaje',
+          data: {
+            to,
+            message,
+            error: result
+          }
+        });
+
+        res.status(400).json({ 
+          error: "Error enviando mensaje", 
+          details: result 
+        });
+      }
+    } catch (error: any) {
+      console.error("Error sending WhatsApp message:", error);
+      await storage.addWhatsAppLog({
+        type: 'error',
+        message: 'Error interno enviando mensaje',
+        data: { error: error.message }
+      });
+      res.status(500).json({ error: "Error interno del servidor" });
+    }
+  });
+
   // WhatsApp Connection Test
   app.post("/api/whatsapp/test-connection", async (req, res) => {
     try {
