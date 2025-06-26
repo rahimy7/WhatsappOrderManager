@@ -1253,11 +1253,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send message to WhatsApp Business API
       const response = await fetch(
-        `https://graph.facebook.com/v18.0/${config.whatsappPhoneNumberId}/messages`,
+        `https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${config.whatsappToken}`,
+            'Authorization': `Bearer ${config.accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(messageData)
