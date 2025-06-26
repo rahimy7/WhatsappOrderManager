@@ -87,7 +87,7 @@ export default function WhatsAppSettings() {
   // Mutación para probar conexión
   const testConnectionMutation = useMutation({
     mutationFn: () => apiRequest("/api/whatsapp/test-connection", "POST"),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       toast({
         title: "Prueba de conexión",
         description: data.success ? "Conexión exitosa" : "Error en la conexión",
@@ -132,14 +132,14 @@ export default function WhatsAppSettings() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex items-center space-x-2">
-              <Badge variant={status?.connected ? "default" : "destructive"}>
-                {status?.connected ? "Conectado" : "Desconectado"}
+              <Badge variant={(status as any)?.connected ? "default" : "destructive"}>
+                {(status as any)?.connected ? "Conectado" : "Desconectado"}
               </Badge>
               <span className="text-sm text-muted-foreground">Estado API</span>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={status?.configured ? "default" : "secondary"}>
-                {status?.configured ? "Configurado" : "Pendiente"}
+              <Badge variant={(status as any)?.configured ? "default" : "secondary"}>
+                {(status as any)?.configured ? "Configurado" : "Pendiente"}
               </Badge>
               <span className="text-sm text-muted-foreground">Configuración</span>
             </div>
@@ -154,19 +154,19 @@ export default function WhatsAppSettings() {
             </div>
           </div>
           
-          {status?.webhookUrl && (
+          {(status as any)?.webhookUrl && (
             <div className="mt-4">
               <Label className="text-sm font-medium">URL del Webhook</Label>
               <div className="flex items-center space-x-2 mt-1">
                 <Input 
-                  value={status.webhookUrl} 
+                  value={(status as any).webhookUrl} 
                   readOnly 
                   className="font-mono text-xs"
                 />
                 <Button 
                   size="sm" 
                   variant="outline"
-                  onClick={() => navigator.clipboard.writeText(status.webhookUrl)}
+                  onClick={() => navigator.clipboard.writeText((status as any).webhookUrl)}
                 >
                   Copiar
                 </Button>
