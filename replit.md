@@ -203,6 +203,7 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Seamless transition from registration to main menu options
   - Error handling and flow recovery for registration failures
   - Complete customer lifecycle management from first contact to order completion
+  - Fixed WhatsApp order creation error by updating method signatures to include delivery cost parameters
 
 ## User Preferences
 

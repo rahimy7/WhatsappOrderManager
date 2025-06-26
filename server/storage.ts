@@ -621,6 +621,8 @@ export class MemStorage implements IStorage {
     partsCost?: string;
     laborHours?: string;
     laborRate?: string;
+    deliveryCost?: string;
+    deliveryDistance?: string;
     notes?: string;
   }>): Promise<OrderWithDetails> {
     const orderId = this.currentOrderId++;
