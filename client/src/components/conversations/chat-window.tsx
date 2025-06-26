@@ -31,7 +31,7 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!conversation) throw new Error("No conversation selected");
-      return apiRequest(`/api/conversations/${conversation.id}/messages`, "POST", {
+      return apiRequest("POST", `/api/conversations/${conversation.id}/messages`, {
         content,
         senderType: "staff",
         messageType: "text"

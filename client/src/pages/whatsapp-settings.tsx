@@ -66,7 +66,7 @@ export default function WhatsAppSettings() {
   // Mutación para actualizar configuración
   const updateConfigMutation = useMutation({
     mutationFn: (data: WhatsAppConfig) => 
-      apiRequest("/api/settings/whatsapp", "PUT", data),
+      apiRequest("PUT", "/api/settings/whatsapp", data),
     onSuccess: () => {
       toast({
         title: "Configuración actualizada",
@@ -86,7 +86,7 @@ export default function WhatsAppSettings() {
 
   // Mutación para probar conexión
   const testConnectionMutation = useMutation({
-    mutationFn: () => apiRequest("/api/whatsapp/test-connection", "POST"),
+    mutationFn: () => apiRequest("POST", "/api/whatsapp/test-connection"),
     onSuccess: (data: any) => {
       toast({
         title: "Prueba de conexión",
