@@ -14,8 +14,8 @@ export default function Sidebar() {
     queryKey: ["/api/conversations"],
   });
 
-  const pendingOrders = orders.filter((order: any) => order.status === "pending").length || 0;
-  const activeConversations = conversations.filter((conv: any) => conv.unreadCount > 0).length || 0;
+  const pendingOrders = Array.isArray(orders) ? orders.filter((order: any) => order.status === "pending").length : 0;
+  const activeConversations = Array.isArray(conversations) ? conversations.filter((conv: any) => conv.unreadCount > 0).length : 0;
 
   const navItems = [
     {

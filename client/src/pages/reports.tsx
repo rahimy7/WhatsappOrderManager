@@ -72,7 +72,7 @@ export default function Reports() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${metrics?.dailyRevenue?.toLocaleString('es-MX') || "0"}</div>
+            <div className="text-2xl font-bold">${(metrics && typeof metrics === 'object' && 'dailyRevenue' in metrics && typeof metrics.dailyRevenue === 'number') ? metrics.dailyRevenue.toLocaleString('es-MX') : "0"}</div>
             <p className="text-sm text-green-600 mt-1">+8.5% vs ayer</p>
           </CardContent>
         </Card>
@@ -113,7 +113,7 @@ export default function Reports() {
           <CardContent>
             <div className="space-y-4">
               {["pending", "assigned", "in_progress", "completed", "cancelled"].map((status) => {
-                const count = orders?.filter((order: any) => order.status === status).length || 0;
+                const count = Array.isArray(orders) ? orders.filter((order: any) => order.status === status).length : 0;
                 const percentage = totalOrders > 0 ? (count / totalOrders * 100).toFixed(1) : "0";
                 
                 const statusLabels: Record<string, string> = {
