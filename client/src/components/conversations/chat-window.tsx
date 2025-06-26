@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Send, MessageCircle, Phone, User } from "lucide-react";
 import { ConversationWithDetails, Message } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import SendMessageModal from "@/components/whatsapp/send-message-modal";
 
 interface ChatWindowProps {
   conversation: ConversationWithDetails | null;
@@ -15,6 +16,7 @@ interface ChatWindowProps {
 
 export default function ChatWindow({ conversation }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState("");
+  const [showSendModal, setShowSendModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -135,8 +137,19 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 success-bg rounded-full"></div>
-            <span className="text-sm text-gray-600">En línea</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSendModal(true)}
+              className="whatsapp-bg text-white hover:bg-green-600"
+            >
+              <MessageCircle className="h-4 w-4 mr-2" />
+              Enviar WhatsApp
+            </Button>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 success-bg rounded-full"></div>
+              <span className="text-sm text-gray-600">En línea</span>
+            </div>
           </div>
         </div>
       </CardHeader>
