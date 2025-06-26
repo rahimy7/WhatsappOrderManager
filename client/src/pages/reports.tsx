@@ -280,94 +280,223 @@ export default function Reports() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${totalRevenue.toLocaleString('es-MX')}</div>
-            <p className="text-sm text-gray-500 mt-1">MXN</p>
+            <p className="text-sm text-green-600 mt-1">Período seleccionado</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600 flex items-center">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Ingresos Hoy
+              <Users className="h-4 w-4 mr-2" />
+              Valor Promedio
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${(metrics && typeof metrics === 'object' && 'dailyRevenue' in metrics && typeof metrics.dailyRevenue === 'number') ? metrics.dailyRevenue.toLocaleString('es-MX') : "0"}</div>
-            <p className="text-sm text-green-600 mt-1">+8.5% vs ayer</p>
+            <div className="text-2xl font-bold">${averageOrderValue.toLocaleString('es-MX')}</div>
+            <p className="text-sm text-gray-500 mt-1">Por pedido completado</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Report Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Exportar Reportes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <Button className="w-full justify-start" variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Reporte de Pedidos (Excel)
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Reporte de Ingresos (PDF)
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Reporte de Equipo (CSV)
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Conversaciones WhatsApp (JSON)
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Analytics Tabs */}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Resumen</TabsTrigger>
+          <TabsTrigger value="performance">Rendimiento</TabsTrigger>
+          <TabsTrigger value="products">Productos</TabsTrigger>
+          <TabsTrigger value="trends">Tendencias</TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Estadísticas por Estado</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {["pending", "assigned", "in_progress", "completed", "cancelled"].map((status) => {
-                const count = Array.isArray(orders) ? orders.filter((order: any) => order.status === status).length : 0;
-                const percentage = totalOrders > 0 ? (count / totalOrders * 100).toFixed(1) : "0";
-                
-                const statusLabels: Record<string, string> = {
-                  pending: "Pendiente",
-                  assigned: "Asignado", 
-                  in_progress: "En Proceso",
-                  completed: "Completado",
-                  cancelled: "Cancelado"
-                };
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Status Distribution Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribución por Estado</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={statusChartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {statusChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-                const statusColors: Record<string, string> = {
-                  pending: "bg-red-100 text-red-800",
-                  assigned: "bg-blue-100 text-blue-800",
-                  in_progress: "bg-yellow-100 text-yellow-800", 
-                  completed: "bg-green-100 text-green-800",
-                  cancelled: "bg-gray-100 text-gray-800"
-                };
+            {/* Revenue Trend Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Tendencia de Ingresos (7 días)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={revenueTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => [`$${value}`, 'Ingresos']} />
+                    <Legend />
+                    <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
 
-                return (
-                  <div key={status} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[status]}`}>
-                        {statusLabels[status]}
-                      </span>
-                      <span className="text-sm text-gray-600">{count} pedidos</span>
+          {/* Status Breakdown */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Desglose por Estado</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {statusChartData.map((status) => {
+                  const percentage = totalOrders > 0 ? (status.value / totalOrders * 100).toFixed(1) : "0";
+                  return (
+                    <div key={status.name} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <div 
+                          className="w-4 h-4 rounded-full" 
+                          style={{ backgroundColor: status.color }}
+                        />
+                        <span className="font-medium">{status.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold">{status.value}</div>
+                        <div className="text-sm text-gray-500">{percentage}%</div>
+                      </div>
                     </div>
-                    <span className="text-sm font-medium">{percentage}%</span>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="performance" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Rendimiento por Técnico</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {technicianPerformance.map((tech) => (
+                  <div key={tech.name} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-medium text-blue-600">
+                          {tech.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-gray-900">{tech.name}</h3>
+                        <p className="text-sm text-gray-500">{tech.orders} pedidos asignados</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">${tech.revenue.toLocaleString('es-MX')}</div>
+                      <div className="text-sm text-gray-500">{tech.completionRate}% completitud</div>
+                      <Badge variant={parseFloat(tech.completionRate) >= 80 ? "default" : "secondary"}>
+                        {tech.completed} completados
+                      </Badge>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="products" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Rendimiento por Producto</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {productPerformance.slice(0, 10).map((product) => (
+                  <div key={product.name} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                        <Package className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-gray-900">{product.name}</h3>
+                        <p className="text-sm text-gray-500">{product.orders} pedidos</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">${product.revenue.toLocaleString('es-MX')}</div>
+                      <Badge variant={product.category === "service" ? "secondary" : "default"}>
+                        {product.category === "service" ? "Servicio" : "Producto"}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="trends" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tendencias de Pedidos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={revenueTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="orders" fill="#3b82f6" name="Pedidos" />
+                  <Bar yAxisId="right" dataKey="revenue" fill="#10b981" name="Ingresos ($)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Export Options */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Exportar Reportes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Button variant="outline" className="justify-start">
+                  <Download className="h-4 w-4 mr-2" />
+                  Reporte Excel
+                </Button>
+                <Button variant="outline" className="justify-start">
+                  <Download className="h-4 w-4 mr-2" />
+                  Reporte PDF
+                </Button>
+                <Button variant="outline" className="justify-start">
+                  <Download className="h-4 w-4 mr-2" />
+                  Datos CSV
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
