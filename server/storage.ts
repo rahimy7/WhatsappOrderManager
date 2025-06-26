@@ -545,7 +545,17 @@ export class MemStorage implements IStorage {
     };
   }
 
-  async createOrder(insertOrder: InsertOrder, items: { productId: number; quantity: number; unitPrice: string; totalPrice: string; }[]): Promise<OrderWithDetails> {
+  async createOrder(insertOrder: InsertOrder, items: Array<{
+    productId: number;
+    quantity: number;
+    unitPrice: string;
+    totalPrice: string;
+    installationCost?: string;
+    partsCost?: string;
+    laborHours?: string;
+    laborRate?: string;
+    notes?: string;
+  }>): Promise<OrderWithDetails> {
     const orderId = this.currentOrderId++;
     const orderNumber = `ORD-${this.currentOrderNumber++}`;
     
@@ -574,10 +584,10 @@ export class MemStorage implements IStorage {
         quantity: insertItem.quantity,
         unitPrice: insertItem.unitPrice,
         totalPrice: insertItem.totalPrice,
-        installationCost: insertItem.installationCost || "0",
-        partsCost: insertItem.partsCost || "0",
-        laborHours: insertItem.laborHours || "0",
-        laborRate: insertItem.laborRate || "0",
+        installationCost: insertItem.installationCost || null,
+        partsCost: insertItem.partsCost || null,
+        laborHours: insertItem.laborHours || null,
+        laborRate: insertItem.laborRate || null,
         notes: insertItem.notes || null,
       };
       this.orderItems.set(itemId, orderItem);
@@ -677,8 +687,13 @@ export class MemStorage implements IStorage {
   async addOrderHistory(insertHistory: InsertOrderHistory): Promise<OrderHistory> {
     const id = this.currentOrderHistoryId++;
     const history: OrderHistory = {
-      ...insertHistory,
       id,
+      orderId: insertHistory.orderId,
+      userId: insertHistory.userId,
+      statusFrom: insertHistory.statusFrom,
+      statusTo: insertHistory.statusTo,
+      action: insertHistory.action,
+      notes: insertHistory.notes || null,
       timestamp: new Date(),
     };
     this.orderHistory.set(id, history);

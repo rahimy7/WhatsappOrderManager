@@ -99,6 +99,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/orders/:id/status", async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      const { status, notes } = z.object({ 
+        status: z.string(), 
+        notes: z.string().optional() 
+      }).parse(req.body);
+      
+      const order = await storage.updateOrderStatus(orderId, status, undefined, notes);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      res.json(order);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid status data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update order status" });
+    }
+  });
+
+  app.get("/api/orders/:id/history", async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      const history = await storage.getOrderHistory(orderId);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch order history" });
+    }
+  });
+
+  app.post("/api/services/:id/calculate-price", async (req, res) => {
+    try {
+      const serviceId = parseInt(req.params.id);
+      const { installationComplexity, partsNeeded } = z.object({
+        installationComplexity: z.number().min(1).max(5),
+        partsNeeded: z.array(z.object({
+          productId: z.number(),
+          quantity: z.number().min(1)
+        })).default([])
+      }).parse(req.body);
+
+      const pricing = await storage.calculateServicePrice(serviceId, installationComplexity, partsNeeded);
+      res.json(pricing);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid pricing request", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to calculate service price" });
+    }
+  });
+
   // Users routes
   app.get("/api/users", async (req, res) => {
     try {
