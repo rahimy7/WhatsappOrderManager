@@ -161,6 +161,12 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   sentAt: true,
 });
 
+export const insertWebMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  sentAt: true,
+  conversationId: true,
+});
+
 export const insertWhatsAppSettingsSchema = createInsertSchema(whatsappSettings).omit({
   id: true,
   createdAt: true,

@@ -22,7 +22,8 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
 
   // Fetch messages for the current conversation
   const { data: messages = [], isLoading } = useQuery({
-    queryKey: ["/api/messages", conversation?.id],
+    queryKey: ["/api/conversations", conversation?.id, "messages"],
+    queryFn: () => conversation?.id ? fetch(`/api/conversations/${conversation.id}/messages`).then(res => res.json()) : [],
     enabled: !!conversation?.id,
   });
 
@@ -30,14 +31,14 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!conversation) throw new Error("No conversation selected");
-      return apiRequest("POST", "/api/messages", {
-        conversationId: conversation.id,
+      return apiRequest(`/api/conversations/${conversation.id}/messages`, "POST", {
         content,
         senderType: "staff",
+        messageType: "text"
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/messages", conversation?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversation?.id, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setNewMessage("");
       toast({

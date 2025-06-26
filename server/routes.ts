@@ -304,8 +304,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conversations/:id/messages", async (req, res) => {
     try {
       const conversationId = parseInt(req.params.id);
+      const webMessageData = insertWebMessageSchema.parse(req.body);
       const messageData = {
-        ...insertMessageSchema.parse(req.body),
+        ...webMessageData,
         conversationId,
       };
       
