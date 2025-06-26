@@ -42,6 +42,7 @@ type WhatsAppConfig = z.infer<typeof whatsappConfigSchema>;
 export default function Settings() {
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
   const { toast } = useToast();
 
   const { data: config = {}, isLoading } = useQuery<any>({
@@ -51,6 +52,21 @@ export default function Settings() {
   const { data: connectionStatus = {} } = useQuery<any>({
     queryKey: ["/api/whatsapp/status"],
   });
+
+  const { data: whatsappLogs = [], refetch: refetchLogs } = useQuery<any[]>({
+    queryKey: ["/api/whatsapp/logs"],
+    refetchInterval: autoRefreshLogs ? 3000 : false, // Auto-refresh every 3 seconds
+  });
+
+  // Auto-refresh logs effect
+  useEffect(() => {
+    if (autoRefreshLogs) {
+      const interval = setInterval(() => {
+        refetchLogs();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [autoRefreshLogs, refetchLogs]);
 
   const form = useForm<WhatsAppConfig>({
     resolver: zodResolver(whatsappConfigSchema),
@@ -155,10 +171,14 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="whatsapp" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="whatsapp" className="flex items-center space-x-2">
               <Phone className="h-4 w-4" />
               <span>WhatsApp Business</span>
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="flex items-center space-x-2">
+              <Activity className="h-4 w-4" />
+              <span>Logs</span>
             </TabsTrigger>
             <TabsTrigger value="security" className="flex items-center space-x-2">
               <Shield className="h-4 w-4" />
@@ -444,6 +464,115 @@ export default function Settings() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="logs" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Activity className="h-5 w-5 text-blue-600" />
+                    <span>Logs de Comunicación WhatsApp</span>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="autoRefresh"
+                        checked={autoRefreshLogs}
+                        onChange={(e) => setAutoRefreshLogs(e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor="autoRefresh" className="text-sm">
+                        Auto-actualizar (3s)
+                      </Label>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refetchLogs()}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardTitle>
+                <p className="text-sm text-gray-600">
+                  Monitorea en tiempo real las comunicaciones con la API de WhatsApp Business
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Webhook URL Info */}
+                  <Alert>
+                    <Globe className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Webhook URL configurada:</strong><br />
+                      <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                        https://whatsapp2-production-e205.up.railway.app/webhook
+                      </code>
+                    </AlertDescription>
+                  </Alert>
+
+                  {/* Logs Container */}
+                  <div className="bg-gray-900 text-gray-100 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm">
+                    {whatsappLogs.length === 0 ? (
+                      <div className="text-center text-gray-400 mt-8">
+                        <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>No hay logs disponibles aún</p>
+                        <p className="text-xs mt-1">Los logs aparecerán aquí cuando se reciban mensajes de WhatsApp</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {whatsappLogs.map((log: any) => (
+                          <div key={log.id} className="border-b border-gray-700 pb-2">
+                            <div className="flex justify-between items-start">
+                              <span className="text-blue-300">
+                                [{new Date(log.timestamp).toLocaleTimeString()}]
+                              </span>
+                              <span className={`px-2 py-1 rounded text-xs ${
+                                log.type === 'incoming' ? 'bg-green-600' :
+                                log.type === 'outgoing' ? 'bg-blue-600' :
+                                log.type === 'error' ? 'bg-red-600' : 'bg-gray-600'
+                              }`}>
+                                {log.type || 'info'}
+                              </span>
+                            </div>
+                            <div className="mt-1">
+                              <p className="text-white">{log.message || log.description}</p>
+                              {log.data && (
+                                <pre className="text-gray-300 text-xs mt-1 overflow-x-auto">
+                                  {typeof log.data === 'object' ? JSON.stringify(log.data, null, 2) : log.data}
+                                </pre>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Connection Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="text-sm font-medium text-blue-800">Total Logs</p>
+                      <p className="text-lg font-bold text-blue-900">{whatsappLogs.length}</p>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <p className="text-sm font-medium text-green-800">Mensajes Entrantes</p>
+                      <p className="text-lg font-bold text-green-900">
+                        {whatsappLogs.filter((log: any) => log.type === 'incoming').length}
+                      </p>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-lg">
+                      <p className="text-sm font-medium text-orange-800">Mensajes Salientes</p>
+                      <p className="text-lg font-bold text-orange-900">
+                        {whatsappLogs.filter((log: any) => log.type === 'outgoing').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="security">

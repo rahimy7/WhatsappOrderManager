@@ -100,6 +100,7 @@ export class MemStorage implements IStorage {
 
   constructor() {
     this.seedData();
+    this.seedWhatsAppLogs();
   }
 
   private seedData() {
@@ -333,6 +334,57 @@ export class MemStorage implements IStorage {
       isRead: false,
     };
     this.messages.set(msg2.id, msg2);
+  }
+
+  private seedWhatsAppLogs() {
+    // Add some sample logs to demonstrate functionality
+    const sampleLogs = [
+      {
+        id: Date.now() - 300000,
+        timestamp: new Date(Date.now() - 300000).toISOString(),
+        type: 'incoming',
+        message: 'Mensaje recibido de cliente',
+        data: {
+          from: '+52 55 1234-5678',
+          message: 'Hola, necesito información sobre sus servicios',
+          webhook_id: 'wh_123456'
+        }
+      },
+      {
+        id: Date.now() - 240000,
+        timestamp: new Date(Date.now() - 240000).toISOString(),
+        type: 'outgoing',
+        message: 'Mensaje enviado a cliente',
+        data: {
+          to: '+52 55 1234-5678',
+          message: '¡Hola! Con gusto te ayudamos. ¿Qué tipo de servicio necesitas?',
+          message_id: 'msg_789012'
+        }
+      },
+      {
+        id: Date.now() - 180000,
+        timestamp: new Date(Date.now() - 180000).toISOString(),
+        type: 'info',
+        message: 'Webhook configurado correctamente',
+        data: {
+          webhook_url: 'https://whatsapp2-production-e205.up.railway.app/webhook',
+          status: 'active'
+        }
+      },
+      {
+        id: Date.now() - 120000,
+        timestamp: new Date(Date.now() - 120000).toISOString(),
+        type: 'incoming',
+        message: 'Nuevo mensaje de WhatsApp',
+        data: {
+          from: '+52 55 9876-5432',
+          message: 'Quiero solicitar una cotización para aire acondicionado',
+          webhook_id: 'wh_345678'
+        }
+      }
+    ];
+
+    this.whatsappLogs = sampleLogs;
   }
 
   async getUser(id: number): Promise<User | undefined> {
