@@ -9,6 +9,8 @@ import {
   messages,
   whatsappSettings,
   whatsappLogs,
+  autoResponses,
+  customerRegistrationFlows,
   type User,
   type Customer,
   type Product,
@@ -19,6 +21,8 @@ import {
   type Message,
   type WhatsAppSettings,
   type WhatsAppLog,
+  type AutoResponse,
+  type CustomerRegistrationFlow,
   type InsertUser,
   type InsertCustomer,
   type InsertProduct,
@@ -29,6 +33,8 @@ import {
   type InsertMessage,
   type InsertWhatsAppSettings,
   type InsertWhatsAppLog,
+  type InsertAutoResponse,
+  type InsertCustomerRegistrationFlow,
   type OrderWithDetails,
   type ConversationWithDetails,
 } from "@shared/schema";
@@ -119,6 +125,20 @@ export interface IStorage {
   // WhatsApp Logs
   getWhatsAppLogs(): Promise<WhatsAppLog[]>;
   addWhatsAppLog(log: InsertWhatsAppLog): Promise<WhatsAppLog>;
+  
+  // Auto Responses
+  getAllAutoResponses(): Promise<AutoResponse[]>;
+  getAutoResponse(id: number): Promise<AutoResponse | undefined>;
+  createAutoResponse(response: InsertAutoResponse): Promise<AutoResponse>;
+  updateAutoResponse(id: number, updates: Partial<InsertAutoResponse>): Promise<AutoResponse | undefined>;
+  deleteAutoResponse(id: number): Promise<void>;
+  getAutoResponsesByTrigger(trigger: string): Promise<AutoResponse[]>;
+  
+  // Customer Registration Flows
+  getRegistrationFlow(phoneNumber: string): Promise<CustomerRegistrationFlow | undefined>;
+  createRegistrationFlow(flow: InsertCustomerRegistrationFlow): Promise<CustomerRegistrationFlow>;
+  updateRegistrationFlow(phoneNumber: string, updates: Partial<InsertCustomerRegistrationFlow>): Promise<CustomerRegistrationFlow | undefined>;
+  deleteRegistrationFlow(phoneNumber: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -1463,6 +1483,69 @@ export class DatabaseStorage implements IStorage {
   async addWhatsAppLog(log: InsertWhatsAppLog): Promise<WhatsAppLog> {
     const [logEntry] = await db.insert(whatsappLogs).values(log).returning();
     return logEntry;
+  }
+
+  // Auto Responses with PostgreSQL
+  async getAllAutoResponses(): Promise<AutoResponse[]> {
+    return await db.select().from(autoResponses)
+      .orderBy(desc(autoResponses.createdAt));
+  }
+
+  async getAutoResponse(id: number): Promise<AutoResponse | undefined> {
+    const [response] = await db.select().from(autoResponses)
+      .where(eq(autoResponses.id, id));
+    return response || undefined;
+  }
+
+  async createAutoResponse(response: InsertAutoResponse): Promise<AutoResponse> {
+    const [newResponse] = await db.insert(autoResponses).values(response).returning();
+    return newResponse;
+  }
+
+  async updateAutoResponse(id: number, updates: Partial<InsertAutoResponse>): Promise<AutoResponse | undefined> {
+    const [updatedResponse] = await db.update(autoResponses)
+      .set(updates)
+      .where(eq(autoResponses.id, id))
+      .returning();
+    return updatedResponse || undefined;
+  }
+
+  async deleteAutoResponse(id: number): Promise<void> {
+    await db.delete(autoResponses).where(eq(autoResponses.id, id));
+  }
+
+  async getAutoResponsesByTrigger(trigger: string): Promise<AutoResponse[]> {
+    return await db.select().from(autoResponses)
+      .where(and(
+        eq(autoResponses.trigger, trigger),
+        eq(autoResponses.isActive, true)
+      ))
+      .orderBy(autoResponses.order);
+  }
+
+  // Customer Registration Flows with PostgreSQL
+  async getRegistrationFlow(phoneNumber: string): Promise<CustomerRegistrationFlow | undefined> {
+    const [flow] = await db.select().from(customerRegistrationFlows)
+      .where(eq(customerRegistrationFlows.phoneNumber, phoneNumber));
+    return flow || undefined;
+  }
+
+  async createRegistrationFlow(flow: InsertCustomerRegistrationFlow): Promise<CustomerRegistrationFlow> {
+    const [newFlow] = await db.insert(customerRegistrationFlows).values(flow).returning();
+    return newFlow;
+  }
+
+  async updateRegistrationFlow(phoneNumber: string, updates: Partial<InsertCustomerRegistrationFlow>): Promise<CustomerRegistrationFlow | undefined> {
+    const [updatedFlow] = await db.update(customerRegistrationFlows)
+      .set(updates)
+      .where(eq(customerRegistrationFlows.phoneNumber, phoneNumber))
+      .returning();
+    return updatedFlow || undefined;
+  }
+
+  async deleteRegistrationFlow(phoneNumber: string): Promise<void> {
+    await db.delete(customerRegistrationFlows)
+      .where(eq(customerRegistrationFlows.phoneNumber, phoneNumber));
   }
 }
 

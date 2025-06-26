@@ -27,6 +27,7 @@ function Router() {
       <Route path="/reports" component={Reports} />
       <Route path="/settings" component={Settings} />
       <Route path="/whatsapp-settings" component={WhatsAppSettings} />
+      <Route path="/auto-responses" component={AutoResponses} />
       <Route component={NotFound} />
     </Switch>
   );
