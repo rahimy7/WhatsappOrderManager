@@ -35,7 +35,7 @@ export default function AutoResponsesPage() {
   });
 
   // Fetch auto responses
-  const { data: responses = [], isLoading } = useQuery({
+  const { data: responses = [], isLoading } = useQuery<AutoResponse[]>({
     queryKey: ["/api/auto-responses"],
   });
 
