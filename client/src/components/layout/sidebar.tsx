@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
@@ -77,6 +77,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       href: "/settings",
       icon: Settings,
       label: "Configuración",
+      badge: null,
+    },
+    {
+      href: "/whatsapp-settings",
+      icon: Smartphone,
+      label: "WhatsApp API",
       badge: null,
     },
   ];

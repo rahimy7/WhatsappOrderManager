@@ -51,14 +51,14 @@ export default function WhatsAppSettings() {
 
   // Actualizar formData cuando se obtiene la configuración
   useEffect(() => {
-    if (config) {
+    if (config && typeof config === 'object') {
       setFormData({
-        accessToken: config.accessToken || "",
-        phoneNumberId: config.phoneNumberId || "",
-        webhookVerifyToken: config.webhookVerifyToken || "",
-        businessAccountId: config.businessAccountId || "",
-        appId: config.appId || "",
-        isActive: config.isActive ?? true
+        accessToken: (config as any).accessToken || "",
+        phoneNumberId: (config as any).phoneNumberId || "",
+        webhookVerifyToken: (config as any).webhookVerifyToken || "",
+        businessAccountId: (config as any).businessAccountId || "",
+        appId: (config as any).appId || "",
+        isActive: (config as any).isActive ?? true
       });
     }
   }, [config]);
