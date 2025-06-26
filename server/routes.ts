@@ -276,6 +276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         whatsappPhoneNumberId: z.string(),
         whatsappToken: z.string(),
         whatsappVerifyToken: z.string(),
+        webhookUrl: z.string().url(),
       }).parse(req.body);
 
       const config = await storage.updateWhatsAppConfig(configData);
@@ -315,6 +316,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(mockStatus);
     } catch (error) {
       res.status(500).json({ error: "Failed to check WhatsApp status" });
+    }
+  });
+
+  // WhatsApp logs endpoints
+  app.get("/api/whatsapp/logs", async (_req, res) => {
+    try {
+      const logs = await storage.getWhatsAppLogs();
+      res.json(logs);
+    } catch (error) {
+      console.error("Error getting WhatsApp logs:", error);
+      res.status(500).json({ error: "Error al obtener los logs de WhatsApp" });
+    }
+  });
+
+  app.post("/api/whatsapp/logs", async (req, res) => {
+    try {
+      await storage.addWhatsAppLog(req.body);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error adding WhatsApp log:", error);
+      res.status(500).json({ error: "Error al agregar log de WhatsApp" });
     }
   });
 

@@ -636,6 +636,7 @@ export class MemStorage implements IStorage {
       whatsappPhoneNumberId: "",
       whatsappToken: "",
       whatsappVerifyToken: "",
+      webhookUrl: "",
     };
   }
 
@@ -645,6 +646,24 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     return this.whatsappConfig;
+  }
+
+  async getWhatsAppLogs(): Promise<any[]> {
+    return [...this.whatsappLogs].reverse(); // Most recent first
+  }
+
+  async addWhatsAppLog(log: any): Promise<void> {
+    const logEntry = {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      ...log
+    };
+    this.whatsappLogs.push(logEntry);
+    
+    // Keep only last 100 logs
+    if (this.whatsappLogs.length > 100) {
+      this.whatsappLogs = this.whatsappLogs.slice(-100);
+    }
   }
 }
 
