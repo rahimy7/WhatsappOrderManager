@@ -337,11 +337,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Initialize config with environment variables if not set
       if (!config || !config.accessToken) {
         const envConfig = {
-          accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
-          phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
-          whatsappVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
-          webhookUrl: process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/webhook` : 'https://tu-dominio-replit.com/webhook',
-          isConfigured: !!(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
+          accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+          phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+          webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "",
+          businessAccountId: "",
+          appId: ""
         };
         
         config = await storage.updateWhatsAppConfig(envConfig);
