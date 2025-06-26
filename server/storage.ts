@@ -1176,21 +1176,13 @@ export class DatabaseStorage implements IStorage {
     deliveryDistance?: string;
     notes?: string;
   }>): Promise<OrderWithDetails> {
-    // Generate unique order number
-    const lastOrder = await db.select({ orderNumber: orders.orderNumber }).from(orders).orderBy(desc(orders.id)).limit(1);
-    let nextOrderNumber: string;
-    
-    if (lastOrder.length === 0) {
-      nextOrderNumber = 'ORD-1001';
-    } else {
-      const lastOrderNumber = lastOrder[0].orderNumber;
-      const lastNumber = parseInt(lastOrderNumber.split('-')[1]);
-      nextOrderNumber = `ORD-${lastNumber + 1}`;
-    }
+    // Generate unique order number using timestamp to avoid conflicts
+    const timestamp = Date.now();
+    const orderNumber = `ORD-${timestamp.toString().slice(-6)}`;
 
     const [order] = await db.insert(orders).values({
       ...insertOrder,
-      orderNumber: nextOrderNumber
+      orderNumber
     }).returning();
 
     // Insert order items
