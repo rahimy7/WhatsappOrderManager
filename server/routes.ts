@@ -405,18 +405,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // In a real implementation, this would check with WhatsApp Business API
-      // For now, simulate the check
-      const mockStatus = {
-        connected: true,
-        configured: true,
-        lastCheck: new Date().toISOString(),
-        phoneNumber: "+52 55 1234-5678",
-        businessName: "OrderManager Business",
-        message: "Connected successfully"
-      };
+      // Test actual connection to WhatsApp Business API
+      try {
+        const response = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}`, {
+          headers: {
+            'Authorization': `Bearer ${config.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
 
-      res.json(mockStatus);
+        if (response.ok) {
+          const phoneData = await response.json();
+          await storage.addWhatsAppLog({
+            type: 'success',
+            phoneNumber: null,
+            messageContent: 'Conexión a WhatsApp Business API exitosa',
+            status: 'connected',
+            rawData: JSON.stringify({ status: 'connected', timestamp: new Date() })
+          });
+
+          res.json({
+            connected: true,
+            configured: true,
+            lastCheck: new Date().toISOString(),
+            phoneNumber: phoneData.display_phone_number || config.phoneNumberId,
+            businessName: phoneData.verified_name || "Business Account",
+            message: "Connected successfully"
+          });
+        } else {
+          const error = await response.text();
+          await storage.addWhatsAppLog({
+            type: 'error',
+            phoneNumber: null,
+            messageContent: 'Error de conexión a WhatsApp Business API',
+            status: 'error',
+            errorMessage: error,
+            rawData: JSON.stringify({ error, status: response.status })
+          });
+
+          res.json({
+            connected: false,
+            configured: true,
+            message: `Connection failed: ${error}`
+          });
+        }
+      } catch (apiError) {
+        await storage.addWhatsAppLog({
+          type: 'error',
+          phoneNumber: null,
+          messageContent: 'Error interno al probar conexión WhatsApp',
+          status: 'error',
+          errorMessage: apiError.message,
+          rawData: JSON.stringify({ error: apiError.message })
+        });
+
+        res.json({
+          connected: false,
+          configured: false,
+          message: `Error: ${apiError.message}`
+        });
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to check WhatsApp status" });
     }
@@ -492,8 +540,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             await storage.addWhatsAppLog({
               type: 'info',
-              message: `Nuevo cliente creado: ${from}`,
-              data: { customerId: customer.id, phone: from }
+              phoneNumber: from,
+              messageContent: `Nuevo cliente creado: ${from}`,
+              status: 'success',
+              rawData: JSON.stringify({ customerId: customer.id, phone: from })
             });
           }
 
@@ -504,14 +554,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!conversation) {
             conversation = await storage.createConversation({
               customerId: customer.id,
-              status: "active",
-              channel: "whatsapp"
+              status: "active"
             });
             
             await storage.addWhatsAppLog({
               type: 'info',
-              message: `Nueva conversación creada para ${from}`,
-              data: { conversationId: conversation.id, customerId: customer.id }
+              phoneNumber: from,
+              messageContent: `Nueva conversación creada para ${from}`,
+              status: 'success',
+              rawData: JSON.stringify({ conversationId: conversation.id, customerId: customer.id })
             });
           }
 
