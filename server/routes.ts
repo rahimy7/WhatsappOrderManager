@@ -579,26 +579,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Function to process customer messages and respond with menu/orders
   async function processCustomerMessage(customer: any, conversation: any, message: any, from: string) {
-    const messageType = message.type;
-    
-    if (messageType === 'text') {
-      const text = message.text.body.toLowerCase().trim();
+    try {
+      const messageType = message.type;
       
-      if (text.includes('hola') || text.includes('menu') || text.includes('catalogo') || text.includes('productos')) {
-        await sendProductMenu(from);
-      } else if (text.includes('pedido') || text.includes('order') || text.includes('estado')) {
-        await sendOrderStatus(customer, from);
-      } else if (text.includes('ubicacion') || text.includes('location') || text.includes('direccion')) {
-        await sendLocationRequest(from);
-      } else if (text.includes('ayuda') || text.includes('help')) {
-        await sendHelpMenu(from);
+      if (messageType === 'text') {
+        const text = message.text.body.toLowerCase().trim();
+        
+        // Always respond with welcome message for any text
+        await sendWelcomeMessage(from);
+        
+        // Log the response
+        await storage.addWhatsAppLog({
+          type: 'info',
+          phoneNumber: from,
+          messageContent: `Respuesta automática enviada a ${from}`,
+          status: 'processed',
+          rawData: JSON.stringify({ customerMessage: text, response: 'welcome_menu' })
+        });
+        
+      } else if (messageType === 'location') {
+        await handleLocationMessage(customer, message.location, from);
+      } else if (messageType === 'interactive') {
+        await handleInteractiveMessage(customer, conversation, message.interactive, from);
       } else {
+        // For any other message type, send welcome message
         await sendWelcomeMessage(from);
       }
-    } else if (messageType === 'location') {
-      await handleLocationMessage(customer, message.location, from);
-    } else if (messageType === 'interactive') {
-      await handleInteractiveMessage(customer, conversation, message.interactive, from);
+    } catch (error) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: from,
+        messageContent: 'Error procesando mensaje del cliente',
+        status: 'error',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, messageType: message.type })
+      });
     }
   }
 
@@ -989,20 +1004,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await storage.addWhatsAppLog({
         type: 'outgoing',
-        message: 'Mensaje enviado',
-        data: {
+        phoneNumber: phoneNumber,
+        messageContent: 'Mensaje enviado exitosamente',
+        messageId: result.messages?.[0]?.id,
+        status: 'sent',
+        rawData: JSON.stringify({
           to: phoneNumber,
           messageId: result.messages?.[0]?.id,
           content: message.substring(0, 100)
-        }
+        })
       });
 
       return result;
     } catch (error: any) {
       await storage.addWhatsAppLog({
         type: 'error',
-        message: 'Error enviando mensaje de WhatsApp',
-        data: { error: error.message, phoneNumber, content: message.substring(0, 100) }
+        phoneNumber: phoneNumber,
+        messageContent: 'Error enviando mensaje de WhatsApp',
+        status: 'error',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, phoneNumber, content: message.substring(0, 100) })
       });
       throw error;
     }
@@ -1134,7 +1155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const config = await storage.getWhatsAppConfig();
       
-      if (!config.whatsappToken || !config.whatsappPhoneNumberId) {
+      if (!config || !config.accessToken || !config.phoneNumberId) {
         return res.status(400).json({ error: "Configuración de WhatsApp incompleta" });
       }
 
