@@ -14,6 +14,7 @@ import {
   employeeProfiles,
   customerHistory,
   assignmentRules,
+  notifications,
   type User,
   type Customer,
   type Product,
@@ -28,6 +29,7 @@ import {
   type CustomerRegistrationFlow,
   type EmployeeProfile,
   type AssignmentRule,
+  type Notification,
   type InsertUser,
   type InsertCustomer,
   type InsertProduct,
@@ -42,6 +44,7 @@ import {
   type InsertCustomerRegistrationFlow,
   type InsertEmployeeProfile,
   type InsertAssignmentRule,
+  type InsertNotification,
   type CustomerHistory,
   type InsertCustomerHistory,
   type OrderWithDetails,
@@ -192,6 +195,16 @@ export interface IStorage {
     reason?: string;
   }>;
   getAvailableTechnicians(specializations?: string[], maxDistance?: number, customerLocation?: { latitude: string; longitude: string }): Promise<(EmployeeProfile & { user: User })[]>;
+  
+  // Notifications
+  getNotification(id: number): Promise<Notification | undefined>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: number): Promise<Notification[]>;
+  getUnreadNotifications(userId: number): Promise<Notification[]>;
+  markNotificationAsRead(id: number): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: number): Promise<void>;
+  deleteNotification(id: number): Promise<void>;
+  getNotificationCount(userId: number): Promise<{ total: number; unread: number }>;
 }
 
 export class MemStorage implements IStorage {
@@ -2223,6 +2236,66 @@ export class DatabaseStorage implements IStorage {
 
   private toRad(degrees: number): number {
     return degrees * (Math.PI / 180);
+  }
+
+  // Notifications
+  async getNotification(id: number): Promise<Notification | undefined> {
+    const [notification] = await db.select().from(notifications).where(eq(notifications.id, id));
+    return notification || undefined;
+  }
+
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const [notification] = await db.insert(notifications).values(insertNotification).returning();
+    return notification;
+  }
+
+  async getUserNotifications(userId: number): Promise<Notification[]> {
+    return await db.select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async getUnreadNotifications(userId: number): Promise<Notification[]> {
+    return await db.select()
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async markNotificationAsRead(id: number): Promise<Notification | undefined> {
+    const [notification] = await db.update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(notifications.id, id))
+      .returning();
+    return notification || undefined;
+  }
+
+  async markAllNotificationsAsRead(userId: number): Promise<void> {
+    await db.update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+  }
+
+  async deleteNotification(id: number): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.id, id));
+  }
+
+  async getNotificationCount(userId: number): Promise<{ total: number; unread: number }> {
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(notifications)
+      .where(eq(notifications.userId, userId));
+
+    const [unreadResult] = await db
+      .select({ count: count() })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+
+    return {
+      total: totalResult.count,
+      unread: unreadResult.count,
+    };
   }
 }
 

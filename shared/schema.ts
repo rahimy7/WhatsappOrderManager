@@ -45,6 +45,21 @@ export const customerHistory = pgTable("customer_history", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // 'order', 'message', 'system', 'assignment', 'urgent'
+  priority: text("priority").notNull().default("normal"), // 'low', 'normal', 'high', 'urgent'
+  isRead: boolean("is_read").notNull().default(false),
+  relatedId: integer("related_id"), // ID of related entity (order, message, etc.)
+  relatedType: text("related_type"), // 'order', 'message', 'customer', 'user'
+  metadata: text("metadata"), // JSON string for additional data
+  createdAt: timestamp("created_at").defaultNow(),
+  readAt: timestamp("read_at"),
+});
+
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -373,3 +388,11 @@ export type ConversationWithDetails = Conversation & {
 export type MessageWithSender = Message & {
   sender?: User;
 };
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
