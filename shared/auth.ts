@@ -40,6 +40,7 @@ export const rolePermissions = {
   ],
   technician: [
     'view_dashboard',
+    'technician_work',
     'view_assigned_orders',
     'update_order_status',
     'view_customers',
