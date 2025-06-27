@@ -1087,10 +1087,20 @@ export class MemStorage implements IStorage {
       id,
       status: insertConversation.status || "active",
       orderId: insertConversation.orderId || null,
+      conversationType: insertConversation.conversationType || "initial",
       lastMessageAt: new Date(),
     };
     this.conversations.set(id, conversation);
     return conversation;
+  }
+
+  async updateConversation(id: number, updates: Partial<InsertConversation>): Promise<Conversation | undefined> {
+    const conversation = this.conversations.get(id);
+    if (!conversation) return undefined;
+    
+    const updatedConversation = { ...conversation, ...updates };
+    this.conversations.set(id, updatedConversation);
+    return updatedConversation;
   }
 
   async getMessages(conversationId: number): Promise<Message[]> {
@@ -1806,6 +1816,14 @@ export class DatabaseStorage implements IStorage {
   async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
     const [conversation] = await db.insert(conversations).values(insertConversation).returning();
     return conversation;
+  }
+
+  async updateConversation(id: number, updates: Partial<InsertConversation>): Promise<Conversation | undefined> {
+    const [conversation] = await db.update(conversations)
+      .set(updates)
+      .where(eq(conversations.id, id))
+      .returning();
+    return conversation || undefined;
   }
 
   // Messages

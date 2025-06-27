@@ -285,6 +285,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Registration flows now activate only during order process: product selection → quantity → order → name → address → payment
   - Enhanced customer experience: browse products freely, register details only when ready to purchase
   - Sales-focused approach: prioritize showing value proposition before requesting personal information
+- June 27, 2025. WhatsApp conversation segmentation system fully implemented:
+  - Intelligent conversation type determination based on customer order history and status
+  - Three conversation types: 'initial' (new customers/no orders), 'tracking' (pending/active orders), 'support' (completed orders)
+  - Specialized response handlers for each conversation type with contextual menus and information
+  - Tracking conversations: order status updates, technician info, estimated times, modification options
+  - Support conversations: technical support, warranty info, feedback collection, invoice requests
+  - Enhanced customer experience with relevant options based on their current relationship stage
+  - Conversation types automatically updated in database and used to route messages appropriately
+  - Complete implementation includes schema updates, storage methods, and comprehensive WhatsApp response flows
 - June 27, 2025. CRITICAL FIX: Phone number normalization and duplicate customer prevention:
   - Resolved critical phone number format mismatch between WhatsApp ("52553333444") and database ("+52 55 3333 4444")
   - Implemented robust normalizePhoneNumber() function in DatabaseStorage for consistent phone matching
