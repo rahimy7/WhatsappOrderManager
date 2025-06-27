@@ -1039,7 +1039,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // If no auto response found, send default welcome
         if (!responseFound) {
-          await sendWelcomeMessage(from);
+          await sendWelcomeMessage(from, customer);
           await storage.addWhatsAppLog({
             type: 'info',
             phoneNumber: from,
@@ -1069,7 +1069,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await handleInteractiveMessage(customer, conversation, message.interactive, from);
       } else {
         // For any other message type, send welcome message
-        await sendWelcomeMessage(from);
+        await sendWelcomeMessage(from, customer);
       }
     } catch (error) {
       await storage.addWhatsAppLog({
@@ -1391,6 +1391,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await sendProductMenu(phoneNumber); // Same menu, but focuses on services
       } else if (buttonId === 'help') {
         await sendHelpMenu(phoneNumber);
+      } else if (buttonId === 'track_orders') {
+        await sendOrderStatusUpdate(customer, phoneNumber);
       } else if (buttonId.startsWith('quantity_')) {
         const [, productId, quantity] = buttonId.split('_');
         await handleQuantitySelection(customer, parseInt(productId), parseInt(quantity), phoneNumber);
@@ -2045,18 +2047,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await sendWhatsAppMessage(phoneNumber, statusMessage);
   }
 
-  async function sendWelcomeMessage(phoneNumber: string) {
-    const welcomeMessage = 
-      "👋 *¡Bienvenido!*\n\n" +
-      "Soy tu asistente virtual para pedidos.\n\n" +
-      "*Comandos disponibles:*\n" +
-      "🛍️ *menu* - Ver catálogo\n" +
-      "📍 *ubicacion* - Compartir ubicación\n" +
-      "📋 *pedido* - Estado de pedidos\n" +
-      "❓ *ayuda* - Ver opciones\n\n" +
-      "¿En qué puedo ayudarte hoy?";
+  async function sendWelcomeMessage(phoneNumber: string, customer?: any) {
+    try {
+      // If no customer provided, try to get customer by phone
+      if (!customer) {
+        customer = await storage.getCustomerByPhone(phoneNumber);
+      }
 
-    await sendWhatsAppMessage(phoneNumber, welcomeMessage);
+      let welcomeMessage = "";
+
+      // Personalized greeting for registered customers
+      if (customer && customer.name && customer.name !== 'Cliente Nuevo') {
+        const customerStats = await storage.getCustomerHistory(customer.id);
+        if (customerStats && customerStats.totalOrders > 0) {
+          welcomeMessage += `👋 *¡Hola ${customer.name}!* 📊 ${customerStats.totalOrders} pedidos • $${parseFloat(customerStats.totalSpent || '0').toFixed(2)} total\n\n`;
+        } else {
+          welcomeMessage += `👋 *¡Hola ${customer.name}!*\n\n`;
+        }
+      } else {
+        welcomeMessage += "👋 *¡Bienvenido!*\n\n";
+      }
+
+      welcomeMessage += "Soy tu asistente virtual para pedidos.\n\n";
+
+      // Check for active orders to decide whether to show tracking option
+      let hasActiveOrders = false;
+      if (customer) {
+        const customerOrders = await storage.getOrdersByCustomer(customer.id);
+        hasActiveOrders = customerOrders.some((order: any) => 
+          order.status === 'pending' || 
+          order.status === 'confirmed' || 
+          order.status === 'in_progress' || 
+          order.status === 'assigned'
+        );
+      }
+
+      // Create interactive buttons
+      const buttons = [
+        {
+          type: "reply",
+          reply: {
+            id: "products",
+            title: "🛍️ Ver catálogo"
+          }
+        },
+        {
+          type: "reply",
+          reply: {
+            id: "help",
+            title: "❓ Ayuda"
+          }
+        }
+      ];
+
+      // Add order tracking button if customer has active orders
+      if (hasActiveOrders) {
+        buttons.splice(1, 0, {
+          type: "reply",
+          reply: {
+            id: "track_orders",
+            title: "📋 Mis pedidos"
+          }
+        });
+      }
+
+      const interactiveMessage = {
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: welcomeMessage + "¿En qué puedo ayudarte hoy?"
+          },
+          action: {
+            buttons: buttons
+          }
+        }
+      };
+
+      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+
+    } catch (error) {
+      console.error('Error sending welcome message:', error);
+      // Fallback to simple text message
+      const fallbackMessage = 
+        "👋 *¡Bienvenido!*\n\n" +
+        "Soy tu asistente virtual para pedidos.\n\n" +
+        "*Comandos disponibles:*\n" +
+        "🛍️ *menu* - Ver catálogo\n" +
+        "📍 *ubicacion* - Compartir ubicación\n" +
+        "📋 *pedido* - Estado de pedidos\n" +
+        "❓ *ayuda* - Ver opciones\n\n" +
+        "¿En qué puedo ayudarte hoy?";
+
+      await sendWhatsAppMessage(phoneNumber, fallbackMessage);
+    }
   }
 
   async function sendHelpMenu(phoneNumber: string) {
@@ -3213,6 +3297,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete notification" });
     }
   });
+
+  // Order status tracking function for WhatsApp
+  async function sendOrderStatusUpdate(customer: any, phoneNumber: string) {
+    try {
+      const customerOrders = await storage.getOrdersByCustomer(customer.id);
+      const activeOrders = customerOrders.filter((order: any) => 
+        order.status === 'pending' || 
+        order.status === 'confirmed' || 
+        order.status === 'in_progress' || 
+        order.status === 'assigned'
+      );
+
+      if (activeOrders.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, 
+          "📝 No tienes pedidos activos en este momento.\n\n" +
+          "¿Te gustaría realizar un nuevo pedido? Escribe *menu* para ver nuestras opciones."
+        );
+        return;
+      }
+
+      let statusMessage = `📦 *Estado de tus pedidos*\n\n`;
+      
+      for (const order of activeOrders) {
+        const orderDate = new Date(order.createdAt).toLocaleDateString('es-MX', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+        
+        // Status emoji and text
+        let statusIcon = '⏳';
+        let statusText = 'Pendiente';
+        
+        switch (order.status) {
+          case 'confirmed':
+            statusIcon = '✅';
+            statusText = 'Confirmado';
+            break;
+          case 'assigned':
+            statusIcon = '👨‍🔧';
+            statusText = 'Asignado';
+            break;
+          case 'in_progress':
+            statusIcon = '🔧';
+            statusText = 'En proceso';
+            break;
+        }
+
+        statusMessage += `🏷️ *${order.orderNumber}*\n`;
+        statusMessage += `📅 Fecha: ${orderDate}\n`;
+        statusMessage += `${statusIcon} Estado: ${statusText}\n`;
+        statusMessage += `💰 Total: $${parseFloat(order.totalAmount).toFixed(2)}\n`;
+        
+        if (order.assignedUser) {
+          statusMessage += `👨‍🔧 Técnico: ${order.assignedUser.name}\n`;
+        }
+        
+        if (order.scheduledDate) {
+          const scheduledDate = new Date(order.scheduledDate).toLocaleDateString('es-MX', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          statusMessage += `📅 Programado: ${scheduledDate}\n`;
+        }
+
+        // Show order items
+        if (order.items && order.items.length > 0) {
+          statusMessage += `📋 Productos/Servicios:\n`;
+          for (const item of order.items) {
+            statusMessage += `   • ${item.product?.name || 'Producto'} (x${item.quantity})\n`;
+          }
+        }
+        
+        statusMessage += `\n`;
+      }
+
+      statusMessage += `ℹ️ Para más información sobre un pedido específico, contáctanos directamente.\n\n`;
+      statusMessage += `¿Necesitas algo más? Escribe *menu* para ver todas las opciones.`;
+
+      await sendWhatsAppMessage(phoneNumber, statusMessage);
+
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: `Estado de pedidos enviado para cliente ${customer.name}`,
+        status: 'sent',
+        rawData: JSON.stringify({ 
+          customerId: customer.id,
+          activeOrdersCount: activeOrders.length,
+          orderNumbers: activeOrders.map((order: any) => order.orderNumber)
+        })
+      });
+
+    } catch (error) {
+      console.error('Error sending order status update:', error);
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error al obtener el estado de tus pedidos. Por favor, inténtalo de nuevo más tarde."
+      );
+      
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error al enviar estado de pedidos',
+        status: 'error',
+        errorMessage: (error as Error).message,
+        rawData: JSON.stringify({ customerId: customer.id, error: (error as Error).message })
+      });
+    }
+  }
 
   const httpServer = createServer(app);
   return httpServer;
