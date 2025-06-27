@@ -1059,7 +1059,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             rawData: JSON.stringify({ customerMessage: text, response: 'default_welcome' })
           });
         }
-      
       } else if (messageType === 'location') {
         // Log the raw location data for debugging
         await storage.addWhatsAppLog({
