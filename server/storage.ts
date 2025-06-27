@@ -1196,14 +1196,6 @@ export class DatabaseStorage implements IStorage {
     const normalizedSearchPhone = this.normalizePhoneNumber(phone);
     const allCustomers = await db.select().from(customers);
     
-    console.log(`[DEBUG] Searching for phone: ${phone}, normalized: ${normalizedSearchPhone}`);
-    console.log(`[DEBUG] Found ${allCustomers.length} customers in database`);
-    
-    for (const customer of allCustomers) {
-      const normalizedCustomerPhone = this.normalizePhoneNumber(customer.phone);
-      console.log(`[DEBUG] Customer ${customer.id}: phone=${customer.phone}, normalized=${normalizedCustomerPhone}, match=${normalizedCustomerPhone === normalizedSearchPhone}`);
-    }
-    
     return allCustomers.find(customer => 
       this.normalizePhoneNumber(customer.phone) === normalizedSearchPhone
     );
