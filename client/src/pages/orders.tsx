@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, User as UserIcon, Package, Clock, DollarSign, Eye } from "lucide-react";
+import { Plus, User as UserIcon, Package, Clock, DollarSign, Eye, Zap } from "lucide-react";
 import CreateOrderModal from "@/components/orders/create-order-modal";
 import OrderDetailModal from "@/components/orders/order-detail-modal";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -36,6 +36,27 @@ export default function Orders() {
       toast({
         title: "Pedido asignado",
         description: "El pedido ha sido asignado correctamente",
+      });
+    },
+  });
+
+  const autoAssignOrderMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+      return apiRequest("POST", `/api/orders/${orderId}/auto-assign`);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: data.success ? "Asignación automática exitosa" : "Asignación automática fallida",
+        description: data.message || "El sistema ha procesado la asignación automática",
+        variant: data.success ? "default" : "destructive",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error en asignación automática",
+        description: "No se pudo procesar la asignación automática",
+        variant: "destructive",
       });
     },
   });
@@ -233,25 +254,36 @@ export default function Orders() {
                                 <Eye className="h-4 w-4" />
                               </Button>
                               {order.status === "pending" && (
-                                <Select
-                                  onValueChange={(userId) => 
-                                    assignOrderMutation.mutate({ 
-                                      orderId: order.id, 
-                                      userId: parseInt(userId) 
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger className="w-32">
-                                    <SelectValue placeholder="Asignar" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {technicians.map((tech) => (
-                                      <SelectItem key={tech.id} value={tech.id.toString()}>
-                                        {tech.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => autoAssignOrderMutation.mutate(order.id)}
+                                    disabled={autoAssignOrderMutation.isPending}
+                                    title="Asignación automática"
+                                  >
+                                    <Zap className="h-4 w-4" />
+                                  </Button>
+                                  <Select
+                                    onValueChange={(userId) => 
+                                      assignOrderMutation.mutate({ 
+                                        orderId: order.id, 
+                                        userId: parseInt(userId) 
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger className="w-32">
+                                      <SelectValue placeholder="Asignar" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {technicians.map((tech) => (
+                                        <SelectItem key={tech.id} value={tech.id.toString()}>
+                                          {tech.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </>
                               )}
                             </div>
                           </td>

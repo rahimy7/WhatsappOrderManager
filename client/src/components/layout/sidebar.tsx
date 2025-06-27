@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
@@ -101,6 +101,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       href: "/auto-responses",
       icon: Bot,
       label: "Respuestas Automáticas",
+      badge: null,
+    },
+    {
+      href: "/assignment-rules",
+      icon: Zap,
+      label: "Asignación Automática",
       badge: null,
     },
   ];
