@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Phone, MapPin, Calendar, DollarSign, Search, Star, History } from "lucide-react";
+import { Plus, Phone, MapPin, Calendar, DollarSign, Search, Star, History, Edit, Trash2 } from "lucide-react";
 import { Customer, insertCustomerSchema } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
@@ -24,7 +24,11 @@ type CustomerFormData = z.infer<typeof customerFormSchema>;
 
 export default function CustomersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
@@ -69,8 +73,69 @@ export default function CustomersPage() {
     },
   });
 
-  // Form setup
+  // Edit customer mutation
+  const editCustomerMutation = useMutation({
+    mutationFn: async (data: CustomerFormData & { id: number }) => {
+      return apiRequest("PUT", `/api/customers/${data.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/vip"] });
+      setShowEditDialog(false);
+      setCustomerToEdit(null);
+      editForm.reset();
+      toast({
+        title: "Cliente actualizado",
+        description: "Los datos del cliente han sido actualizados exitosamente",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el cliente",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete customer mutation
+  const deleteCustomerMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/customers/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/vip"] });
+      setShowDeleteDialog(false);
+      setCustomerToDelete(null);
+      setSelectedCustomer(null);
+      toast({
+        title: "Cliente eliminado",
+        description: "El cliente ha sido eliminado exitosamente",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el cliente",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Form setup for creating customers
   const form = useForm<CustomerFormData>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: {
+      name: "",
+      phone: "",
+      address: "",
+      notes: "",
+    },
+  });
+
+  // Form setup for editing customers
+  const editForm = useForm<CustomerFormData>({
     resolver: zodResolver(customerFormSchema),
     defaultValues: {
       name: "",
@@ -82,6 +147,34 @@ export default function CustomersPage() {
 
   const onSubmit = (data: CustomerFormData) => {
     createCustomerMutation.mutate(data);
+  };
+
+  const onEditSubmit = (data: CustomerFormData) => {
+    if (customerToEdit) {
+      editCustomerMutation.mutate({ ...data, id: customerToEdit.id });
+    }
+  };
+
+  const handleEditCustomer = (customer: Customer) => {
+    setCustomerToEdit(customer);
+    editForm.reset({
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address || "",
+      notes: customer.notes || "",
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleDeleteCustomer = (customer: Customer) => {
+    setCustomerToDelete(customer);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (customerToDelete) {
+      deleteCustomerMutation.mutate(customerToDelete.id);
+    }
   };
 
   // Filter customers based on search term
@@ -293,7 +386,7 @@ export default function CustomersPage() {
                     onClick={() => setSelectedCustomer(customer)}
                   >
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="flex-1">
                         <div className="flex items-center space-x-2">
                           <h3 className="font-medium text-gray-900">{customer.name}</h3>
                           {customer.isVip && (
@@ -314,6 +407,29 @@ export default function CustomersPage() {
                             </span>
                           )}
                         </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditCustomer(customer);
+                          }}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteCustomer(customer);
+                          }}
+                          className="text-red-600 hover:text-red-700 hover:border-red-300"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -424,6 +540,130 @@ export default function CustomersPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Customer Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Cliente</DialogTitle>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre completo</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Juan Pérez" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={editForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+52 55 1234 5678" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dirección (opcional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Calle 123, Colonia, Ciudad" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notas (opcional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Información adicional" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditDialog(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={editCustomerMutation.isPending}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {editCustomerMutation.isPending ? "Actualizando..." : "Actualizar Cliente"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Customer Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar Cliente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              ¿Estás seguro de que quieres eliminar a <strong>{customerToDelete?.name}</strong>?
+              Esta acción no se puede deshacer.
+            </p>
+            
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-sm text-yellow-800">
+                <strong>Advertencia:</strong> Si este cliente tiene pedidos o conversaciones asociadas, 
+                también podrían verse afectadas.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowDeleteDialog(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                disabled={deleteCustomerMutation.isPending}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deleteCustomerMutation.isPending ? "Eliminando..." : "Eliminar Cliente"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

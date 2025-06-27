@@ -249,6 +249,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/customers/:id", async (req, res) => {
+    try {
+      const customerId = parseInt(req.params.id);
+      const customerData = insertCustomerSchema.parse(req.body);
+      const customer = await storage.updateCustomer(customerId, customerData);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid customer data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update customer" });
+    }
+  });
+
+  app.delete("/api/customers/:id", async (req, res) => {
+    try {
+      const customerId = parseInt(req.params.id);
+      const success = await storage.deleteCustomer(customerId);
+      if (!success) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json({ message: "Customer deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete customer" });
+    }
+  });
+
   // Products routes
   app.get("/api/products", async (req, res) => {
     try {
