@@ -59,6 +59,8 @@ export interface IStorage {
   getCustomer(id: number): Promise<Customer | undefined>;
   getCustomerByPhone(phone: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: number, customer: InsertCustomer): Promise<Customer | undefined>;
+  deleteCustomer(id: number): Promise<boolean>;
   getAllCustomers(): Promise<Customer[]>;
   updateCustomerLocation(id: number, location: {
     latitude: string;
@@ -547,6 +549,30 @@ export class MemStorage implements IStorage {
     };
     this.customers.set(id, customer);
     return customer;
+  }
+
+  async updateCustomer(id: number, customerData: InsertCustomer): Promise<Customer | undefined> {
+    const existingCustomer = this.customers.get(id);
+    if (!existingCustomer) return undefined;
+
+    const updatedCustomer: Customer = {
+      ...existingCustomer,
+      ...customerData,
+      id,
+      whatsappId: customerData.whatsappId || existingCustomer.whatsappId,
+      lastContact: existingCustomer.lastContact,
+    };
+    
+    this.customers.set(id, updatedCustomer);
+    return updatedCustomer;
+  }
+
+  async deleteCustomer(id: number): Promise<boolean> {
+    const exists = this.customers.has(id);
+    if (!exists) return false;
+
+    this.customers.delete(id);
+    return true;
   }
 
   async getAllCustomers(): Promise<Customer[]> {
@@ -1117,6 +1143,19 @@ export class DatabaseStorage implements IStorage {
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
     const [customer] = await db.insert(customers).values(insertCustomer).returning();
     return customer;
+  }
+
+  async updateCustomer(id: number, customerData: InsertCustomer): Promise<Customer | undefined> {
+    const [customer] = await db.update(customers).set({
+      ...customerData,
+      lastContact: new Date()
+    }).where(eq(customers.id, id)).returning();
+    return customer || undefined;
+  }
+
+  async deleteCustomer(id: number): Promise<boolean> {
+    const result = await db.delete(customers).where(eq(customers.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   async getAllCustomers(): Promise<Customer[]> {
