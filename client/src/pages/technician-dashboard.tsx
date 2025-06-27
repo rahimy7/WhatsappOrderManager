@@ -56,7 +56,7 @@ export default function TechnicianDashboard() {
 
   // Obtener órdenes asignadas al técnico
   const { data: orders = [], isLoading } = useQuery<OrderWithDetails[]>({
-    queryKey: ['/api/orders/technician', user?.id],
+    queryKey: ['/api/technician/orders'],
     enabled: !!user?.id,
   });
 

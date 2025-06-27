@@ -843,6 +843,15 @@ export class MemStorage implements IStorage {
     return orders.filter(order => order !== undefined) as OrderWithDetails[];
   }
 
+  async getTechnicianOrders(userId: number): Promise<OrderWithDetails[]> {
+    const orders = await Promise.all(
+      Array.from(this.orders.keys()).map(id => this.getOrder(id))
+    );
+    return orders.filter(order => 
+      order !== undefined && order.assignedUserId === userId
+    ) as OrderWithDetails[];
+  }
+
   async updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined> {
     const order = this.orders.get(id);
     if (order) {
@@ -1573,6 +1582,27 @@ export class DatabaseStorage implements IStorage {
     .from(orders)
     .leftJoin(customers, eq(orders.customerId, customers.id))
     .leftJoin(users, eq(orders.assignedUserId, users.id))
+    .orderBy(desc(orders.createdAt));
+
+    const ordersWithDetails = await Promise.all(
+      ordersData.map(async ({ order }) => {
+        return await this.getOrder(order.id);
+      })
+    );
+
+    return ordersWithDetails.filter(order => order !== undefined) as OrderWithDetails[];
+  }
+
+  async getTechnicianOrders(userId: number): Promise<OrderWithDetails[]> {
+    const ordersData = await db.select({
+      order: orders,
+      customer: customers,
+      assignedUser: users
+    })
+    .from(orders)
+    .leftJoin(customers, eq(orders.customerId, customers.id))
+    .leftJoin(users, eq(orders.assignedUserId, users.id))
+    .where(eq(orders.assignedUserId, userId))
     .orderBy(desc(orders.createdAt));
 
     const ordersWithDetails = await Promise.all(
