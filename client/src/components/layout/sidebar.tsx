@@ -1,9 +1,10 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -33,8 +34,16 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     queryKey: ["/api/conversations"],
   });
 
+  // Fetch notification counts for the current user (demo user ID 1)
+  const { data: notificationCounts = { total: 0, unread: 0 } } = useQuery({
+    queryKey: ["/api/notifications/count", { userId: 1 }],
+    queryFn: () => apiRequest("GET", "/api/notifications/count?userId=1"),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
   const pendingOrders = Array.isArray(orders) ? orders.filter((order: any) => order.status === "pending").length : 0;
   const activeConversations = Array.isArray(conversations) ? conversations.filter((conv: any) => conv.unreadCount > 0).length : 0;
+  const unreadNotifications = notificationCounts.unread || 0;
 
   const navItems = [
     {
@@ -54,6 +63,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       icon: MessageCircle,
       label: "Conversaciones",
       badge: activeConversations > 0 ? activeConversations : null,
+    },
+    {
+      href: "/notifications",
+      icon: Bell,
+      label: "Notificaciones",
+      badge: unreadNotifications > 0 ? unreadNotifications : null,
     },
     {
       href: "/team",
