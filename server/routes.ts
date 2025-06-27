@@ -2082,49 +2082,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
-      // Create interactive buttons
-      const buttons = [
-        {
-          type: "reply",
-          reply: {
-            id: "products",
-            title: "🛍️ Ver catálogo"
-          }
-        },
-        {
-          type: "reply",
-          reply: {
-            id: "help",
-            title: "❓ Ayuda"
-          }
-        }
-      ];
-
-      // Add order tracking button if customer has active orders
+      // Use text message with commands as primary method
+      let textMessage = welcomeMessage + "*Comandos disponibles:*\n";
+      textMessage += "🛍️ *menu* - Ver catálogo\n";
+      
       if (hasActiveOrders) {
-        buttons.splice(1, 0, {
-          type: "reply",
-          reply: {
-            id: "track_orders",
-            title: "📋 Mis pedidos"
-          }
-        });
+        textMessage += "📋 *pedido* - Estado de pedidos\n";
       }
+      
+      textMessage += "📍 *ubicacion* - Compartir ubicación\n";
+      textMessage += "❓ *ayuda* - Ver opciones\n\n";
+      textMessage += "¿En qué puedo ayudarte hoy?";
 
-      const interactiveMessage = {
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: {
-            text: welcomeMessage + "¿En qué puedo ayudarte hoy?"
-          },
-          action: {
-            buttons: buttons
-          }
-        }
-      };
-
-      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+      await sendWhatsAppMessage(phoneNumber, textMessage);
 
     } catch (error) {
       console.error('Error sending welcome message:', error);
