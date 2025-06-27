@@ -354,7 +354,7 @@ export default function TechnicianDashboard() {
                       <div className="flex items-center gap-2">
                         <CheckCircle className="w-4 h-4 text-green-500" />
                         <span className="text-sm">
-                          Completado: {new Date(order.updatedAt).toLocaleTimeString()}
+                          Completado: {new Date(order.updatedAt).toLocaleDateString()} - {new Date(order.updatedAt).toLocaleTimeString()}
                         </span>
                       </div>
                     </div>
