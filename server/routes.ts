@@ -715,14 +715,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 data: JSON.stringify({ phone: from })
               });
               
-              await sendRegistrationWelcome(from);
-              
               await storage.addWhatsAppLog({
                 type: 'debug',
                 phoneNumber: from,
-                messageContent: 'Mensaje de bienvenida enviado, esperando nombre',
-                status: 'success'
+                messageContent: 'Flujo de registro creado, enviando mensaje de bienvenida',
+                status: 'processing'
               });
+
+              try {
+                await sendRegistrationWelcome(from);
+                
+                await storage.addWhatsAppLog({
+                  type: 'debug',
+                  phoneNumber: from,
+                  messageContent: 'Mensaje de bienvenida enviado exitosamente',
+                  status: 'success'
+                });
+              } catch (welcomeError: any) {
+                await storage.addWhatsAppLog({
+                  type: 'error',
+                  phoneNumber: from,
+                  messageContent: 'Error enviando mensaje de bienvenida',
+                  status: 'error',
+                  errorMessage: welcomeError.message || welcomeError.toString(),
+                  rawData: JSON.stringify({ 
+                    error: welcomeError.message || welcomeError.toString(),
+                    stack: welcomeError.stack || 'No stack'
+                  })
+                });
+                // No re-throw, just log the error and continue
+              }
               return; // Don't process the message further, wait for name
             } else {
               // Handle registration flow
@@ -805,10 +827,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
     } catch (error: any) {
+      console.error("Error detallado en processWhatsAppMessage:", error);
+      
       await storage.addWhatsAppLog({
         type: 'error',
-        message: 'Error procesando mensaje de WhatsApp',
-        data: { error: error.message, value }
+        phoneNumber: null,
+        messageContent: 'Error procesando mensaje de WhatsApp',
+        status: 'error',
+        errorMessage: error.message || error.toString(),
+        rawData: JSON.stringify({ 
+          error: error.message || error.toString(),
+          stack: error.stack || 'No stack trace',
+          value: value,
+          errorType: typeof error,
+          errorName: error.name || 'Unknown error'
+        })
       });
     }
   }
