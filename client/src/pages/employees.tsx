@@ -176,6 +176,9 @@ export default function Employees() {
 
   // Filter employees
   const filteredEmployees = employees.filter(employee => {
+    // Defensive check to ensure user exists
+    if (!employee.user) return false;
+    
     const matchesSearch = employee.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          employee.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          employee.position.toLowerCase().includes(searchTerm.toLowerCase());
@@ -494,12 +497,12 @@ export default function Employees() {
                       <DepartmentIcon className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <CardTitle className="text-lg">{employee.user.name}</CardTitle>
+                      <CardTitle className="text-lg">{employee.user?.name || "Sin nombre"}</CardTitle>
                       <CardDescription>{employee.position}</CardDescription>
                     </div>
                   </div>
-                  <Badge variant="secondary" className={roleColors[employee.user.role as keyof typeof roleColors]}>
-                    {roleLabels[employee.user.role as keyof typeof roleLabels]}
+                  <Badge variant="secondary" className={roleColors[employee.user?.role as keyof typeof roleColors] || "bg-gray-100 text-gray-800"}>
+                    {roleLabels[employee.user?.role as keyof typeof roleLabels] || "Sin rol"}
                   </Badge>
                 </div>
               </CardHeader>
@@ -518,12 +521,12 @@ export default function Employees() {
                   
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Estado:</span>
-                    <Badge variant={employee.user.status === "active" ? "default" : "secondary"}>
-                      {employee.user.status === "active" ? "Activo" : employee.user.status}
+                    <Badge variant={employee.user?.status === "active" ? "default" : "secondary"}>
+                      {employee.user?.status === "active" ? "Activo" : employee.user?.status || "Sin estado"}
                     </Badge>
                   </div>
                   
-                  {employee.user.phone && (
+                  {employee.user?.phone && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Teléfono:</span>
                       <span>{employee.user.phone}</span>
