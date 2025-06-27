@@ -328,6 +328,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Support conversations: warranty information, technical support, feedback collection, invoice requests
   - Initial conversations: welcome menus and product catalogs for new customers
   - System verified and tested with webhook processing - conversation segmentation fully operational
+- June 27, 2025. RESOLVED: WhatsApp order completion flow error (#131009) fixed:
+  - Fixed critical WhatsApp API validation error "Parameter value is not valid" during order completion
+  - Problem was caused by emojis and special characters in interactive message buttons and body text
+  - Replaced interactive messages with simple text messages for order confirmation
+  - Order flow now works correctly: product selection → quantity selection → order generation → text confirmation
+  - Customers receive clear text message with order details and instructions to respond "CONFIRMAR" or "CAMBIAR"
+  - Complete WhatsApp order creation and confirmation process now fully operational without API validation errors
 
 ## User Preferences
 
