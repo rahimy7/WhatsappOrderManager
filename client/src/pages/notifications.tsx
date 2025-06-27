@@ -173,13 +173,16 @@ export default function NotificationsPage() {
     return `${Math.floor(diffInMinutes / 1440)}d`;
   }
 
+  // Ensure notifications is always an array
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+
   const filteredNotifications = {
-    all: notifications,
-    unread: notifications.filter((n: Notification) => !n.isRead),
-    order: notifications.filter((n: Notification) => n.type === "order"),
-    message: notifications.filter((n: Notification) => n.type === "message"),
-    system: notifications.filter((n: Notification) => n.type === "system"),
-    urgent: notifications.filter((n: Notification) => n.priority === "urgent")
+    all: safeNotifications,
+    unread: safeNotifications.filter((n: Notification) => !n.isRead),
+    order: safeNotifications.filter((n: Notification) => n.type === "order"),
+    message: safeNotifications.filter((n: Notification) => n.type === "message"),
+    system: safeNotifications.filter((n: Notification) => n.type === "system"),
+    urgent: safeNotifications.filter((n: Notification) => n.priority === "urgent")
   };
 
   if (isLoading) {

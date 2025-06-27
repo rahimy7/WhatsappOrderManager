@@ -34,10 +34,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     queryKey: ["/api/conversations"],
   });
 
-  // Fetch notification counts for the current user (demo user ID 1)
+  // Fetch notification counts for the current user (demo user ID 6)
   const { data: notificationCounts = { total: 0, unread: 0 } } = useQuery({
-    queryKey: ["/api/notifications/count", { userId: 1 }],
-    queryFn: () => apiRequest("GET", "/api/notifications/count?userId=1"),
+    queryKey: ["/api/notifications/count", { userId: 6 }],
+    queryFn: () => apiRequest("GET", "/api/notifications/count?userId=6"),
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
