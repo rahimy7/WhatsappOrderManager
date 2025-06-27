@@ -13,6 +13,7 @@ import { z } from "zod";
 import { Plus, Phone, MapPin, Calendar, DollarSign, Search, Star, History, Edit, Trash2 } from "lucide-react";
 import { Customer, insertCustomerSchema } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Form validation schema
 const customerFormSchema = insertCustomerSchema.extend({
@@ -31,6 +32,10 @@ export default function CustomersPage() {
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Check if user is admin
+  const isAdmin = user?.role === 'admin';
 
   // Fetch customers
   const { data: customers = [], isLoading } = useQuery({
@@ -203,13 +208,14 @@ export default function CustomersPage() {
             Gestiona la base de datos de clientes y su historial
           </p>
         </div>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Cliente
-            </Button>
-          </DialogTrigger>
+        {isAdmin && (
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Nuevo Cliente
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Registrar Nuevo Cliente</DialogTitle>
@@ -292,6 +298,7 @@ export default function CustomersPage() {
             </Form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       {/* Stats Cards */}
