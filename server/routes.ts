@@ -2610,6 +2610,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Assignment Rules Routes
+  app.get("/api/assignment-rules", async (req, res) => {
+    try {
+      const rules = await storage.getAllAssignmentRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching assignment rules:", error);
+      res.status(500).json({ error: "Failed to fetch assignment rules" });
+    }
+  });
+
+  app.get("/api/assignment-rules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const rule = await storage.getAssignmentRule(id);
+      if (!rule) {
+        return res.status(404).json({ error: "Assignment rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Error fetching assignment rule:", error);
+      res.status(500).json({ error: "Failed to fetch assignment rule" });
+    }
+  });
+
+  app.post("/api/assignment-rules", async (req, res) => {
+    try {
+      const ruleData = req.body; // Using Zod validation would be ideal here
+      const rule = await storage.createAssignmentRule(ruleData);
+      res.json(rule);
+    } catch (error) {
+      console.error("Error creating assignment rule:", error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create assignment rule" });
+    }
+  });
+
+  app.put("/api/assignment-rules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      const rule = await storage.updateAssignmentRule(id, updates);
+      if (!rule) {
+        return res.status(404).json({ error: "Assignment rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Error updating assignment rule:", error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update assignment rule" });
+    }
+  });
+
+  app.delete("/api/assignment-rules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteAssignmentRule(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting assignment rule:", error);
+      res.status(500).json({ error: "Failed to delete assignment rule" });
+    }
+  });
+
+  app.get("/api/assignment-rules/active", async (req, res) => {
+    try {
+      const rules = await storage.getActiveAssignmentRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching active assignment rules:", error);
+      res.status(500).json({ error: "Failed to fetch active assignment rules" });
+    }
+  });
+
+  // Automatic Assignment System Routes
+  app.post("/api/orders/:id/auto-assign", async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      const result = await storage.autoAssignOrder(orderId);
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: `Orden asignada automáticamente a ${result.assignedTechnician?.user.name} (${result.assignedTechnician?.employeeId})`,
+          assignedTechnician: result.assignedTechnician
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.reason || "No se pudo asignar automáticamente"
+        });
+      }
+    } catch (error) {
+      console.error("Error in auto-assignment:", error);
+      res.status(500).json({ error: "Error en el sistema de asignación automática" });
+    }
+  });
+
+  app.get("/api/orders/:id/best-technician", async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      const { latitude, longitude } = req.query;
+      
+      let customerLocation;
+      if (latitude && longitude) {
+        customerLocation = {
+          latitude: latitude as string,
+          longitude: longitude as string
+        };
+      }
+      
+      const bestMatch = await storage.findBestTechnician(orderId, customerLocation);
+      
+      if (!bestMatch) {
+        return res.status(404).json({ 
+          message: "No se encontró ningún técnico disponible para esta orden" 
+        });
+      }
+      
+      res.json({
+        technician: bestMatch.technician,
+        distance: bestMatch.distance,
+        estimatedTime: bestMatch.estimatedTime,
+        matchingRules: bestMatch.matchingRules
+      });
+    } catch (error) {
+      console.error("Error finding best technician:", error);
+      res.status(500).json({ error: "Error al buscar el mejor técnico" });
+    }
+  });
+
+  app.get("/api/technicians/available", async (req, res) => {
+    try {
+      const { specializations, maxDistance, latitude, longitude } = req.query;
+      
+      let customerLocation;
+      if (latitude && longitude) {
+        customerLocation = {
+          latitude: latitude as string,
+          longitude: longitude as string
+        };
+      }
+      
+      const specializationsArray = specializations ? 
+        (Array.isArray(specializations) ? specializations : [specializations]) as string[] : 
+        undefined;
+      
+      const maxDistanceNum = maxDistance ? parseFloat(maxDistance as string) : undefined;
+      
+      const availableTechnicians = await storage.getAvailableTechnicians(
+        specializationsArray, 
+        maxDistanceNum, 
+        customerLocation
+      );
+      
+      res.json(availableTechnicians);
+    } catch (error) {
+      console.error("Error fetching available technicians:", error);
+      res.status(500).json({ error: "Error al obtener técnicos disponibles" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -162,6 +162,28 @@ export interface IStorage {
   deleteEmployeeProfile(id: number): Promise<void>;
   getEmployeesByDepartment(department: string): Promise<(EmployeeProfile & { user: User })[]>;
   generateEmployeeId(department: string): Promise<string>;
+  
+  // Assignment Rules
+  getAllAssignmentRules(): Promise<AssignmentRule[]>;
+  getAssignmentRule(id: number): Promise<AssignmentRule | undefined>;
+  createAssignmentRule(rule: InsertAssignmentRule): Promise<AssignmentRule>;
+  updateAssignmentRule(id: number, updates: Partial<InsertAssignmentRule>): Promise<AssignmentRule | undefined>;
+  deleteAssignmentRule(id: number): Promise<void>;
+  getActiveAssignmentRules(): Promise<AssignmentRule[]>;
+  
+  // Automatic Assignment System
+  findBestTechnician(orderId: number, customerLocation?: { latitude: string; longitude: string }): Promise<{
+    technician: EmployeeProfile & { user: User };
+    distance?: number;
+    estimatedTime: number;
+    matchingRules: AssignmentRule[];
+  } | null>;
+  autoAssignOrder(orderId: number): Promise<{
+    success: boolean;
+    assignedTechnician?: EmployeeProfile & { user: User };
+    reason?: string;
+  }>;
+  getAvailableTechnicians(specializations?: string[], maxDistance?: number, customerLocation?: { latitude: string; longitude: string }): Promise<(EmployeeProfile & { user: User })[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -1837,6 +1859,296 @@ export class DatabaseStorage implements IStorage {
       .from(customers)
       .where(eq(customers.isVip, true))
       .orderBy(desc(customers.totalSpent));
+  }
+
+  // Assignment Rules Methods
+  async getAllAssignmentRules(): Promise<AssignmentRule[]> {
+    return await db.select()
+      .from(assignmentRules)
+      .orderBy(desc(assignmentRules.priority), assignmentRules.name);
+  }
+
+  async getAssignmentRule(id: number): Promise<AssignmentRule | undefined> {
+    const [rule] = await db.select()
+      .from(assignmentRules)
+      .where(eq(assignmentRules.id, id));
+    return rule;
+  }
+
+  async createAssignmentRule(rule: InsertAssignmentRule): Promise<AssignmentRule> {
+    const [newRule] = await db.insert(assignmentRules).values(rule).returning();
+    return newRule;
+  }
+
+  async updateAssignmentRule(id: number, updates: Partial<InsertAssignmentRule>): Promise<AssignmentRule | undefined> {
+    const [updatedRule] = await db.update(assignmentRules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(assignmentRules.id, id))
+      .returning();
+    return updatedRule;
+  }
+
+  async deleteAssignmentRule(id: number): Promise<void> {
+    await db.delete(assignmentRules).where(eq(assignmentRules.id, id));
+  }
+
+  async getActiveAssignmentRules(): Promise<AssignmentRule[]> {
+    return await db.select()
+      .from(assignmentRules)
+      .where(eq(assignmentRules.isActive, true))
+      .orderBy(desc(assignmentRules.priority), assignmentRules.name);
+  }
+
+  // Automatic Assignment System
+  async findBestTechnician(orderId: number, customerLocation?: { latitude: string; longitude: string }): Promise<{
+    technician: EmployeeProfile & { user: User };
+    distance?: number;
+    estimatedTime: number;
+    matchingRules: AssignmentRule[];
+  } | null> {
+    // Get order details
+    const order = await this.getOrder(orderId);
+    if (!order) return null;
+
+    // Get customer location if not provided
+    let location = customerLocation;
+    if (!location && order.customer.latitude && order.customer.longitude) {
+      location = {
+        latitude: order.customer.latitude,
+        longitude: order.customer.longitude
+      };
+    }
+
+    // Get active assignment rules
+    const rules = await this.getActiveAssignmentRules();
+    
+    // Get available technicians
+    const technicians = await this.getAvailableTechnicians();
+    
+    if (technicians.length === 0) return null;
+
+    let bestTechnician = null;
+    let bestScore = -1;
+    let matchingRules: AssignmentRule[] = [];
+
+    for (const technician of technicians) {
+      let score = 0;
+      const applicableRules: AssignmentRule[] = [];
+
+      for (const rule of rules) {
+        let ruleMatches = true;
+        let ruleScore = 0;
+
+        // Check specialization requirements
+        if (rule.useSpecializationBased && rule.requiredSpecializations && rule.requiredSpecializations.length > 0) {
+          const techSpecializations = technician.specializations || [];
+          const hasRequiredSpecializations = rule.requiredSpecializations.every(spec => 
+            techSpecializations.includes(spec)
+          );
+          if (!hasRequiredSpecializations) {
+            ruleMatches = false;
+            continue;
+          }
+          ruleScore += 10; // Specialization match bonus
+        }
+
+        // Check location-based assignment
+        if (rule.useLocationBased && location && technician.baseLatitude && technician.baseLongitude) {
+          const distance = this.calculateDistance(
+            parseFloat(location.latitude),
+            parseFloat(location.longitude),
+            parseFloat(technician.baseLatitude),
+            parseFloat(technician.baseLongitude)
+          );
+          
+          const maxDistance = parseFloat(rule.maxDistanceKm || "15");
+          if (distance > maxDistance) {
+            ruleMatches = false;
+            continue;
+          }
+          
+          // Distance score (closer is better)
+          ruleScore += Math.max(0, 10 - (distance / maxDistance) * 10);
+        }
+
+        // Check workload
+        if (rule.useWorkloadBased) {
+          const currentOrders = technician.currentOrders || 0;
+          const maxOrders = rule.maxOrdersPerTechnician || 5;
+          if (currentOrders >= maxOrders) {
+            ruleMatches = false;
+            continue;
+          }
+          
+          // Workload score (less busy is better)
+          ruleScore += Math.max(0, 5 - currentOrders);
+        }
+
+        // Check skill level
+        const skillLevel = technician.skillLevel || 1;
+        ruleScore += skillLevel;
+
+        if (ruleMatches) {
+          applicableRules.push(rule);
+          score += ruleScore * (rule.priority || 1);
+        }
+      }
+
+      if (score > bestScore && applicableRules.length > 0) {
+        bestScore = score;
+        bestTechnician = technician;
+        matchingRules = applicableRules;
+      }
+    }
+
+    if (!bestTechnician) return null;
+
+    // Calculate distance and estimated time
+    let distance;
+    let estimatedTime = 60; // Default 60 minutes
+
+    if (location && bestTechnician.baseLatitude && bestTechnician.baseLongitude) {
+      distance = this.calculateDistance(
+        parseFloat(location.latitude),
+        parseFloat(location.longitude),
+        parseFloat(bestTechnician.baseLatitude),
+        parseFloat(bestTechnician.baseLongitude)
+      );
+      
+      // Estimate time: 30min base + 5min per km
+      estimatedTime = 30 + (distance * 5);
+    }
+
+    return {
+      technician: bestTechnician,
+      distance,
+      estimatedTime,
+      matchingRules
+    };
+  }
+
+  async autoAssignOrder(orderId: number): Promise<{
+    success: boolean;
+    assignedTechnician?: EmployeeProfile & { user: User };
+    reason?: string;
+  }> {
+    try {
+      const bestMatch = await this.findBestTechnician(orderId);
+      
+      if (!bestMatch) {
+        return {
+          success: false,
+          reason: "No hay técnicos disponibles que cumplan con los criterios de asignación"
+        };
+      }
+
+      // Assign the order to the technician
+      const assignedOrder = await this.assignOrder(orderId, bestMatch.technician.userId);
+      
+      if (!assignedOrder) {
+        return {
+          success: false,
+          reason: "Error al asignar la orden al técnico"
+        };
+      }
+
+      // Update technician's current orders count
+      await this.updateEmployeeProfile(bestMatch.technician.id, {
+        currentOrders: (bestMatch.technician.currentOrders || 0) + 1
+      });
+
+      // Add order history entry
+      await this.addOrderHistory({
+        orderId,
+        status: "assigned",
+        notes: `Asignado automáticamente a ${bestMatch.technician.user.name} (${bestMatch.technician.employeeId})`,
+        userId: bestMatch.technician.userId
+      });
+
+      return {
+        success: true,
+        assignedTechnician: bestMatch.technician
+      };
+
+    } catch (error) {
+      console.error("Error in autoAssignOrder:", error);
+      return {
+        success: false,
+        reason: "Error interno del sistema de asignación automática"
+      };
+    }
+  }
+
+  async getAvailableTechnicians(
+    specializations?: string[], 
+    maxDistance?: number, 
+    customerLocation?: { latitude: string; longitude: string }
+  ): Promise<(EmployeeProfile & { user: User })[]> {
+    // Get all technical employees
+    const technicians = await db.select()
+      .from(employeeProfiles)
+      .innerJoin(users, eq(employeeProfiles.userId, users.id))
+      .where(and(
+        eq(employeeProfiles.department, "technical"),
+        eq(users.status, "active"),
+        eq(users.isActive, true)
+      ));
+
+    let availableTechnicians = technicians.map(result => ({
+      ...result.employee_profiles,
+      user: result.users
+    }));
+
+    // Filter by specializations if provided
+    if (specializations && specializations.length > 0) {
+      availableTechnicians = availableTechnicians.filter(tech => {
+        const techSpecs = tech.specializations || [];
+        return specializations.some(spec => techSpecs.includes(spec));
+      });
+    }
+
+    // Filter by distance if location and maxDistance provided
+    if (customerLocation && maxDistance) {
+      availableTechnicians = availableTechnicians.filter(tech => {
+        if (!tech.baseLatitude || !tech.baseLongitude) return false;
+        
+        const distance = this.calculateDistance(
+          parseFloat(customerLocation.latitude),
+          parseFloat(customerLocation.longitude),
+          parseFloat(tech.baseLatitude),
+          parseFloat(tech.baseLongitude)
+        );
+        
+        return distance <= maxDistance;
+      });
+    }
+
+    // Filter by current workload
+    availableTechnicians = availableTechnicians.filter(tech => {
+      const currentOrders = tech.currentOrders || 0;
+      const maxOrders = tech.maxDailyOrders || 5;
+      return currentOrders < maxOrders;
+    });
+
+    return availableTechnicians;
+  }
+
+  // Haversine formula to calculate distance between two points
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) * 
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+    return distance;
+  }
+
+  private toRad(degrees: number): number {
+    return degrees * (Math.PI / 180);
   }
 }
 
