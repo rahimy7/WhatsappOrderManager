@@ -114,10 +114,11 @@ export default function CustomersPage() {
         description: "El cliente ha sido eliminado exitosamente",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error('Error deleting customer:', error);
       toast({
-        title: "Error",
-        description: "No se pudo eliminar el cliente",
+        title: "Error al eliminar cliente",
+        description: error.message || "No se pudo eliminar el cliente. Es posible que tenga pedidos o conversaciones asociadas.",
         variant: "destructive",
       });
     },
