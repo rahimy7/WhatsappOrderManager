@@ -872,6 +872,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Skip automatic name registration - we'll do it during order process
         // For new customers or those without names, we'll show menu directly
         
+        // Check for special order management commands first
+        if (await handleOrderManagementCommands(customer, text, from)) {
+          return; // Exit early if command was handled
+        }
+        
         // Check if customer has active orders and add tracking option
         const activeOrders = await storage.getOrdersByCustomer(customer.id);
         const pendingOrders = activeOrders.filter(order => 
@@ -888,7 +893,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check common triggers
         const triggers = [
           { keywords: ['hola', 'hello', 'hi', 'buenos dias', 'buenas tardes'], trigger: 'welcome' },
-          { keywords: ['menu', 'menú', 'opciones', 'catalogo', 'catálogo'], trigger: 'menu' },
+          { keywords: ['menu', 'menú', 'opciones', 'catalogo', 'catálogo', 'nuevo'], trigger: 'menu' },
+          { keywords: ['seguimiento', 'pedido', 'pedidos', 'estado', 'orden', 'mis pedidos'], trigger: 'order_tracking' },
           { keywords: ['productos', 'product', 'comprar'], trigger: 'product_inquiry' },
           { keywords: ['servicios', 'service', 'reparacion', 'reparación'], trigger: 'service_inquiry' },
           { keywords: ['ayuda', 'help', 'contacto', 'soporte'], trigger: 'contact_request' }
@@ -2022,29 +2028,264 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  async function sendOrderStatus(customer: any, phoneNumber: string) {
-    const orders = await storage.getAllOrders();
-    const customerOrders = orders.filter(order => order.customer.id === customer.id);
-    
-    if (customerOrders.length === 0) {
-      await sendWhatsAppMessage(phoneNumber, 
-        "📋 *Estado de Pedidos*\n\n" +
-        "No tienes pedidos registrados.\n\n" +
-        "Escribe *menu* para ver nuestros productos."
+  // Handle order management commands (nota, cancelar, programar, etc.)
+  async function handleOrderManagementCommands(customer: any, text: string, phoneNumber: string): Promise<boolean> {
+    try {
+      const words = text.split(' ');
+      const command = words[0];
+      
+      // Get customer's active orders
+      const orders = await storage.getOrdersByCustomer(customer.id);
+      const activeOrders = orders.filter(order => 
+        order.status === 'pending' || 
+        order.status === 'confirmed' || 
+        order.status === 'in_progress' || 
+        order.status === 'assigned'
       );
-      return;
+
+      if (activeOrders.length === 0) {
+        return false; // No active orders, let regular processing handle this
+      }
+
+      switch (command) {
+        case 'nota':
+          if (words.length < 3) {
+            await sendWhatsAppMessage(phoneNumber, 
+              "📝 *Agregar Nota*\n\n" +
+              "Formato: *nota [número] [mensaje]*\n\n" +
+              "Ejemplo: *nota 1 Favor llamar antes de llegar*"
+            );
+            return true;
+          }
+          
+          const noteOrderIndex = parseInt(words[1]) - 1;
+          if (noteOrderIndex < 0 || noteOrderIndex >= activeOrders.length) {
+            await sendWhatsAppMessage(phoneNumber, 
+              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
+            );
+            return true;
+          }
+          
+          const noteMessage = words.slice(2).join(' ');
+          const noteOrder = activeOrders[noteOrderIndex];
+          
+          // Add note to order
+          const currentNotes = noteOrder.notes ? noteOrder.notes + '\n' : '';
+          const newNotes = currentNotes + `[Cliente] ${new Date().toLocaleString('es-ES')}: ${noteMessage}`;
+          
+          await storage.updateOrder(noteOrder.id, { notes: newNotes });
+          
+          await sendWhatsAppMessage(phoneNumber, 
+            `✅ *Nota Agregada*\n\n` +
+            `📋 Pedido: ${noteOrder.orderNumber}\n` +
+            `📝 Nota: ${noteMessage}\n\n` +
+            `Tu nota ha sido enviada al técnico asignado.`
+          );
+          return true;
+
+        case 'cancelar':
+          if (words.length < 2) {
+            await sendWhatsAppMessage(phoneNumber, 
+              "❌ *Cancelar Pedido*\n\n" +
+              "Formato: *cancelar [número]*\n\n" +
+              "Ejemplo: *cancelar 1*"
+            );
+            return true;
+          }
+          
+          const cancelOrderIndex = parseInt(words[1]) - 1;
+          if (cancelOrderIndex < 0 || cancelOrderIndex >= activeOrders.length) {
+            await sendWhatsAppMessage(phoneNumber, 
+              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
+            );
+            return true;
+          }
+          
+          const cancelOrder = activeOrders[cancelOrderIndex];
+          
+          if (cancelOrder.status === 'in_progress') {
+            await sendWhatsAppMessage(phoneNumber, 
+              `⚠️ *No se puede cancelar*\n\n` +
+              `El pedido ${cancelOrder.orderNumber} ya está en proceso.\n\n` +
+              `Contacta directamente al técnico o llama a soporte.`
+            );
+            return true;
+          }
+          
+          await storage.updateOrder(cancelOrder.id, { 
+            status: 'cancelled',
+            notes: (cancelOrder.notes || '') + `\n[Cliente] ${new Date().toLocaleString('es-ES')}: Pedido cancelado por el cliente`
+          });
+          
+          await sendWhatsAppMessage(phoneNumber, 
+            `✅ *Pedido Cancelado*\n\n` +
+            `📋 Pedido: ${cancelOrder.orderNumber}\n` +
+            `💰 Total: $${parseFloat(cancelOrder.totalAmount).toFixed(2)}\n\n` +
+            `Tu pedido ha sido cancelado exitosamente.`
+          );
+          return true;
+
+        case 'programar':
+          if (words.length < 2) {
+            await sendWhatsAppMessage(phoneNumber, 
+              "⏰ *Programar Entrega*\n\n" +
+              "Formato: *programar [número]*\n\n" +
+              "Ejemplo: *programar 1*\n\n" +
+              "Te ayudaremos a coordinar la fecha y hora ideal."
+            );
+            return true;
+          }
+          
+          const scheduleOrderIndex = parseInt(words[1]) - 1;
+          if (scheduleOrderIndex < 0 || scheduleOrderIndex >= activeOrders.length) {
+            await sendWhatsAppMessage(phoneNumber, 
+              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
+            );
+            return true;
+          }
+          
+          const scheduleOrder = activeOrders[scheduleOrderIndex];
+          
+          await sendWhatsAppMessage(phoneNumber, 
+            `⏰ *Programar Entrega/Servicio*\n\n` +
+            `📋 Pedido: ${scheduleOrder.orderNumber}\n\n` +
+            `Nuestro equipo se comunicará contigo en las próximas horas para coordinar la fecha y hora que mejor te convenga.\n\n` +
+            `¿Hay algún horario específico que prefieras? Puedes enviar una nota con tu disponibilidad:\n\n` +
+            `*nota ${scheduleOrderIndex + 1} Disponible lunes a viernes 9am-5pm*`
+          );
+          return true;
+
+        case 'agregar':
+          if (words.length < 2) {
+            await sendWhatsAppMessage(phoneNumber, 
+              "➕ *Agregar Productos*\n\n" +
+              "Formato: *agregar [número]*\n\n" +
+              "Ejemplo: *agregar 1*\n\n" +
+              "Te permitiremos agregar más productos a tu pedido."
+            );
+            return true;
+          }
+          
+          const addOrderIndex = parseInt(words[1]) - 1;
+          if (addOrderIndex < 0 || addOrderIndex >= activeOrders.length) {
+            await sendWhatsAppMessage(phoneNumber, 
+              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
+            );
+            return true;
+          }
+          
+          const addOrder = activeOrders[addOrderIndex];
+          
+          if (addOrder.status !== 'pending' && addOrder.status !== 'confirmed') {
+            await sendWhatsAppMessage(phoneNumber, 
+              `⚠️ *No se pueden agregar productos*\n\n` +
+              `El pedido ${addOrder.orderNumber} ya está siendo procesado.\n\n` +
+              `Para modificaciones, contacta directamente al técnico.`
+            );
+            return true;
+          }
+          
+          await sendWhatsAppMessage(phoneNumber, 
+            `➕ *Agregar Productos*\n\n` +
+            `📋 Pedido: ${addOrder.orderNumber}\n\n` +
+            `Puedes agregar más productos escribiendo *menu* para ver el catálogo.\n\n` +
+            `Los nuevos productos se agregarán a tu pedido existente.`
+          );
+          return true;
+
+        case 'llamar':
+          // Find order with assigned technician
+          const assignedOrder = activeOrders.find(order => order.assignedUser);
+          
+          if (!assignedOrder) {
+            await sendWhatsAppMessage(phoneNumber, 
+              `📞 *Contactar Técnico*\n\n` +
+              `Aún no hay un técnico asignado a tus pedidos.\n\n` +
+              `Nuestro equipo se comunicará contigo cuando asignen el técnico.`
+            );
+            return true;
+          }
+          
+          await sendWhatsAppMessage(phoneNumber, 
+            `📞 *Información de Contacto*\n\n` +
+            `👨‍🔧 Técnico: ${assignedOrder.assignedUser}\n` +
+            `📋 Pedido: ${assignedOrder.orderNumber}\n\n` +
+            `Para contactar directamente al técnico, llama a nuestra oficina y menciona el número de pedido.\n\n` +
+            `📱 Teléfono: (55) 1234-5678\n` +
+            `🕐 Horario: Lunes a Viernes 8:00 AM - 6:00 PM`
+          );
+          return true;
+
+        default:
+          return false; // Command not recognized, continue with regular processing
+      }
+    } catch (error) {
+      console.error('Error handling order management command:', error);
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error al procesar tu solicitud. Por favor, inténtalo más tarde."
+      );
+      return true;
     }
+  }
 
-    const recentOrder = customerOrders[0];
-    const statusMessage = 
-      `📋 *Tu Último Pedido*\n\n` +
-      `🆔 ${recentOrder.orderNumber}\n` +
-      `📦 ${recentOrder.items.map(item => `${item.product.name} x${item.quantity}`).join(', ')}\n` +
-      `💰 Total: $${parseFloat(recentOrder.totalAmount).toLocaleString('es-MX')}\n` +
-      `📊 Estado: ${getStatusEmoji(recentOrder.status)} ${recentOrder.status}\n\n` +
-      "📞 Para más información, nuestro equipo se comunicará contigo.";
+  async function sendOrderStatus(customer: any, phoneNumber: string) {
+    try {
+      const orders = await storage.getOrdersByCustomer(customer.id);
+      const activeOrders = orders.filter(order => 
+        order.status === 'pending' || 
+        order.status === 'confirmed' || 
+        order.status === 'in_progress' || 
+        order.status === 'assigned'
+      );
 
-    await sendWhatsAppMessage(phoneNumber, statusMessage);
+      if (activeOrders.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, 
+          "📋 *Estado de Pedidos*\n\n" +
+          "No tienes pedidos activos en este momento.\n\n" +
+          "¿Te gustaría hacer un nuevo pedido? Escribe *menu* para ver nuestros productos y servicios."
+        );
+        return;
+      }
+
+      let statusMessage = `📋 *Tus Pedidos Activos (${activeOrders.length})*\n\n`;
+      
+      for (let i = 0; i < activeOrders.length; i++) {
+        const order = activeOrders[i];
+        const statusEmoji = getStatusEmoji(order.status);
+        const orderDate = new Date(order.createdAt).toLocaleDateString('es-ES');
+        
+        statusMessage += `${i + 1}. *Pedido ${order.orderNumber}*\n`;
+        statusMessage += `${statusEmoji} Estado: ${order.status}\n`;
+        statusMessage += `📅 Fecha: ${orderDate}\n`;
+        statusMessage += `💰 Total: $${parseFloat(order.total).toFixed(2)}\n`;
+        
+        if (order.assignedUser) {
+          statusMessage += `👨‍🔧 Técnico: ${order.assignedUser}\n`;
+        }
+        
+        if (order.notes) {
+          statusMessage += `📝 Notas: ${order.notes}\n`;
+        }
+        
+        statusMessage += "\n";
+      }
+      
+      statusMessage += "*Opciones disponibles:*\n";
+      statusMessage += "📝 *nota* + número - Enviar nota (ej: nota 1 Cambio de horario)\n";
+      statusMessage += "❌ *cancelar* + número - Cancelar pedido (ej: cancelar 1)\n";
+      statusMessage += "⏰ *programar* + número - Programar fecha/hora (ej: programar 1)\n";
+      statusMessage += "➕ *agregar* + número - Agregar productos (ej: agregar 1)\n";
+      statusMessage += "📞 *llamar* - Contactar técnico asignado\n\n";
+      statusMessage += "Ejemplo: *nota 1 Favor llamar antes de llegar*";
+      
+      await sendWhatsAppMessage(phoneNumber, statusMessage);
+
+    } catch (error) {
+      console.error('Error sending order status:', error);
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error al consultar tus pedidos. Por favor, inténtalo más tarde o contacta a soporte."
+      );
+    }
   }
 
   async function sendWelcomeMessage(phoneNumber: string, customer?: any) {
@@ -2083,16 +2324,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Use text message with commands as primary method
-      let textMessage = welcomeMessage + "*Comandos disponibles:*\n";
-      textMessage += "🛍️ *menu* - Ver catálogo\n";
+      let textMessage = welcomeMessage;
       
       if (hasActiveOrders) {
-        textMessage += "📋 *pedido* - Estado de pedidos\n";
+        textMessage += "*Tienes pedidos en proceso:*\n\n";
+        textMessage += "📋 *seguimiento* - Ver pedidos en proceso\n";
+        textMessage += "🛍️ *nuevo* - Hacer nuevo pedido\n";
+        textMessage += "📍 *ubicacion* - Compartir ubicación\n";
+        textMessage += "❓ *ayuda* - Ver opciones\n\n";
+        textMessage += "¿Qué te gustaría hacer?";
+      } else {
+        textMessage += "*Comandos disponibles:*\n";
+        textMessage += "🛍️ *menu* - Ver catálogo\n";
+        textMessage += "📍 *ubicacion* - Compartir ubicación\n";
+        textMessage += "❓ *ayuda* - Ver opciones\n\n";
+        textMessage += "¿En qué puedo ayudarte hoy?";
       }
-      
-      textMessage += "📍 *ubicacion* - Compartir ubicación\n";
-      textMessage += "❓ *ayuda* - Ver opciones\n\n";
-      textMessage += "¿En qué puedo ayudarte hoy?";
 
       await sendWhatsAppMessage(phoneNumber, textMessage);
 
