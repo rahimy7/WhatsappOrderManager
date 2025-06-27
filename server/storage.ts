@@ -127,6 +127,7 @@ export interface IStorage {
   getConversation(id: number): Promise<ConversationWithDetails | undefined>;
   getActiveConversations(): Promise<ConversationWithDetails[]>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
+  updateConversation(id: number, updates: Partial<InsertConversation>): Promise<Conversation | undefined>;
   
   // Messages
   getMessages(conversationId: number): Promise<Message[]>;
@@ -1231,6 +1232,42 @@ export class MemStorage implements IStorage {
 
   async getNotificationCount(userId: number): Promise<{ total: number; unread: number }> {
     return { total: 0, unread: 0 };
+  }
+
+  // Conversation Type Determination for WhatsApp Segmentation (stub)
+  async determineConversationType(customerId: number): Promise<'initial' | 'tracking' | 'support'> {
+    const customer = this.customers.get(customerId);
+    if (!customer) return 'initial';
+
+    const customerOrders = Array.from(this.orders.values())
+      .filter(order => order.customerId === customerId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    if (customerOrders.length === 0) {
+      return 'initial';
+    }
+
+    const openOrders = customerOrders.filter(order => 
+      ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+    );
+
+    if (openOrders.length > 0) {
+      return 'tracking';
+    }
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentCompletedOrders = customerOrders.filter(order => 
+      ['completed', 'delivered'].includes(order.status) &&
+      new Date(order.updatedAt) >= thirtyDaysAgo
+    );
+
+    if (recentCompletedOrders.length > 0) {
+      return 'support';
+    }
+
+    return 'initial';
   }
 }
 

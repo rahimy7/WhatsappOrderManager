@@ -869,10 +869,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
+        // DETERMINE CONVERSATION TYPE BASED ON CUSTOMER STATUS
+        const conversationType = await storage.determineConversationType(customer.id);
+        
+        await storage.addWhatsAppLog({
+          type: 'debug',
+          phoneNumber: from,
+          messageContent: `Tipo de conversación determinado: ${conversationType}`,
+          status: 'processing',
+          rawData: JSON.stringify({ 
+            customerId: customer.id,
+            conversationType: conversationType,
+            customerName: customer.name,
+            isNewCustomer: isNewCustomer
+          })
+        });
+
+        // Update conversation type in database
+        if (conversation) {
+          await storage.updateConversation(conversation.id, { conversationType });
+        }
+
+        // HANDLE DIFFERENT CONVERSATION FLOWS BASED ON TYPE
+        if (conversationType === 'tracking') {
+          await handleTrackingConversation(customer, from, text);
+          return;
+        } else if (conversationType === 'support') {
+          await handleSupportConversation(customer, from, text);
+          return;
+        }
+        
         // Skip automatic name registration - we'll do it during order process
         // For new customers or those without names, we'll show menu directly
         
-        // Check for auto responses based on triggers
+        // Check for auto responses based on triggers (INITIAL CONVERSATION TYPE)
         const autoResponses = await storage.getAllAutoResponses();
         let responseFound = false;
         
@@ -3190,4 +3220,314 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+// CONVERSATION TYPE HANDLERS FOR WHATSAPP SEGMENTATION
+
+async function handleTrackingConversation(customer: any, phoneNumber: string, messageText: string) {
+  try {
+    await storage.addWhatsAppLog({
+      type: 'debug',
+      phoneNumber: phoneNumber,
+      messageContent: `Procesando conversación de seguimiento para cliente ${customer.id}`,
+      status: 'processing',
+      rawData: JSON.stringify({ 
+        customerId: customer.id,
+        conversationType: 'tracking',
+        messageReceived: messageText
+      })
+    });
+
+    // Get customer's active orders
+    const orders = await storage.getAllOrders();
+    const activeOrders = orders.filter(order => 
+      order.customer.id === customer.id && 
+      ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+    );
+
+    // Handle specific tracking commands
+    const lowerText = messageText.toLowerCase().trim();
+    
+    if (lowerText.includes('estado') || lowerText.includes('seguimiento') || lowerText.includes('pedido')) {
+      await sendOrderTrackingStatus(customer, phoneNumber, activeOrders);
+    } else if (lowerText.includes('cancelar') || lowerText.includes('modificar')) {
+      await sendOrderModificationOptions(customer, phoneNumber, activeOrders);
+    } else if (lowerText.includes('tiempo') || lowerText.includes('cuando') || lowerText.includes('cuándo')) {
+      await sendEstimatedTime(customer, phoneNumber, activeOrders);
+    } else if (lowerText.includes('tecnico') || lowerText.includes('técnico') || lowerText.includes('asignado')) {
+      await sendTechnicianInfo(customer, phoneNumber, activeOrders);
+    } else {
+      // Default tracking menu
+      await sendTrackingMenu(customer, phoneNumber, activeOrders);
+    }
+
+  } catch (error) {
+    console.error('Error in handleTrackingConversation:', error);
+    await sendWhatsAppMessage(phoneNumber, 
+      "❌ Error al procesar tu solicitud de seguimiento. Por favor intenta nuevamente."
+    );
+  }
+}
+
+async function handleSupportConversation(customer: any, phoneNumber: string, messageText: string) {
+  try {
+    await storage.addWhatsAppLog({
+      type: 'debug',
+      phoneNumber: phoneNumber,
+      messageContent: `Procesando conversación de soporte para cliente ${customer.id}`,
+      status: 'processing',
+      rawData: JSON.stringify({ 
+        customerId: customer.id,
+        conversationType: 'support',
+        messageReceived: messageText
+      })
+    });
+
+    // Get customer's recent completed orders
+    const orders = await storage.getAllOrders();
+    const recentOrders = orders.filter(order => {
+      if (order.customer.id !== customer.id) return false;
+      if (!['completed', 'delivered'].includes(order.status)) return false;
+      
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      return new Date(order.updatedAt) >= thirtyDaysAgo;
+    });
+
+    const lowerText = messageText.toLowerCase().trim();
+    
+    if (lowerText.includes('problema') || lowerText.includes('falla') || lowerText.includes('no funciona')) {
+      await sendTechnicalSupportOptions(customer, phoneNumber, recentOrders);
+    } else if (lowerText.includes('garantia') || lowerText.includes('garantía') || lowerText.includes('reparacion')) {
+      await sendWarrantyInfo(customer, phoneNumber, recentOrders);
+    } else if (lowerText.includes('satisfecho') || lowerText.includes('opinion') || lowerText.includes('calificar')) {
+      await sendFeedbackRequest(customer, phoneNumber, recentOrders);
+    } else if (lowerText.includes('factura') || lowerText.includes('recibo') || lowerText.includes('comprobante')) {
+      await sendInvoiceOptions(customer, phoneNumber, recentOrders);
+    } else {
+      // Default support menu
+      await sendSupportMenu(customer, phoneNumber, recentOrders);
+    }
+
+  } catch (error) {
+    console.error('Error in handleSupportConversation:', error);
+    await sendWhatsAppMessage(phoneNumber, 
+      "❌ Error al procesar tu solicitud de soporte. Por favor intenta nuevamente."
+    );
+  }
+}
+
+// TRACKING CONVERSATION HELPERS
+
+async function sendOrderTrackingStatus(customer: any, phoneNumber: string, activeOrders: any[]) {
+  if (activeOrders.length === 0) {
+    await sendWhatsAppMessage(phoneNumber, 
+      "📋 No tienes pedidos activos en este momento.\n\n" +
+      "¿Te gustaría hacer un nuevo pedido? Escribe *menu* para ver nuestros productos y servicios."
+    );
+    return;
+  }
+
+  let statusMessage = `📊 *Estado de tus Pedidos Activos*\n\n`;
+  
+  for (const order of activeOrders.slice(0, 3)) { // Limit to 3 orders
+    const statusEmoji = {
+      'pending': '⏳',
+      'confirmed': '✅',
+      'assigned': '👨‍🔧',
+      'in_progress': '🔧'
+    }[order.status] || '📋';
+
+    const statusText = {
+      'pending': 'Pendiente',
+      'confirmed': 'Confirmado',
+      'assigned': 'Técnico Asignado',
+      'in_progress': 'En Progreso'
+    }[order.status] || order.status;
+
+    statusMessage += `${statusEmoji} *Pedido ${order.orderNumber}*\n`;
+    statusMessage += `   Estado: ${statusText}\n`;
+    statusMessage += `   Total: $${order.totalAmount}\n`;
+    if (order.assignedUser) {
+      statusMessage += `   Técnico: ${order.assignedUser.name}\n`;
+    }
+    statusMessage += `   Fecha: ${new Date(order.createdAt).toLocaleDateString('es-MX')}\n\n`;
+  }
+
+  statusMessage += "💬 *Opciones disponibles:*\n";
+  statusMessage += "• Escribe *tecnico* para ver info del técnico\n";
+  statusMessage += "• Escribe *tiempo* para tiempo estimado\n";
+  statusMessage += "• Escribe *modificar* para cambios al pedido";
+
+  await sendWhatsAppMessage(phoneNumber, statusMessage);
+}
+
+async function sendOrderModificationOptions(customer: any, phoneNumber: string, activeOrders: any[]) {
+  let message = "🔧 *Modificaciones de Pedido*\n\n";
+  
+  if (activeOrders.length === 0) {
+    message += "No tienes pedidos activos que se puedan modificar.";
+  } else {
+    message += "Para modificaciones o cancelaciones, contacta directamente:\n\n";
+    message += "📞 *Teléfono:* +52 55 1234 5678\n";
+    message += "🕒 *Horario:* Lun-Vie 8AM-6PM, Sáb 9AM-2PM\n\n";
+    message += "⚠️ *Importante:* Las modificaciones deben realizarse antes de que el técnico esté en camino.";
+  }
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+async function sendEstimatedTime(customer: any, phoneNumber: string, activeOrders: any[]) {
+  let message = "⏰ *Tiempos Estimados*\n\n";
+  
+  for (const order of activeOrders.slice(0, 2)) {
+    message += `📋 *Pedido ${order.orderNumber}*\n`;
+    
+    if (order.status === 'pending') {
+      message += "   ⏳ Estimado: 24-48 horas para confirmar\n";
+    } else if (order.status === 'confirmed') {
+      message += "   ⏳ Estimado: 1-3 días para asignar técnico\n";
+    } else if (order.status === 'assigned') {
+      message += "   ⏳ Estimado: Técnico contactará en 24 horas\n";
+    } else if (order.status === 'in_progress') {
+      message += "   🔧 En proceso: Tiempo según complejidad\n";
+    }
+    message += "\n";
+  }
+  
+  message += "📞 Para información más específica, contacta al equipo de seguimiento.";
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+async function sendTechnicianInfo(customer: any, phoneNumber: string, activeOrders: any[]) {
+  let message = "👨‍🔧 *Información del Técnico*\n\n";
+  
+  const ordersWithTechnician = activeOrders.filter(order => order.assignedUser);
+  
+  if (ordersWithTechnician.length === 0) {
+    message += "⏳ Aún no se ha asignado técnico a tus pedidos.\n\n";
+    message += "El técnico será asignado una vez que el pedido sea confirmado y programado.";
+  } else {
+    for (const order of ordersWithTechnician) {
+      message += `📋 *Pedido ${order.orderNumber}*\n`;
+      message += `👨‍🔧 Técnico: ${order.assignedUser.name}\n`;
+      message += `📞 El técnico te contactará directamente\n`;
+      message += `🕒 Horario: Lun-Vie 8AM-6PM\n\n`;
+    }
+  }
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+async function sendTrackingMenu(customer: any, phoneNumber: string, activeOrders: any[]) {
+  const orderCount = activeOrders.length;
+  const customerName = customer.name && !customer.name.startsWith('Cliente ') ? customer.name : '';
+  
+  let message = `👋 ${customerName ? `Hola ${customerName}!` : 'Hola!'}\n\n`;
+  message += `📊 Tienes ${orderCount} pedido${orderCount !== 1 ? 's' : ''} activo${orderCount !== 1 ? 's' : ''}\n\n`;
+  message += "💬 *¿Qué necesitas saber?*\n\n";
+  message += "📋 Escribe *estado* - Ver estado de pedidos\n";
+  message += "👨‍🔧 Escribe *tecnico* - Info del técnico asignado\n";
+  message += "⏰ Escribe *tiempo* - Tiempos estimados\n";
+  message += "🔧 Escribe *modificar* - Cambios al pedido\n";
+  message += "🆕 Escribe *menu* - Hacer nuevo pedido";
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+// SUPPORT CONVERSATION HELPERS
+
+async function sendSupportMenu(customer: any, phoneNumber: string, recentOrders: any[]) {
+  const customerName = customer.name && !customer.name.startsWith('Cliente ') ? customer.name : '';
+  
+  let message = `👋 ${customerName ? `Hola ${customerName}!` : 'Hola!'}\n\n`;
+  message += "🛠️ *Centro de Soporte*\n\n";
+  message += "¿Con qué podemos ayudarte?\n\n";
+  message += "🔧 Escribe *problema* - Reportar falla técnica\n";
+  message += "🛡️ Escribe *garantia* - Información de garantía\n";
+  message += "⭐ Escribe *opinion* - Dejar comentarios\n";
+  message += "📄 Escribe *factura* - Solicitar documentos\n";
+  message += "📞 Escribe *contacto* - Hablar con un agente";
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+async function sendTechnicalSupportOptions(customer: any, phoneNumber: string, recentOrders: any[]) {
+  let message = "🔧 *Soporte Técnico*\n\n";
+  message += "Describe brevemente el problema que estás experimentando:\n\n";
+  message += "• ❄️ No enfría adecuadamente\n";
+  message += "• 💨 Ruidos extraños\n";
+  message += "• 💧 Goteo de agua\n";
+  message += "• ⚡ Problemas eléctricos\n";
+  message += "• 🌪️ Aire no circula\n\n";
+  message += "📞 *Soporte Urgente:* +52 55 1234 5678\n";
+  message += "🕒 *24/7 para emergencias*";
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+async function sendWarrantyInfo(customer: any, phoneNumber: string, recentOrders: any[]) {
+  let message = "🛡️ *Información de Garantía*\n\n";
+  
+  if (recentOrders.length > 0) {
+    message += "📋 *Tus servicios con garantía:*\n\n";
+    for (const order of recentOrders.slice(0, 2)) {
+      const daysAgo = Math.floor((Date.now() - new Date(order.updatedAt).getTime()) / (1000 * 60 * 60 * 24));
+      message += `• Pedido ${order.orderNumber}\n`;
+      message += `  Completado hace ${daysAgo} días\n`;
+      message += `  Garantía: ${30 - daysAgo} días restantes\n\n`;
+    }
+  }
+  
+  message += "✅ *Cobertura de Garantía:*\n";
+  message += "• 30 días en mano de obra\n";
+  message += "• 1 año en piezas nuevas\n";
+  message += "• Soporte técnico gratuito\n\n";
+  message += "📞 Para reclamos: +52 55 1234 5678";
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+async function sendFeedbackRequest(customer: any, phoneNumber: string, recentOrders: any[]) {
+  let message = "⭐ *Tu Opinión es Importante*\n\n";
+  
+  if (recentOrders.length > 0) {
+    message += "¿Cómo calificarías nuestro servicio?\n\n";
+    message += "😊 *Excelente* - Todo perfecto\n";
+    message += "🙂 *Bueno* - Algunas mejoras menores\n";
+    message += "😐 *Regular* - Necesita mejorar\n";
+    message += "😟 *Malo* - Muy insatisfecho\n\n";
+    message += "💬 También puedes escribir comentarios específicos.";
+  } else {
+    message += "Gracias por tu interés en dejarnos comentarios.\n\n";
+    message += "📞 Contacta a nuestro equipo para compartir tu experiencia:\n";
+    message += "+52 55 1234 5678";
+  }
+
+  await sendWhatsAppMessage(phoneNumber, message);
+}
+
+async function sendInvoiceOptions(customer: any, phoneNumber: string, recentOrders: any[]) {
+  let message = "📄 *Documentos y Facturas*\n\n";
+  
+  if (recentOrders.length > 0) {
+    message += "📋 *Pedidos disponibles para facturar:*\n\n";
+    for (const order of recentOrders.slice(0, 3)) {
+      message += `• ${order.orderNumber} - $${order.totalAmount}\n`;
+    }
+    message += "\n";
+  }
+  
+  message += "✅ *Documentos disponibles:*\n";
+  message += "• Comprobante de servicio\n";
+  message += "• Factura fiscal (RFC requerido)\n";
+  message += "• Garantía de servicio\n\n";
+  message += "📧 *Para solicitar:*\n";
+  message += "Envía por WhatsApp:\n";
+  message += "- Número de pedido\n";
+  message += "- Tipo de documento\n";
+  message += "- RFC (si requiere factura)";
+
+  await sendWhatsAppMessage(phoneNumber, message);
 }
