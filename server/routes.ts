@@ -126,6 +126,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get orders assigned to specific technician
+  app.get("/api/technician/orders", authenticateToken, async (req, res) => {
+    try {
+      const user = req.user as AuthUser;
+      const orders = await storage.getTechnicianOrders(user.id);
+      res.json(orders);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch technician orders" });
+    }
+  });
+
+  // Get technician dashboard metrics
+  app.get("/api/technician/metrics", authenticateToken, async (req, res) => {
+    try {
+      const user = req.user as AuthUser;
+      const orders = await storage.getTechnicianOrders(user.id);
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const pending = orders.filter(order => order.status === 'pending' || order.status === 'confirmed').length;
+      const inProgress = orders.filter(order => order.status === 'assigned' || order.status === 'in_progress').length;
+      const completedToday = orders.filter(order => {
+        const orderDate = new Date(order.updatedAt);
+        orderDate.setHours(0, 0, 0, 0);
+        return order.status === 'completed' && orderDate.getTime() === today.getTime();
+      }).length;
+      const totalCompleted = orders.filter(order => order.status === 'completed').length;
+      
+      // Calculate today's income from completed orders
+      const todayIncome = orders
+        .filter(order => {
+          const orderDate = new Date(order.updatedAt);
+          orderDate.setHours(0, 0, 0, 0);
+          return order.status === 'completed' && orderDate.getTime() === today.getTime();
+        })
+        .reduce((total, order) => total + parseFloat(order.totalPrice || '0'), 0);
+
+      // Get conversations related to technician's orders
+      const technicianConversations = await storage.getTechnicianConversations(user.id);
+      
+      res.json({
+        pending,
+        inProgress,
+        completedToday,
+        totalCompleted,
+        todayIncome,
+        activeConversations: technicianConversations.length
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch technician metrics" });
+    }
+  });
+
   // Endpoint específico para técnicos - obtener sus órdenes asignadas
   app.get("/api/technician/orders", authenticateToken, async (req: any, res) => {
     try {

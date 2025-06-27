@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, CheckCircle, AlertCircle, MapPin, Phone, User } from "lucide-react";
+import { Clock, CheckCircle, AlertCircle, MapPin, Phone, User, DollarSign } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Order } from "@shared/schema";
 
@@ -60,6 +60,12 @@ export default function TechnicianDashboard() {
     enabled: !!user?.id,
   });
 
+  // Obtener métricas específicas del técnico
+  const { data: technicianMetrics = {}, isLoading: metricsLoading } = useQuery({
+    queryKey: ['/api/technician/metrics'],
+    enabled: !!user?.id,
+  });
+
   // Mutation para actualizar estado de orden
   const updateOrderStatus = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: number; status: string }) => {
@@ -96,14 +102,17 @@ export default function TechnicianDashboard() {
     );
   }
 
-  // Ya tenemos solo las órdenes asignadas al técnico desde el endpoint
-  const myOrders = orders;
-  const pendingOrders = myOrders.filter(order => order.status === 'assigned');
-  const inProgressOrders = myOrders.filter(order => order.status === 'in_progress');
-  const completedOrders = myOrders.filter(order => order.status === 'completed');
-  const completedToday = completedOrders.filter(order => 
-    new Date(order.updatedAt).toDateString() === new Date().toDateString()
-  );
+  // Usar métricas del endpoint específico del técnico
+  const pendingOrders = orders.filter(order => order.status === 'pending' || order.status === 'confirmed');
+  const inProgressOrders = orders.filter(order => order.status === 'assigned' || order.status === 'in_progress');
+  const completedOrders = orders.filter(order => order.status === 'completed');
+  const completedToday = orders.filter(order => {
+    const orderDate = new Date(order.updatedAt);
+    orderDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return order.status === 'completed' && orderDate.getTime() === today.getTime();
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
