@@ -10,7 +10,7 @@ import { Bell, BellOff, CheckCircle, Clock, Trash2, Users, Settings, AlertTriang
 import type { Notification } from "@shared/schema";
 
 export default function NotificationsPage() {
-  const [selectedUser, setSelectedUser] = useState<number>(1); // For demo purposes, would get from auth
+  const [selectedUser, setSelectedUser] = useState<number>(6); // For demo purposes, would get from auth
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
