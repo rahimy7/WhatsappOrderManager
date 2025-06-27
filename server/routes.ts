@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { 
   insertOrderSchema, 
@@ -14,8 +16,96 @@ import {
   insertEmployeeProfileSchema,
   insertNotificationSchema,
 } from "@shared/schema";
+import { loginSchema, AuthUser } from "@shared/auth";
+
+// Middleware de autenticación
+function authenticateToken(req: any, res: any, next: any) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.sendStatus(401);
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'default-secret', (err: any, user: any) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Rutas de autenticación
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = loginSchema.parse(req.body);
+      
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
+      }
+
+      // Comparar contraseña (en producción deberían estar hasheadas)
+      if (user.password !== password) {
+        return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
+      }
+
+      // Generar token JWT
+      const token = jwt.sign(
+        { 
+          id: user.id, 
+          username: user.username, 
+          role: user.role 
+        },
+        process.env.JWT_SECRET || 'default-secret',
+        { expiresIn: '24h' }
+      );
+
+      // Preparar datos del usuario para el frontend
+      const authUser: AuthUser = {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        phone: user.phone,
+        email: user.email,
+        department: user.department,
+      };
+
+      res.json({ user: authUser, token });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Datos inválidos", details: error.errors });
+      }
+      res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      const authUser: AuthUser = {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        phone: user.phone,
+        email: user.email,
+        department: user.department,
+      };
+
+      res.json(authUser);
+    } catch (error) {
+      res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
   // Dashboard metrics
   app.get("/api/dashboard/metrics", async (req, res) => {
     try {
