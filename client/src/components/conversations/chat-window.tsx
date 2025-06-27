@@ -27,6 +27,13 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
     enabled: !!conversation?.id,
   });
 
+  // Fetch customer details with history
+  const { data: customerDetails } = useQuery({
+    queryKey: ["/api/customers", conversation?.customer.id, "details"],
+    queryFn: () => conversation?.customer.id ? fetch(`/api/customers/${conversation.customer.id}/details`).then(res => res.json()) : null,
+    enabled: !!conversation?.customer.id,
+  });
+
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -116,9 +123,16 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
               </div>
               
               <div className="flex-1">
-                <CardTitle className="text-lg font-semibold text-gray-900 mb-1">
-                  {conversation.customer.name}
-                </CardTitle>
+                <div className="flex items-center space-x-2 mb-1">
+                  <CardTitle className="text-lg font-semibold text-gray-900">
+                    {conversation.customer.name}
+                  </CardTitle>
+                  {customerDetails?.isVip && (
+                    <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 text-xs">
+                      ⭐ VIP
+                    </Badge>
+                  )}
+                </div>
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
                   <Phone className="h-3 w-3" />
                   <span className="font-medium">{conversation.customer.phone}</span>
@@ -131,6 +145,11 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
                   {conversation.order && (
                     <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 border-blue-200">
                       {conversation.order.orderNumber}
+                    </Badge>
+                  )}
+                  {customerDetails && customerDetails.totalOrders > 0 && (
+                    <Badge variant="outline" className="text-xs border-gray-300 text-gray-600">
+                      📊 {customerDetails.totalOrders} pedidos
                     </Badge>
                   )}
                 </div>

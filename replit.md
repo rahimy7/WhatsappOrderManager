@@ -258,6 +258,16 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Enhanced error logging with detailed location coordinates and processing steps
   - GPS location sharing now fully functional for order completion flow
   - Distance calculation and delivery cost estimation working correctly with real GPS coordinates
+- June 27, 2025. Customer history tracking and personalized WhatsApp responses implemented:
+  - Complete customer history system with new customer_history table in PostgreSQL database
+  - Automatic history logging when orders are confirmed through WhatsApp integration
+  - Personalized welcome messages using registered customer names and order history
+  - VIP customer status identification based on spending thresholds and order frequency
+  - Customer statistics calculation including total orders, total spent, and VIP status
+  - WhatsApp responses now show customer history: "Hola [Name]! 📊 X pedidos • $Y total"
+  - Enhanced chat interface displaying customer VIP status and order count in conversation headers
+  - Backend API routes for customer history, details, and VIP customer management
+  - Customer profile enhancement with comprehensive historical data tracking and display
 
 ## User Preferences
 
