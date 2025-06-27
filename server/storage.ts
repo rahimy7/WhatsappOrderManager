@@ -103,12 +103,20 @@ export interface IStorage {
   addOrderHistory(history: InsertOrderHistory): Promise<OrderHistory>;
   
   // Service Pricing
-  calculateServicePrice(serviceId: number, installationComplexity: number, partsNeeded: Array<{productId: number; quantity: number}>): Promise<{
+  calculateServicePrice(
+    serviceId: number, 
+    installationComplexity: number, 
+    partsNeeded: Array<{productId: number; quantity: number}>,
+    customerLatitude?: string,
+    customerLongitude?: string
+  ): Promise<{
     basePrice: number;
     installationCost: number;
     partsCost: number;
     laborHours: number;
     laborRate: number;
+    deliveryCost: number;
+    deliveryDistance: number;
     totalPrice: number;
   }>;
 
@@ -1440,12 +1448,20 @@ export class DatabaseStorage implements IStorage {
     return history;
   }
 
-  async calculateServicePrice(serviceId: number, installationComplexity: number, partsNeeded: Array<{productId: number; quantity: number}>): Promise<{
+  async calculateServicePrice(
+    serviceId: number, 
+    installationComplexity: number, 
+    partsNeeded: Array<{productId: number; quantity: number}>,
+    customerLatitude?: string,
+    customerLongitude?: string
+  ): Promise<{
     basePrice: number;
     installationCost: number;
     partsCost: number;
     laborHours: number;
     laborRate: number;
+    deliveryCost: number;
+    deliveryDistance: number;
     totalPrice: number;
   }> {
     const service = await this.getProduct(serviceId);
@@ -1466,7 +1482,21 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const totalPrice = basePrice + installationCost + partsCost;
+    // Calculate delivery cost if customer location is provided
+    let deliveryCost = 0;
+    let deliveryDistance = 0;
+    
+    if (customerLatitude && customerLongitude) {
+      const deliveryInfo = await this.calculateDeliveryCost(
+        customerLatitude, 
+        customerLongitude, 
+        "service"
+      );
+      deliveryCost = deliveryInfo.cost;
+      deliveryDistance = deliveryInfo.distance;
+    }
+
+    const totalPrice = basePrice + installationCost + partsCost + deliveryCost;
 
     return {
       basePrice,
@@ -1474,6 +1504,8 @@ export class DatabaseStorage implements IStorage {
       partsCost,
       laborHours,
       laborRate,
+      deliveryCost,
+      deliveryDistance,
       totalPrice: Math.round(totalPrice * 100) / 100,
     };
   }
