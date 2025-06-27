@@ -2733,25 +2733,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await response.json();
       
       if (!response.ok) {
+        // Log the specific error for debugging
+        await storage.addWhatsAppLog({
+          type: 'error',
+          phoneNumber: phoneNumber,
+          messageContent: 'Error enviando mensaje interactivo',
+          status: 'failed',
+          errorMessage: result.error?.message || 'Unknown error',
+          rawData: JSON.stringify({ error: result, message: message })
+        });
+
+        // Check if it's a permissions/interactive buttons error
+        if (result.error?.code === 131009 || result.error?.code === 131030 || 
+            (result.error?.message && result.error.message.includes('Parameter value is not valid'))) {
+          
+          // Fallback to text message with formatted options
+          let textFallback = message.interactive?.body?.text || message.body?.text || "";
+          
+          if (message.interactive?.action?.buttons) {
+            textFallback += "\n\n*Opciones disponibles:*";
+            message.interactive.action.buttons.forEach((button: any, index: number) => {
+              textFallback += `\n${index + 1}. ${button.reply.title}`;
+            });
+            textFallback += "\n\nEscribe el número de la opción o el comando correspondiente.";
+          }
+          
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: phoneNumber,
+            messageContent: 'Fallback automático a mensaje de texto',
+            status: 'processed',
+            rawData: JSON.stringify({ originalError: result.error, textFallback })
+          });
+          
+          // Send text fallback
+          return await sendWhatsAppMessage(phoneNumber, textFallback);
+        }
+        
         throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
       }
 
       await storage.addWhatsAppLog({
         type: 'outgoing',
-        message: 'Mensaje interactivo enviado',
-        data: {
+        phoneNumber: phoneNumber,
+        messageContent: 'Mensaje interactivo enviado exitosamente',
+        status: 'sent',
+        rawData: JSON.stringify({
           to: phoneNumber,
           messageId: result.messages?.[0]?.id,
           messageType: message.type
-        }
+        })
       });
 
       return result;
     } catch (error: any) {
       await storage.addWhatsAppLog({
         type: 'error',
-        message: 'Error enviando mensaje interactivo de WhatsApp',
-        data: { error: error.message, phoneNumber }
+        phoneNumber: phoneNumber,
+        messageContent: 'Error crítico enviando mensaje interactivo',
+        status: 'failed',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, phoneNumber })
       });
       throw error;
     }
