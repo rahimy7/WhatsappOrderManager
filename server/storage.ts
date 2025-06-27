@@ -1178,7 +1178,18 @@ export class DatabaseStorage implements IStorage {
 
   // Normalize phone number for comparison (remove spaces, dashes, and country codes)
   private normalizePhoneNumber(phone: string): string {
-    return phone.replace(/[\s\-\+]/g, '');
+    // Remove all non-digit characters
+    const digitsOnly = phone.replace(/\D/g, '');
+    
+    // If it starts with 52 (Mexico) and has more than 10 digits, keep as is
+    // If it doesn't start with 52 but has 10 digits, add 52 prefix
+    if (digitsOnly.startsWith('52') && digitsOnly.length > 10) {
+      return digitsOnly;
+    } else if (!digitsOnly.startsWith('52') && digitsOnly.length === 10) {
+      return '52' + digitsOnly;
+    } else {
+      return digitsOnly;
+    }
   }
 
   async getCustomerByPhone(phone: string): Promise<Customer | undefined> {
