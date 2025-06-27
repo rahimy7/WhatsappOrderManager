@@ -97,7 +97,6 @@ export interface IStorage {
     notes?: string;
   }>): Promise<OrderWithDetails>;
   getAllOrders(): Promise<OrderWithDetails[]>;
-  getOrdersByCustomer(customerId: number): Promise<OrderWithDetails[]>;
   updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined>;
   assignOrder(orderId: number, userId: number): Promise<Order | undefined>;
   updateOrderStatus(orderId: number, status: string, userId?: number, notes?: string): Promise<Order | undefined>;
@@ -839,17 +838,6 @@ export class MemStorage implements IStorage {
     return orders.filter(order => order !== undefined) as OrderWithDetails[];
   }
 
-  async getOrdersByCustomer(customerId: number): Promise<OrderWithDetails[]> {
-    const customerOrders = Array.from(this.orders.values())
-      .filter(order => order.customerId === customerId);
-    
-    const ordersWithDetails = await Promise.all(
-      customerOrders.map(order => this.getOrder(order.id))
-    );
-    
-    return ordersWithDetails.filter(order => order !== undefined) as OrderWithDetails[];
-  }
-
   async updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined> {
     const order = this.orders.get(id);
     if (order) {
@@ -1534,27 +1522,6 @@ export class DatabaseStorage implements IStorage {
     .from(orders)
     .leftJoin(customers, eq(orders.customerId, customers.id))
     .leftJoin(users, eq(orders.assignedUserId, users.id))
-    .orderBy(desc(orders.createdAt));
-
-    const ordersWithDetails = await Promise.all(
-      ordersData.map(async ({ order }) => {
-        return await this.getOrder(order.id);
-      })
-    );
-
-    return ordersWithDetails.filter(order => order !== undefined) as OrderWithDetails[];
-  }
-
-  async getOrdersByCustomer(customerId: number): Promise<OrderWithDetails[]> {
-    const ordersData = await db.select({
-      order: orders,
-      customer: customers,
-      assignedUser: users
-    })
-    .from(orders)
-    .leftJoin(customers, eq(orders.customerId, customers.id))
-    .leftJoin(users, eq(orders.assignedUserId, users.id))
-    .where(eq(orders.customerId, customerId))
     .orderBy(desc(orders.createdAt));
 
     const ordersWithDetails = await Promise.all(

@@ -837,80 +837,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const priorityCommands = ['menu', 'menú', 'hola', 'hello', 'ayuda', 'help'];
         const isPriorityCommand = priorityCommands.some(cmd => text === cmd);
         
-        // Handle greeting commands directly with personalized welcome
-        if (text === 'hola' || text === 'hello') {
-          await sendWelcomeMessage(from, customer);
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Mensaje de bienvenida personalizado enviado a ${customer?.name || 'cliente'}`,
-            status: 'processed',
-            rawData: JSON.stringify({ customerMessage: text, response: 'personalized_welcome', customerName: customer?.name })
-          });
-          return; // Exit function after sending welcome message
-        }
-        
-        // Handle order tracking commands directly 
-        if (text === 'seguimiento' || text === 'pedido' || text === 'mis pedidos' || text === 'pedidos') {
-          await sendOrderStatus(customer, from);
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Estado de pedidos enviado a ${customer?.name || 'cliente'}`,
-            status: 'processed',
-            rawData: JSON.stringify({ customerMessage: text, response: 'order_status', customerName: customer?.name })
-          });
-          return; // Exit function after sending order status
-        }
-        
-        // Handle new order commands directly
-        if (text === 'nuevo' || text === 'menu' || text === 'menú' || text === 'nuevo_pedido') {
-          await sendProductMenu(from);
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Menú de productos enviado a ${customer?.name || 'cliente'}`,
-            status: 'processed',
-            rawData: JSON.stringify({ customerMessage: text, response: 'product_menu', customerName: customer?.name })
-          });
-          return; // Exit function after sending product menu
-        }
-        
-        // Handle button interactions
-        if (text === 'agregar_productos') {
-          await sendWhatsAppMessage(from, 
-            "➕ *Agregar Productos*\n\n" +
-            "Para agregar productos a un pedido existente:\n" +
-            "1. Escribe *agregar* seguido del número de pedido\n" +
-            "2. Ejemplo: *agregar 1*\n\n" +
-            "O escribe *menu* para ver el catálogo completo."
-          );
-          return;
-        }
-        
-        if (text === 'contactar_tecnico') {
-          const orders = await storage.getOrdersByCustomer(customer.id);
-          const assignedOrder = orders.find(order => order.assignedUser);
-          
-          if (!assignedOrder) {
-            await sendWhatsAppMessage(from, 
-              "📞 *Contactar Técnico*\n\n" +
-              "Aún no hay un técnico asignado a tus pedidos.\n\n" +
-              "Nuestro equipo se comunicará contigo cuando asignen el técnico."
-            );
-          } else {
-            await sendWhatsAppMessage(from, 
-              "📞 *Información de Contacto*\n\n" +
-              `👨‍🔧 Técnico: ${assignedOrder.assignedUser}\n` +
-              `📋 Pedido: ${assignedOrder.orderNumber}\n\n` +
-              "Para contactar directamente al técnico, llama a nuestra oficina y menciona el número de pedido.\n\n" +
-              "📱 Teléfono: (55) 1234-5678\n" +
-              "🕐 Horario: Lunes a Viernes 8:00 AM - 6:00 PM"
-            );
-          }
-          return;
-        }
-        
         // FIRST CHECK: Handle registration flows (but allow priority commands to override)
         const registrationFlow = await storage.getRegistrationFlow(from);
         if (registrationFlow && !registrationFlow.isCompleted && !isPriorityCommand) {
@@ -946,41 +872,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Skip automatic name registration - we'll do it during order process
         // For new customers or those without names, we'll show menu directly
         
-        // Check for special order management commands first
-        if (await handleOrderManagementCommands(customer, text, from)) {
-          return; // Exit early if command was handled
-        }
-
-        // Handle numeric menu selections (for text-based fallback menus)
-        if (/^[1-9]\d*$/.test(text.trim())) {
-          const products = await storage.getAllProducts();
-          const productItems = products.filter(p => p.category === 'product').slice(0, 8);
-          const serviceItems = products.filter(p => p.category === 'service').slice(0, 8);
-          const allItems = [...productItems, ...serviceItems];
-          
-          const selectedNumber = parseInt(text.trim());
-          
-          if (selectedNumber <= allItems.length) {
-            const selectedProduct = allItems[selectedNumber - 1];
-            await handleProductSelection(customer, conversation, selectedProduct.id, from);
-            return;
-          } else if (selectedNumber === allItems.length + 1) {
-            // Location sharing option
-            await sendLocationRequest(from);
-            return;
-          }
-          // If number is out of range, continue to normal processing
-        }
-        
-        // Check if customer has active orders and add tracking option
-        const activeOrders = await storage.getOrdersByCustomer(customer.id);
-        const pendingOrders = activeOrders.filter(order => 
-          order.status === 'pending' || 
-          order.status === 'confirmed' || 
-          order.status === 'in_progress' || 
-          order.status === 'assigned'
-        );
-        
         // Check for auto responses based on triggers
         const autoResponses = await storage.getAllAutoResponses();
         let responseFound = false;
@@ -988,8 +879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check common triggers
         const triggers = [
           { keywords: ['hola', 'hello', 'hi', 'buenos dias', 'buenas tardes'], trigger: 'welcome' },
-          { keywords: ['menu', 'menú', 'opciones', 'catalogo', 'catálogo', 'nuevo'], trigger: 'menu' },
-          { keywords: ['seguimiento', 'pedido', 'pedidos', 'estado', 'orden', 'mis pedidos'], trigger: 'order_tracking' },
+          { keywords: ['menu', 'menú', 'opciones', 'catalogo', 'catálogo'], trigger: 'menu' },
           { keywords: ['productos', 'product', 'comprar'], trigger: 'product_inquiry' },
           { keywords: ['servicios', 'service', 'reparacion', 'reparación'], trigger: 'service_inquiry' },
           { keywords: ['ayuda', 'help', 'contacto', 'soporte'], trigger: 'contact_request' }
@@ -1015,59 +905,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         if (autoResponse) {
-          // Special handling for order tracking - show order status directly
-          if (matchedTrigger === 'order_tracking') {
-            await sendOrderStatus(customer, from);
-            responseFound = true;
-          } else {
-            // Personalize message for existing customers with history
-            let personalizedMessage = autoResponse.messageText;
-            if (matchedTrigger === 'welcome' && !isNewCustomer && customer.name && !customer.name.startsWith('Cliente ')) {
-              // Get customer history to personalize further
-              try {
-                await storage.updateCustomerStats(customer.id);
-                const customerWithHistory = await storage.getCustomerWithHistory(customer.id);
-                
-                if (customerWithHistory && customerWithHistory.totalOrders && customerWithHistory.totalOrders > 0) {
-                  const vipMessage = customerWithHistory.isVip ? ' ⭐ Cliente VIP ⭐' : '';
-                  personalizedMessage = `👋 ¡Hola ${customer.name}!${vipMessage} Bienvenido de nuevo a nuestro servicio.\n\n` +
-                    `📊 Historial: ${customerWithHistory.totalOrders} pedidos realizados por $${customerWithHistory.totalSpent}\n\n` +
-                    `¿En qué podemos ayudarte hoy?`;
-                } else {
-                  personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
-                }
-              } catch (error) {
-                console.log('Error getting customer history:', error);
+          // Personalize message for existing customers with history
+          let personalizedMessage = autoResponse.messageText;
+          if (matchedTrigger === 'welcome' && !isNewCustomer && customer.name && !customer.name.startsWith('Cliente ')) {
+            // Get customer history to personalize further
+            try {
+              await storage.updateCustomerStats(customer.id);
+              const customerWithHistory = await storage.getCustomerWithHistory(customer.id);
+              
+              if (customerWithHistory && customerWithHistory.totalOrders && customerWithHistory.totalOrders > 0) {
+                const vipMessage = customerWithHistory.isVip ? ' ⭐ Cliente VIP ⭐' : '';
+                personalizedMessage = `👋 ¡Hola ${customer.name}!${vipMessage} Bienvenido de nuevo a nuestro servicio.\n\n` +
+                  `📊 Historial: ${customerWithHistory.totalOrders} pedidos realizados por $${customerWithHistory.totalSpent}\n\n` +
+                  `¿En qué podemos ayudarte hoy?`;
+              } else {
                 personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
               }
-            } else if (matchedTrigger === 'welcome' && (isNewCustomer || !customer.name || customer.name.startsWith('Cliente '))) {
-              // New customer or customer without name - show direct welcome with menu
-              personalizedMessage = `👋 ¡Hola! Bienvenido a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+            } catch (error) {
+              console.log('Error getting customer history:', error);
+              personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
             }
+          } else if (matchedTrigger === 'welcome' && (isNewCustomer || !customer.name || customer.name.startsWith('Cliente '))) {
+            // New customer or customer without name - show direct welcome with menu
+            personalizedMessage = `👋 ¡Hola! Bienvenido a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+          }
           
           // Check if this response has menu options for interactive message
           if (autoResponse.menuOptions) {
             try {
               const menuOptions = JSON.parse(autoResponse.menuOptions);
               if (Array.isArray(menuOptions) && menuOptions.length > 0) {
-                // Add order tracking option if customer has pending orders
-                let finalMenuOptions = [...menuOptions];
-                if (pendingOrders.length > 0) {
-                  // Add tracking option at the beginning
-                  finalMenuOptions.unshift({
-                    value: "track_orders",
-                    label: `📦 Ver mis pedidos (${pendingOrders.length})`
-                  });
-                  
-                  // Update the personalized message to mention pending orders
-                  if (pendingOrders.length === 1) {
-                    personalizedMessage += `\n\n📦 Tienes 1 pedido en proceso: ${pendingOrders[0].orderNumber}`;
-                  } else {
-                    personalizedMessage += `\n\n📦 Tienes ${pendingOrders.length} pedidos en proceso`;
-                  }
-                }
-                
-                // Send interactive message with buttons (limit to 3 buttons max)
+                // Send interactive message with buttons
                 const interactiveMessage = {
                   messaging_product: "whatsapp",
                   to: from,
@@ -1082,7 +950,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       text: personalizedMessage
                     },
                     action: {
-                      buttons: finalMenuOptions.slice(0, 3).map((option, index) => ({
+                      buttons: menuOptions.slice(0, 3).map((option, index) => ({
                         type: "reply",
                         reply: {
                           id: option.value,
@@ -1145,7 +1013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // If no auto response found, send default welcome
         if (!responseFound) {
-          await sendWelcomeMessage(from, customer);
+          await sendWelcomeMessage(from);
           await storage.addWhatsAppLog({
             type: 'info',
             phoneNumber: from,
@@ -1154,6 +1022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             rawData: JSON.stringify({ customerMessage: text, response: 'default_welcome' })
           });
         }
+        
       } else if (messageType === 'location') {
         // Log the raw location data for debugging
         await storage.addWhatsAppLog({
@@ -1174,9 +1043,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await handleInteractiveMessage(customer, conversation, message.interactive, from);
       } else {
         // For any other message type, send welcome message
-        await sendWelcomeMessage(from, customer);
+        await sendWelcomeMessage(from);
       }
-    } // Close messageType condition
     } catch (error) {
       await storage.addWhatsAppLog({
         type: 'error',
@@ -1190,104 +1058,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   async function sendProductMenu(phoneNumber: string) {
-    try {
-      const products = await storage.getAllProducts();
-      const productItems = products.filter(p => p.category === 'product').slice(0, 5);
-      const serviceItems = products.filter(p => p.category === 'service').slice(0, 5);
+    const products = await storage.getAllProducts();
+    const productItems = products.filter(p => p.category === 'product').slice(0, 5);
+    const serviceItems = products.filter(p => p.category === 'service').slice(0, 5);
 
-      const menuMessage = {
-        messaging_product: "whatsapp",
-        to: phoneNumber,
-        type: "interactive",
-        interactive: {
-          type: "list",
-          header: {
-            type: "text",
-            text: "🛍️ Catálogo de Productos"
-          },
-          body: {
-            text: "Selecciona una categoría para ver nuestros productos disponibles:"
-          },
-          footer: {
-            text: "Precio incluye entrega basada en tu ubicación"
-          },
-          action: {
-            button: "Ver Productos",
-            sections: [
-              {
-                title: "🔧 Productos",
-                rows: productItems.map(product => ({
-                  id: `product_${product.id}`,
-                  title: product.name.substring(0, 24),
-                  description: `$${parseFloat(product.price).toLocaleString('es-MX')}`
-                }))
-              },
-              {
-                title: "⚙️ Servicios",
-                rows: serviceItems.map(service => ({
-                  id: `service_${service.id}`,
-                  title: service.name.substring(0, 24),
-                  description: `Desde $${parseFloat(service.price).toLocaleString('es-MX')}`
-                }))
-              },
-              {
-                title: "📍 Ubicación",
-                rows: [{
-                  id: "request_location",
-                  title: "Compartir Ubicación",
-                  description: "Para calcular costo de entrega"
-                }]
-              }
-            ]
-          }
+    const menuMessage = {
+      messaging_product: "whatsapp",
+      to: phoneNumber,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        header: {
+          type: "text",
+          text: "🛍️ Catálogo de Productos"
+        },
+        body: {
+          text: "Selecciona una categoría para ver nuestros productos disponibles:"
+        },
+        footer: {
+          text: "Precio incluye entrega basada en tu ubicación"
+        },
+        action: {
+          button: "Ver Productos",
+          sections: [
+            {
+              title: "🔧 Productos",
+              rows: productItems.map(product => ({
+                id: `product_${product.id}`,
+                title: product.name.substring(0, 24),
+                description: `$${parseFloat(product.price).toLocaleString('es-MX')}`
+              }))
+            },
+            {
+              title: "⚙️ Servicios",
+              rows: serviceItems.map(service => ({
+                id: `service_${service.id}`,
+                title: service.name.substring(0, 24),
+                description: `Desde $${parseFloat(service.price).toLocaleString('es-MX')}`
+              }))
+            },
+            {
+              title: "📍 Ubicación",
+              rows: [{
+                id: "request_location",
+                title: "Compartir Ubicación",
+                description: "Para calcular costo de entrega"
+              }]
+            }
+          ]
         }
-      };
+      }
+    };
 
-      // Try interactive list first
-      await sendWhatsAppInteractiveMessage(phoneNumber, menuMessage);
-      
-    } catch (error) {
-      console.log('Interactive list failed, sending text menu fallback:', error);
-      
-      // Fallback to text-based menu
-      const products = await storage.getAllProducts();
-      const productItems = products.filter(p => p.category === 'product').slice(0, 8);
-      const serviceItems = products.filter(p => p.category === 'service').slice(0, 8);
-      
-      let textMenu = "🛍️ *Catálogo de Productos*\n\n";
-      textMenu += "*🔧 PRODUCTOS:*\n";
-      
-      productItems.forEach((product, index) => {
-        textMenu += `${index + 1}. ${product.name}\n`;
-        textMenu += `   💰 $${parseFloat(product.price).toLocaleString('es-MX')}\n`;
-      });
-      
-      textMenu += "\n*⚙️ SERVICIOS:*\n";
-      serviceItems.forEach((service, index) => {
-        textMenu += `${productItems.length + index + 1}. ${service.name}\n`;
-        textMenu += `   💰 Desde $${parseFloat(service.price).toLocaleString('es-MX')}\n`;
-      });
-      
-      textMenu += "\n*📍 UBICACIÓN:*\n";
-      textMenu += `${productItems.length + serviceItems.length + 1}. Compartir ubicación\n`;
-      
-      textMenu += "\n*Instrucciones:*\n";
-      textMenu += "• Escribe el número del producto/servicio que deseas\n";
-      textMenu += "• Ejemplo: escribe *3* para seleccionar el producto #3\n";
-      textMenu += "• Escribe *ubicacion* para compartir tu ubicación\n\n";
-      textMenu += "💡 Precio incluye entrega basada en tu ubicación";
-      
-      await sendWhatsAppMessage(phoneNumber, textMenu);
-      
-      // Log the fallback for debugging
-      await storage.addWhatsAppLog({
-        type: 'info',
-        phoneNumber: phoneNumber,
-        messageContent: 'Fallback automático: menú de texto enviado',
-        status: 'processed',
-        rawData: JSON.stringify({ originalError: error.message, productsCount: products.length })
-      });
-    }
+    await sendWhatsAppInteractiveMessage(phoneNumber, menuMessage);
   }
 
   async function sendLocationRequest(phoneNumber: string) {
@@ -1536,61 +1359,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const buttonId = interactive.button_reply.id;
       
       // Handle menu buttons from welcome message
-      if (buttonId === 'seguimiento') {
-        await sendOrderStatus(customer, phoneNumber);
-      } else if (buttonId === 'nuevo') {
-        await sendProductMenu(phoneNumber);
-      } else if (buttonId === 'menu') {
-        await sendProductMenu(phoneNumber);
-      } else if (buttonId === 'ubicacion') {
-        await sendLocationRequest(phoneNumber);
-      } else if (buttonId === 'ayuda') {
-        await sendHelpMenu(phoneNumber);
-      } else if (buttonId === 'agregar_productos') {
-        await sendWhatsAppMessage(phoneNumber, 
-          "➕ *Agregar Productos*\n\n" +
-          "Para agregar productos a un pedido existente:\n" +
-          "1. Escribe *agregar* seguido del número de pedido\n" +
-          "2. Ejemplo: *agregar 1*\n\n" +
-          "O escribe *menu* para ver el catálogo completo."
-        );
-      } else if (buttonId === 'contactar_tecnico') {
-        const orders = await storage.getOrdersByCustomer(customer.id);
-        const assignedOrder = orders.find(order => order.assignedUser);
-        
-        if (!assignedOrder) {
-          await sendWhatsAppMessage(phoneNumber, 
-            "📞 *Contactar Técnico*\n\n" +
-            "Aún no hay un técnico asignado a tus pedidos.\n\n" +
-            "Nuestro equipo se comunicará contigo cuando asignen el técnico."
-          );
-        } else {
-          await sendWhatsAppMessage(phoneNumber, 
-            "📞 *Información de Contacto*\n\n" +
-            `👨‍🔧 Técnico: ${assignedOrder.assignedUser}\n` +
-            `📋 Pedido: ${assignedOrder.orderNumber}\n\n` +
-            "Para contactar directamente al técnico, llama a nuestra oficina y menciona el número de pedido.\n\n" +
-            "📱 Teléfono: (55) 1234-5678\n" +
-            "🕐 Horario: Lunes a Viernes 8:00 AM - 6:00 PM"
-          );
-        }
-      } else if (buttonId === 'nuevo_pedido') {
-        await sendProductMenu(phoneNumber);
-      } else if (buttonId === 'products') {
+      if (buttonId === 'products') {
         await sendProductMenu(phoneNumber);
       } else if (buttonId === 'services') {
         await sendProductMenu(phoneNumber); // Same menu, but focuses on services
       } else if (buttonId === 'help') {
         await sendHelpMenu(phoneNumber);
-      } else if (buttonId === 'track_orders') {
-        await sendOrderStatusUpdate(customer, phoneNumber);
       } else if (buttonId.startsWith('quantity_')) {
         const [, productId, quantity] = buttonId.split('_');
         await handleQuantitySelection(customer, parseInt(productId), parseInt(quantity), phoneNumber);
       } else if (buttonId === 'confirm_order') {
         await handleOrderConfirmation(customer, conversation, phoneNumber);
       } else if (buttonId === 'cancel_order') {
-        await sendWelcomeMessage(phoneNumber, customer);
+        await sendWelcomeMessage(phoneNumber);
       } else if (buttonId.startsWith('payment_')) {
         const paymentMethod = buttonId.split('_')[1];
         await handlePaymentMethodSelection(customer, paymentMethod, phoneNumber);
@@ -2213,463 +1994,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  // Handle order management commands (nota, cancelar, programar, etc.)
-  async function handleOrderManagementCommands(customer: any, text: string, phoneNumber: string): Promise<boolean> {
-    try {
-      const words = text.split(' ');
-      const command = words[0];
-      
-      // Get customer's active orders
-      const orders = await storage.getOrdersByCustomer(customer.id);
-      const activeOrders = orders.filter(order => 
-        order.status === 'pending' || 
-        order.status === 'confirmed' || 
-        order.status === 'in_progress' || 
-        order.status === 'assigned'
-      );
-
-      if (activeOrders.length === 0) {
-        return false; // No active orders, let regular processing handle this
-      }
-
-      switch (command) {
-        case 'nota':
-          if (words.length < 3) {
-            await sendWhatsAppMessage(phoneNumber, 
-              "📝 *Agregar Nota*\n\n" +
-              "Formato: *nota [número] [mensaje]*\n\n" +
-              "Ejemplo: *nota 1 Favor llamar antes de llegar*"
-            );
-            return true;
-          }
-          
-          const noteOrderIndex = parseInt(words[1]) - 1;
-          if (noteOrderIndex < 0 || noteOrderIndex >= activeOrders.length) {
-            await sendWhatsAppMessage(phoneNumber, 
-              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
-            );
-            return true;
-          }
-          
-          const noteMessage = words.slice(2).join(' ');
-          const noteOrder = activeOrders[noteOrderIndex];
-          
-          // Add note to order
-          const currentNotes = noteOrder.notes ? noteOrder.notes + '\n' : '';
-          const newNotes = currentNotes + `[Cliente] ${new Date().toLocaleString('es-ES')}: ${noteMessage}`;
-          
-          await storage.updateOrder(noteOrder.id, { notes: newNotes });
-          
-          await sendWhatsAppMessage(phoneNumber, 
-            `✅ *Nota Agregada*\n\n` +
-            `📋 Pedido: ${noteOrder.orderNumber}\n` +
-            `📝 Nota: ${noteMessage}\n\n` +
-            `Tu nota ha sido enviada al técnico asignado.`
-          );
-          return true;
-
-        case 'cancelar':
-          if (words.length < 2) {
-            await sendWhatsAppMessage(phoneNumber, 
-              "❌ *Cancelar Pedido*\n\n" +
-              "Formato: *cancelar [número]*\n\n" +
-              "Ejemplo: *cancelar 1*"
-            );
-            return true;
-          }
-          
-          const cancelOrderIndex = parseInt(words[1]) - 1;
-          if (cancelOrderIndex < 0 || cancelOrderIndex >= activeOrders.length) {
-            await sendWhatsAppMessage(phoneNumber, 
-              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
-            );
-            return true;
-          }
-          
-          const cancelOrder = activeOrders[cancelOrderIndex];
-          
-          if (cancelOrder.status === 'in_progress') {
-            await sendWhatsAppMessage(phoneNumber, 
-              `⚠️ *No se puede cancelar*\n\n` +
-              `El pedido ${cancelOrder.orderNumber} ya está en proceso.\n\n` +
-              `Contacta directamente al técnico o llama a soporte.`
-            );
-            return true;
-          }
-          
-          await storage.updateOrder(cancelOrder.id, { 
-            status: 'cancelled',
-            notes: (cancelOrder.notes || '') + `\n[Cliente] ${new Date().toLocaleString('es-ES')}: Pedido cancelado por el cliente`
-          });
-          
-          await sendWhatsAppMessage(phoneNumber, 
-            `✅ *Pedido Cancelado*\n\n` +
-            `📋 Pedido: ${cancelOrder.orderNumber}\n` +
-            `💰 Total: $${parseFloat(cancelOrder.totalAmount).toFixed(2)}\n\n` +
-            `Tu pedido ha sido cancelado exitosamente.`
-          );
-          return true;
-
-        case 'programar':
-          if (words.length < 2) {
-            await sendWhatsAppMessage(phoneNumber, 
-              "⏰ *Programar Entrega*\n\n" +
-              "Formato: *programar [número]*\n\n" +
-              "Ejemplo: *programar 1*\n\n" +
-              "Te ayudaremos a coordinar la fecha y hora ideal."
-            );
-            return true;
-          }
-          
-          const scheduleOrderIndex = parseInt(words[1]) - 1;
-          if (scheduleOrderIndex < 0 || scheduleOrderIndex >= activeOrders.length) {
-            await sendWhatsAppMessage(phoneNumber, 
-              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
-            );
-            return true;
-          }
-          
-          const scheduleOrder = activeOrders[scheduleOrderIndex];
-          
-          await sendWhatsAppMessage(phoneNumber, 
-            `⏰ *Programar Entrega/Servicio*\n\n` +
-            `📋 Pedido: ${scheduleOrder.orderNumber}\n\n` +
-            `Nuestro equipo se comunicará contigo en las próximas horas para coordinar la fecha y hora que mejor te convenga.\n\n` +
-            `¿Hay algún horario específico que prefieras? Puedes enviar una nota con tu disponibilidad:\n\n` +
-            `*nota ${scheduleOrderIndex + 1} Disponible lunes a viernes 9am-5pm*`
-          );
-          return true;
-
-        case 'agregar':
-          if (words.length < 2) {
-            await sendWhatsAppMessage(phoneNumber, 
-              "➕ *Agregar Productos*\n\n" +
-              "Formato: *agregar [número]*\n\n" +
-              "Ejemplo: *agregar 1*\n\n" +
-              "Te permitiremos agregar más productos a tu pedido."
-            );
-            return true;
-          }
-          
-          const addOrderIndex = parseInt(words[1]) - 1;
-          if (addOrderIndex < 0 || addOrderIndex >= activeOrders.length) {
-            await sendWhatsAppMessage(phoneNumber, 
-              `❌ Número de pedido inválido. Tienes ${activeOrders.length} pedidos activos (1-${activeOrders.length}).`
-            );
-            return true;
-          }
-          
-          const addOrder = activeOrders[addOrderIndex];
-          
-          if (addOrder.status !== 'pending' && addOrder.status !== 'confirmed') {
-            await sendWhatsAppMessage(phoneNumber, 
-              `⚠️ *No se pueden agregar productos*\n\n` +
-              `El pedido ${addOrder.orderNumber} ya está siendo procesado.\n\n` +
-              `Para modificaciones, contacta directamente al técnico.`
-            );
-            return true;
-          }
-          
-          await sendWhatsAppMessage(phoneNumber, 
-            `➕ *Agregar Productos*\n\n` +
-            `📋 Pedido: ${addOrder.orderNumber}\n\n` +
-            `Puedes agregar más productos escribiendo *menu* para ver el catálogo.\n\n` +
-            `Los nuevos productos se agregarán a tu pedido existente.`
-          );
-          return true;
-
-        case 'llamar':
-          // Find order with assigned technician
-          const assignedOrder = activeOrders.find(order => order.assignedUser);
-          
-          if (!assignedOrder) {
-            await sendWhatsAppMessage(phoneNumber, 
-              `📞 *Contactar Técnico*\n\n` +
-              `Aún no hay un técnico asignado a tus pedidos.\n\n` +
-              `Nuestro equipo se comunicará contigo cuando asignen el técnico.`
-            );
-            return true;
-          }
-          
-          await sendWhatsAppMessage(phoneNumber, 
-            `📞 *Información de Contacto*\n\n` +
-            `👨‍🔧 Técnico: ${assignedOrder.assignedUser}\n` +
-            `📋 Pedido: ${assignedOrder.orderNumber}\n\n` +
-            `Para contactar directamente al técnico, llama a nuestra oficina y menciona el número de pedido.\n\n` +
-            `📱 Teléfono: (55) 1234-5678\n` +
-            `🕐 Horario: Lunes a Viernes 8:00 AM - 6:00 PM`
-          );
-          return true;
-
-        default:
-          return false; // Command not recognized, continue with regular processing
-      }
-    } catch (error) {
-      console.error('Error handling order management command:', error);
-      await sendWhatsAppMessage(phoneNumber, 
-        "❌ Hubo un error al procesar tu solicitud. Por favor, inténtalo más tarde."
-      );
-      return true;
-    }
-  }
-
   async function sendOrderStatus(customer: any, phoneNumber: string) {
-    try {
-      const orders = await storage.getOrdersByCustomer(customer.id);
-      const activeOrders = orders.filter(order => 
-        order.status === 'pending' || 
-        order.status === 'confirmed' || 
-        order.status === 'in_progress' || 
-        order.status === 'assigned'
-      );
-
-      if (activeOrders.length === 0) {
-        await sendWhatsAppMessage(phoneNumber, 
-          "📋 *Estado de Pedidos*\n\n" +
-          "No tienes pedidos activos en este momento.\n\n" +
-          "¿Te gustaría hacer un nuevo pedido? Escribe *menu* para ver nuestros productos y servicios."
-        );
-        return;
-      }
-
-      let statusMessage = `📋 *Tus Pedidos Activos (${activeOrders.length})*\n\n`;
-      
-      for (let i = 0; i < activeOrders.length; i++) {
-        const order = activeOrders[i];
-        const statusEmoji = getStatusEmoji(order.status);
-        const orderDate = new Date(order.createdAt).toLocaleDateString('es-ES');
-        
-        statusMessage += `${i + 1}. *Pedido ${order.orderNumber}*\n`;
-        statusMessage += `${statusEmoji} Estado: ${order.status}\n`;
-        statusMessage += `📅 Fecha: ${orderDate}\n`;
-        statusMessage += `💰 Total: $${parseFloat(order.totalAmount).toFixed(2)}\n`;
-        
-        if (order.assignedUser) {
-          statusMessage += `👨‍🔧 Técnico: ${order.assignedUser}\n`;
-        }
-        
-        if (order.notes) {
-          statusMessage += `📝 Notas: ${order.notes}\n`;
-        }
-        
-        statusMessage += "\n";
-      }
-      
-      // Try interactive buttons for order management
-      const interactiveMessage = {
-        messaging_product: "whatsapp",
-        to: phoneNumber,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: {
-            text: statusMessage + "\n*Opciones disponibles:*"
-          },
-          action: {
-            buttons: [
-              {
-                type: "reply",
-                reply: {
-                  id: "agregar_productos",
-                  title: "➕ Agregar"
-                }
-              },
-              {
-                type: "reply",
-                reply: {
-                  id: "contactar_tecnico",
-                  title: "📞 Contactar"
-                }
-              },
-              {
-                type: "reply",
-                reply: {
-                  id: "nuevo_pedido",
-                  title: "🛍️ Nuevo"
-                }
-              }
-            ]
-          }
-        }
-      };
-
-      try {
-        await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
-      } catch (error) {
-        console.log('Interactive message failed for order status, sending text fallback:', error);
-        // Fallback to text with command instructions
-        statusMessage += "*Opciones disponibles:*\n";
-        statusMessage += "📝 *nota* + número - Enviar nota (ej: nota 1 Cambio de horario)\n";
-        statusMessage += "❌ *cancelar* + número - Cancelar pedido (ej: cancelar 1)\n";
-        statusMessage += "⏰ *programar* + número - Programar fecha/hora (ej: programar 1)\n";
-        statusMessage += "➕ *agregar* + número - Agregar productos (ej: agregar 1)\n";
-        statusMessage += "📞 *llamar* - Contactar técnico asignado\n\n";
-        statusMessage += "Ejemplo: *nota 1 Favor llamar antes de llegar*";
-        
-        await sendWhatsAppMessage(phoneNumber, statusMessage);
-      }
-
-    } catch (error) {
-      console.error('Error sending order status:', error);
+    const orders = await storage.getAllOrders();
+    const customerOrders = orders.filter(order => order.customer.id === customer.id);
+    
+    if (customerOrders.length === 0) {
       await sendWhatsAppMessage(phoneNumber, 
-        "❌ Hubo un error al consultar tus pedidos. Por favor, inténtalo más tarde o contacta a soporte."
+        "📋 *Estado de Pedidos*\n\n" +
+        "No tienes pedidos registrados.\n\n" +
+        "Escribe *menu* para ver nuestros productos."
       );
+      return;
     }
+
+    const recentOrder = customerOrders[0];
+    const statusMessage = 
+      `📋 *Tu Último Pedido*\n\n` +
+      `🆔 ${recentOrder.orderNumber}\n` +
+      `📦 ${recentOrder.items.map(item => `${item.product.name} x${item.quantity}`).join(', ')}\n` +
+      `💰 Total: $${parseFloat(recentOrder.totalAmount).toLocaleString('es-MX')}\n` +
+      `📊 Estado: ${getStatusEmoji(recentOrder.status)} ${recentOrder.status}\n\n` +
+      "📞 Para más información, nuestro equipo se comunicará contigo.";
+
+    await sendWhatsAppMessage(phoneNumber, statusMessage);
   }
 
-  async function sendWelcomeMessage(phoneNumber: string, customer?: any) {
-    try {
-      // If no customer provided, try to get customer by phone
-      if (!customer) {
-        customer = await storage.getCustomerByPhone(phoneNumber);
-      }
+  async function sendWelcomeMessage(phoneNumber: string) {
+    const welcomeMessage = 
+      "👋 *¡Bienvenido!*\n\n" +
+      "Soy tu asistente virtual para pedidos.\n\n" +
+      "*Comandos disponibles:*\n" +
+      "🛍️ *menu* - Ver catálogo\n" +
+      "📍 *ubicacion* - Compartir ubicación\n" +
+      "📋 *pedido* - Estado de pedidos\n" +
+      "❓ *ayuda* - Ver opciones\n\n" +
+      "¿En qué puedo ayudarte hoy?";
 
-      let welcomeMessage = "";
-
-      // Personalized greeting for registered customers
-      if (customer && customer.name && customer.name !== 'Cliente Nuevo') {
-        const customerStats = await storage.getCustomerHistory(customer.id);
-        if (customerStats && customerStats.totalOrders > 0) {
-          welcomeMessage += `👋 *¡Hola ${customer.name}!* 📊 ${customerStats.totalOrders} pedidos • $${parseFloat(customerStats.totalSpent || '0').toFixed(2)} total\n\n`;
-        } else {
-          welcomeMessage += `👋 *¡Hola ${customer.name}!*\n\n`;
-        }
-      } else {
-        welcomeMessage += "👋 *¡Bienvenido!*\n\n";
-      }
-
-      welcomeMessage += "Soy tu asistente virtual para pedidos.\n\n";
-
-      // Check for active orders to decide whether to show tracking option
-      let hasActiveOrders = false;
-      if (customer) {
-        const customerOrders = await storage.getOrdersByCustomer(customer.id);
-        hasActiveOrders = customerOrders.some((order: any) => 
-          order.status === 'pending' || 
-          order.status === 'confirmed' || 
-          order.status === 'in_progress' || 
-          order.status === 'assigned'
-        );
-      }
-
-      // Try interactive buttons first, fallback to text if needed
-      let interactiveMessage;
-      
-      if (hasActiveOrders) {
-        interactiveMessage = {
-          messaging_product: "whatsapp",
-          to: phoneNumber,
-          type: "interactive",
-          interactive: {
-            type: "button",
-            body: {
-              text: welcomeMessage + "*Tienes pedidos en proceso:*\n\n¿Qué te gustaría hacer?"
-            },
-            action: {
-              buttons: [
-                {
-                  type: "reply",
-                  reply: {
-                    id: "seguimiento",
-                    title: "📋 Ver Pedidos"
-                  }
-                },
-                {
-                  type: "reply",
-                  reply: {
-                    id: "nuevo",
-                    title: "🛍️ Nuevo Pedido"
-                  }
-                },
-                {
-                  type: "reply",
-                  reply: {
-                    id: "ayuda",
-                    title: "❓ Ayuda"
-                  }
-                }
-              ]
-            }
-          }
-        };
-      } else {
-        interactiveMessage = {
-          messaging_product: "whatsapp",
-          to: phoneNumber,
-          type: "interactive",
-          interactive: {
-            type: "button",
-            body: {
-              text: welcomeMessage + "¿En qué puedo ayudarte hoy?"
-            },
-            action: {
-              buttons: [
-                {
-                  type: "reply",
-                  reply: {
-                    id: "menu",
-                    title: "🛍️ Ver Catálogo"
-                  }
-                },
-                {
-                  type: "reply",
-                  reply: {
-                    id: "ubicacion",
-                    title: "📍 Ubicación"
-                  }
-                },
-                {
-                  type: "reply",
-                  reply: {
-                    id: "ayuda",
-                    title: "❓ Ayuda"
-                  }
-                }
-              ]
-            }
-          }
-        };
-      }
-
-      try {
-        await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
-      } catch (error) {
-        console.log('Interactive message failed, sending text fallback:', error);
-        // Fallback to text message
-        let textMessage = welcomeMessage;
-        
-        if (hasActiveOrders) {
-          textMessage += "*Tienes pedidos en proceso:*\n\n";
-          textMessage += "📋 *seguimiento* - Ver pedidos en proceso\n";
-          textMessage += "🛍️ *nuevo* - Hacer nuevo pedido\n";
-          textMessage += "❓ *ayuda* - Ver opciones\n\n";
-          textMessage += "¿Qué te gustaría hacer?";
-        } else {
-          textMessage += "*Comandos disponibles:*\n";
-          textMessage += "🛍️ *menu* - Ver catálogo\n";
-          textMessage += "📍 *ubicacion* - Compartir ubicación\n";
-          textMessage += "❓ *ayuda* - Ver opciones\n\n";
-          textMessage += "¿En qué puedo ayudarte hoy?";
-        }
-
-        await sendWhatsAppMessage(phoneNumber, textMessage);
-      }
-
-    } catch (error) {
-      console.error('Error sending welcome message:', error);
-      // Fallback to simple text message
-      const fallbackMessage = 
-        "👋 *¡Bienvenido!*\n\n" +
-        "Soy tu asistente virtual para pedidos.\n\n" +
-        "*Comandos disponibles:*\n" +
-        "🛍️ *menu* - Ver catálogo\n" +
-        "📍 *ubicacion* - Compartir ubicación\n" +
-        "📋 *pedido* - Estado de pedidos\n" +
-        "❓ *ayuda* - Ver opciones\n\n" +
-        "¿En qué puedo ayudarte hoy?";
-
-      await sendWhatsAppMessage(phoneNumber, fallbackMessage);
-    }
+    await sendWhatsAppMessage(phoneNumber, welcomeMessage);
   }
 
   async function sendHelpMenu(phoneNumber: string) {
@@ -2799,67 +2160,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await response.json();
       
       if (!response.ok) {
-        // Log the specific error for debugging
-        await storage.addWhatsAppLog({
-          type: 'error',
-          phoneNumber: phoneNumber,
-          messageContent: 'Error enviando mensaje interactivo',
-          status: 'failed',
-          errorMessage: result.error?.message || 'Unknown error',
-          rawData: JSON.stringify({ error: result, message: message })
-        });
-
-        // Check if it's a permissions/interactive buttons error
-        if (result.error?.code === 131009 || result.error?.code === 131030 || 
-            (result.error?.message && result.error.message.includes('Parameter value is not valid'))) {
-          
-          // Fallback to text message with formatted options
-          let textFallback = message.interactive?.body?.text || message.body?.text || "";
-          
-          if (message.interactive?.action?.buttons) {
-            textFallback += "\n\n*Opciones disponibles:*";
-            message.interactive.action.buttons.forEach((button: any, index: number) => {
-              textFallback += `\n${index + 1}. ${button.reply.title}`;
-            });
-            textFallback += "\n\nEscribe el número de la opción o el comando correspondiente.";
-          }
-          
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: phoneNumber,
-            messageContent: 'Fallback automático a mensaje de texto',
-            status: 'processed',
-            rawData: JSON.stringify({ originalError: result.error, textFallback })
-          });
-          
-          // Send text fallback
-          return await sendWhatsAppMessage(phoneNumber, textFallback);
-        }
-        
         throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
       }
 
       await storage.addWhatsAppLog({
         type: 'outgoing',
-        phoneNumber: phoneNumber,
-        messageContent: 'Mensaje interactivo enviado exitosamente',
-        status: 'sent',
-        rawData: JSON.stringify({
+        message: 'Mensaje interactivo enviado',
+        data: {
           to: phoneNumber,
           messageId: result.messages?.[0]?.id,
           messageType: message.type
-        })
+        }
       });
 
       return result;
     } catch (error: any) {
       await storage.addWhatsAppLog({
         type: 'error',
-        phoneNumber: phoneNumber,
-        messageContent: 'Error crítico enviando mensaje interactivo',
-        status: 'failed',
-        errorMessage: error.message,
-        rawData: JSON.stringify({ error: error.message, phoneNumber })
+        message: 'Error enviando mensaje interactivo de WhatsApp',
+        data: { error: error.message, phoneNumber }
       });
       throw error;
     }
@@ -3868,118 +3187,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete notification" });
     }
   });
-
-  // Order status tracking function for WhatsApp
-  async function sendOrderStatusUpdate(customer: any, phoneNumber: string) {
-    try {
-      const customerOrders = await storage.getOrdersByCustomer(customer.id);
-      const activeOrders = customerOrders.filter((order: any) => 
-        order.status === 'pending' || 
-        order.status === 'confirmed' || 
-        order.status === 'in_progress' || 
-        order.status === 'assigned'
-      );
-
-      if (activeOrders.length === 0) {
-        await sendWhatsAppMessage(phoneNumber, 
-          "📝 No tienes pedidos activos en este momento.\n\n" +
-          "¿Te gustaría realizar un nuevo pedido? Escribe *menu* para ver nuestras opciones."
-        );
-        return;
-      }
-
-      let statusMessage = `📦 *Estado de tus pedidos*\n\n`;
-      
-      for (const order of activeOrders) {
-        const orderDate = new Date(order.createdAt).toLocaleDateString('es-MX', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        });
-        
-        // Status emoji and text
-        let statusIcon = '⏳';
-        let statusText = 'Pendiente';
-        
-        switch (order.status) {
-          case 'confirmed':
-            statusIcon = '✅';
-            statusText = 'Confirmado';
-            break;
-          case 'assigned':
-            statusIcon = '👨‍🔧';
-            statusText = 'Asignado';
-            break;
-          case 'in_progress':
-            statusIcon = '🔧';
-            statusText = 'En proceso';
-            break;
-        }
-
-        statusMessage += `🏷️ *${order.orderNumber}*\n`;
-        statusMessage += `📅 Fecha: ${orderDate}\n`;
-        statusMessage += `${statusIcon} Estado: ${statusText}\n`;
-        statusMessage += `💰 Total: $${parseFloat(order.totalAmount).toFixed(2)}\n`;
-        
-        if (order.assignedUser) {
-          statusMessage += `👨‍🔧 Técnico: ${order.assignedUser.name}\n`;
-        }
-        
-        if (order.scheduledDate) {
-          const scheduledDate = new Date(order.scheduledDate).toLocaleDateString('es-MX', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          });
-          statusMessage += `📅 Programado: ${scheduledDate}\n`;
-        }
-
-        // Show order items
-        if (order.items && order.items.length > 0) {
-          statusMessage += `📋 Productos/Servicios:\n`;
-          for (const item of order.items) {
-            statusMessage += `   • ${item.product?.name || 'Producto'} (x${item.quantity})\n`;
-          }
-        }
-        
-        statusMessage += `\n`;
-      }
-
-      statusMessage += `ℹ️ Para más información sobre un pedido específico, contáctanos directamente.\n\n`;
-      statusMessage += `¿Necesitas algo más? Escribe *menu* para ver todas las opciones.`;
-
-      await sendWhatsAppMessage(phoneNumber, statusMessage);
-
-      await storage.addWhatsAppLog({
-        type: 'info',
-        phoneNumber: phoneNumber,
-        messageContent: `Estado de pedidos enviado para cliente ${customer.name}`,
-        status: 'sent',
-        rawData: JSON.stringify({ 
-          customerId: customer.id,
-          activeOrdersCount: activeOrders.length,
-          orderNumbers: activeOrders.map((order: any) => order.orderNumber)
-        })
-      });
-
-    } catch (error) {
-      console.error('Error sending order status update:', error);
-      await sendWhatsAppMessage(phoneNumber, 
-        "❌ Hubo un error al obtener el estado de tus pedidos. Por favor, inténtalo de nuevo más tarde."
-      );
-      
-      await storage.addWhatsAppLog({
-        type: 'error',
-        phoneNumber: phoneNumber,
-        messageContent: 'Error al enviar estado de pedidos',
-        status: 'error',
-        errorMessage: (error as Error).message,
-        rawData: JSON.stringify({ customerId: customer.id, error: (error as Error).message })
-      });
-    }
-  }
 
   const httpServer = createServer(app);
   return httpServer;
