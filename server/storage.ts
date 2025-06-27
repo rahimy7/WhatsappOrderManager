@@ -1594,25 +1594,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTechnicianOrders(userId: number): Promise<OrderWithDetails[]> {
-    const ordersData = await db.select({
-      order: orders,
-      customer: customers,
-      assignedUser: users,
-      product: products
-    })
-    .from(orders)
-    .leftJoin(customers, eq(orders.customerId, customers.id))
-    .leftJoin(users, eq(orders.assignedUserId, users.id))
-    .leftJoin(products, eq(orders.productId, products.id))
-    .where(eq(orders.assignedUserId, userId))
-    .orderBy(desc(orders.createdAt));
+    try {
+      const result = await db.select()
+        .from(orders)
+        .where(eq(orders.assignedUserId, userId))
+        .orderBy(desc(orders.createdAt));
 
-    return ordersData.map(({ order, customer, assignedUser, product }) => ({
-      ...order,
-      customer: customer || { id: 0, name: 'Cliente desconocido', phone: '', address: null },
-      assignedUser: assignedUser || null,
-      product: product || { id: 0, name: 'Producto desconocido', type: 'product', price: 0 }
-    }));
+      // Get the details for each order
+      const ordersWithDetails = await Promise.all(
+        result.map(async (order) => {
+          return await this.getOrder(order.id);
+        })
+      );
+
+      return ordersWithDetails.filter(order => order !== undefined) as OrderWithDetails[];
+    } catch (error) {
+      console.error("Error in getTechnicianOrders:", error);
+      return [];
+    }
   }
 
   async updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined> {
