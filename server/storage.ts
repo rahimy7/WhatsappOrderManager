@@ -12,6 +12,7 @@ import {
   autoResponses,
   customerRegistrationFlows,
   employeeProfiles,
+  customerHistory,
   type User,
   type Customer,
   type Product,
@@ -38,6 +39,8 @@ import {
   type InsertAutoResponse,
   type InsertCustomerRegistrationFlow,
   type InsertEmployeeProfile,
+  type CustomerHistory,
+  type InsertCustomerHistory,
   type OrderWithDetails,
   type ConversationWithDetails,
 } from "@shared/schema";
@@ -1654,48 +1657,8 @@ export class DatabaseStorage implements IStorage {
     return profile || undefined;
   }
 
-  async getAllEmployeeProfiles(): Promise<(EmployeeProfile & { user: User })[]> {
-    const result = await db.select({
-      id: employeeProfiles.id,
-      userId: employeeProfiles.userId,
-      employeeId: employeeProfiles.employeeId,
-      department: employeeProfiles.department,
-      position: employeeProfiles.position,
-      hireDate: employeeProfiles.hireDate,
-      salary: employeeProfiles.salary,
-      commissionRate: employeeProfiles.commissionRate,
-      specializations: employeeProfiles.specializations,
-      certifications: employeeProfiles.certifications,
-      emergencyContact: employeeProfiles.emergencyContact,
-      emergencyPhone: employeeProfiles.emergencyPhone,
-      vehicleInfo: employeeProfiles.vehicleInfo,
-      territory: employeeProfiles.territory,
-      notes: employeeProfiles.notes,
-      isActive: employeeProfiles.isActive,
-      createdAt: employeeProfiles.createdAt,
-      updatedAt: employeeProfiles.updatedAt,
-      user: {
-        id: users.id,
-        username: users.username,
-        name: users.name,
-        role: users.role,
-        status: users.status,
-        phone: users.phone,
-        email: users.email,
-        address: users.address,
-        isActive: users.isActive,
-        department: users.department,
-        permissions: users.permissions,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        lastActive: users.lastActive,
-      }
-    })
-    .from(employeeProfiles)
-    .innerJoin(users, eq(employeeProfiles.userId, users.id))
-    .orderBy(employeeProfiles.createdAt);
-
-    return result;
+  async getAllEmployeeProfiles(): Promise<EmployeeProfile[]> {
+    return await db.select().from(employeeProfiles).orderBy(employeeProfiles.createdAt);
   }
 
   async createEmployeeProfile(profile: InsertEmployeeProfile): Promise<EmployeeProfile> {
@@ -1715,49 +1678,11 @@ export class DatabaseStorage implements IStorage {
     await db.delete(employeeProfiles).where(eq(employeeProfiles.id, id));
   }
 
-  async getEmployeesByDepartment(department: string): Promise<(EmployeeProfile & { user: User })[]> {
-    const result = await db.select({
-      id: employeeProfiles.id,
-      userId: employeeProfiles.userId,
-      employeeId: employeeProfiles.employeeId,
-      department: employeeProfiles.department,
-      position: employeeProfiles.position,
-      hireDate: employeeProfiles.hireDate,
-      salary: employeeProfiles.salary,
-      commissionRate: employeeProfiles.commissionRate,
-      specializations: employeeProfiles.specializations,
-      certifications: employeeProfiles.certifications,
-      emergencyContact: employeeProfiles.emergencyContact,
-      emergencyPhone: employeeProfiles.emergencyPhone,
-      vehicleInfo: employeeProfiles.vehicleInfo,
-      territory: employeeProfiles.territory,
-      notes: employeeProfiles.notes,
-      isActive: employeeProfiles.isActive,
-      createdAt: employeeProfiles.createdAt,
-      updatedAt: employeeProfiles.updatedAt,
-      user: {
-        id: users.id,
-        username: users.username,
-        name: users.name,
-        role: users.role,
-        status: users.status,
-        phone: users.phone,
-        email: users.email,
-        address: users.address,
-        isActive: users.isActive,
-        department: users.department,
-        permissions: users.permissions,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        lastActive: users.lastActive,
-      }
-    })
-    .from(employeeProfiles)
-    .innerJoin(users, eq(employeeProfiles.userId, users.id))
-    .where(eq(employeeProfiles.department, department))
-    .orderBy(employeeProfiles.createdAt);
-
-    return result;
+  async getEmployeesByDepartment(department: string): Promise<EmployeeProfile[]> {
+    return await db.select()
+      .from(employeeProfiles)
+      .where(eq(employeeProfiles.department, department))
+      .orderBy(employeeProfiles.createdAt);
   }
 
   async generateEmployeeId(department: string): Promise<string> {

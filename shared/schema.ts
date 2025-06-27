@@ -28,6 +28,21 @@ export const customers = pgTable("customers", {
   latitude: decimal("latitude", { precision: 10, scale: 8 }),
   longitude: decimal("longitude", { precision: 11, scale: 8 }),
   lastContact: timestamp("last_contact"),
+  registrationDate: timestamp("registration_date").defaultNow(),
+  totalOrders: integer("total_orders").default(0),
+  totalSpent: decimal("total_spent", { precision: 10, scale: 2 }).default("0.00"),
+  isVip: boolean("is_vip").default(false),
+  notes: text("notes"),
+});
+
+export const customerHistory = pgTable("customer_history", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id).notNull(),
+  action: text("action").notNull(), // 'order_created', 'order_completed', 'contact_updated', 'note_added'
+  description: text("description").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }),
+  metadata: text("metadata"), // JSON string for additional data
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const products = pgTable("products", {
@@ -288,6 +303,10 @@ export type InsertCustomerRegistrationFlow = z.infer<typeof insertCustomerRegist
 
 export type EmployeeProfile = typeof employeeProfiles.$inferSelect;
 export type InsertEmployeeProfile = z.infer<typeof insertEmployeeProfileSchema>;
+
+export const insertCustomerHistorySchema = createInsertSchema(customerHistory);
+export type CustomerHistory = typeof customerHistory.$inferSelect;
+export type InsertCustomerHistory = z.infer<typeof insertCustomerHistorySchema>;
 
 // Extended types for API responses
 export type OrderWithDetails = Order & {
