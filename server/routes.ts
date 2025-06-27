@@ -2277,12 +2277,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 await storage.addWhatsAppLog({
                   type: 'debug',
                   phoneNumber: null,
-                  messageContent: `Procesando change: ${change.field}`,
+                  messageContent: `Procesando change: ${change.field || 'field not specified'}`,
                   status: 'processing',
-                  rawData: JSON.stringify({ field: change.field, hasValue: !!change.value })
+                  rawData: JSON.stringify({ field: change.field, hasValue: !!change.value, hasMessages: !!(change.value && change.value.messages) })
                 });
 
-                if (change.field === "messages") {
+                // For real WhatsApp webhooks, check for field === "messages"
+                // For test webhooks, check if value has messages
+                if (change.field === "messages" || (change.value && change.value.messages && change.value.messages.length > 0)) {
                   await storage.addWhatsAppLog({
                     type: 'debug',
                     phoneNumber: null,
