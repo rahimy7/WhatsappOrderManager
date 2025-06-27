@@ -184,7 +184,46 @@ export const employeeProfiles = pgTable("employee_profiles", {
   salary: decimal("salary", { precision: 10, scale: 2 }),
   commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }), // For sales roles
   territory: text("territory"), // Geographic assignment for delivery/sales
+  // Location fields for automatic assignment
+  baseLatitude: decimal("base_latitude", { precision: 10, scale: 8 }), // Employee's base location
+  baseLongitude: decimal("base_longitude", { precision: 11, scale: 8 }),
+  baseAddress: text("base_address"), // Readable address of base location
+  serviceRadius: decimal("service_radius", { precision: 5, scale: 2 }).default("10.0"), // Service radius in km
+  maxDailyOrders: integer("max_daily_orders").default(5), // Maximum orders per day
+  currentOrders: integer("current_orders").default(0), // Current active orders
+  availabilityHours: text("availability_hours"), // JSON: {"monday": "08:00-18:00", ...}
+  skillLevel: integer("skill_level").default(1), // 1-5 skill rating
   notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Automatic assignment rules
+export const assignmentRules = pgTable("assignment_rules", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(1), // Higher number = higher priority
+  // Location criteria
+  useLocationBased: boolean("use_location_based").default(true),
+  maxDistanceKm: decimal("max_distance_km", { precision: 5, scale: 2 }).default("15.0"),
+  // Specialization criteria
+  useSpecializationBased: boolean("use_specialization_based").default(true),
+  requiredSpecializations: text("required_specializations").array(), // Required specializations for this rule
+  // Workload criteria
+  useWorkloadBased: boolean("use_workload_based").default(true),
+  maxOrdersPerTechnician: integer("max_orders_per_technician").default(5),
+  // Time criteria
+  useTimeBased: boolean("use_time_based").default(true),
+  availabilityRequired: boolean("availability_required").default(true),
+  // Product/Service criteria
+  applicableProducts: text("applicable_products").array(), // Product IDs this rule applies to
+  applicableServices: text("applicable_services").array(), // Service categories
+  // Assignment behavior
+  assignmentMethod: text("assignment_method").default("closest_available"), // closest_available, least_busy, highest_skill, round_robin
+  autoAssign: boolean("auto_assign").default(true), // Automatically assign or just suggest
+  notifyCustomer: boolean("notify_customer").default(true),
+  estimatedResponseTime: integer("estimated_response_time").default(60), // minutes
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -264,6 +303,12 @@ export const insertEmployeeProfileSchema = createInsertSchema(employeeProfiles).
   updatedAt: true,
 });
 
+export const insertAssignmentRuleSchema = createInsertSchema(assignmentRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -303,6 +348,9 @@ export type InsertCustomerRegistrationFlow = z.infer<typeof insertCustomerRegist
 
 export type EmployeeProfile = typeof employeeProfiles.$inferSelect;
 export type InsertEmployeeProfile = z.infer<typeof insertEmployeeProfileSchema>;
+
+export type AssignmentRule = typeof assignmentRules.$inferSelect;
+export type InsertAssignmentRule = z.infer<typeof insertAssignmentRuleSchema>;
 
 export const insertCustomerHistorySchema = createInsertSchema(customerHistory);
 export type CustomerHistory = typeof customerHistory.$inferSelect;
