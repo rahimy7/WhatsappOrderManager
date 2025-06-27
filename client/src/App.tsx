@@ -57,10 +57,22 @@ function ProtectedRoute({ component: Component, permission }: { component: React
   return <Component />;
 }
 
+function RoleDashboard() {
+  const { user } = useAuth();
+  
+  // Redireccionar técnicos a su dashboard específico
+  if (user?.role === 'technician') {
+    return <ProtectedRoute component={TechnicianDashboard} permission="technician_work" />;
+  }
+  
+  // Administradores y otros roles al dashboard principal
+  return <ProtectedRoute component={Dashboard} permission="view_dashboard" />;
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={() => <ProtectedRoute component={Dashboard} permission="view_dashboard" />} />
+      <Route path="/" component={RoleDashboard} />
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} permission="view_dashboard" />} />
       <Route path="/technician-dashboard" component={() => <ProtectedRoute component={TechnicianDashboard} permission="technician_work" />} />
       <Route path="/orders" component={() => <ProtectedRoute component={Orders} permission="view_orders" />} />
