@@ -711,8 +711,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
               await storage.createRegistrationFlow({
                 phoneNumber: from,
-                step: 'awaiting_name',
-                data: JSON.stringify({ phone: from })
+                currentStep: 'awaiting_name',
+                collectedData: JSON.stringify({ phone: from }),
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
               });
               
               await storage.addWhatsAppLog({
@@ -1922,6 +1923,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await response.json();
       
       if (!response.ok) {
+        // Check if it's the development restriction error (phone not in allowed list)
+        if (result.error?.code === 131030) {
+          await storage.addWhatsAppLog({
+            type: 'warning',
+            phoneNumber: phoneNumber,
+            messageContent: 'Número no autorizado en cuenta de desarrollo',
+            status: 'restricted',
+            errorMessage: 'Account limitation: Phone number not in allowed list',
+            rawData: JSON.stringify({
+              error: result.error,
+              isDevelopmentRestriction: true,
+              recommendation: 'Add phone number to allowed list in Meta Business settings'
+            })
+          });
+          return { 
+            messages: [{ id: 'dev_restricted' }], 
+            isDevelopmentRestriction: true,
+            phoneNumber 
+          };
+        }
         throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
       }
 
