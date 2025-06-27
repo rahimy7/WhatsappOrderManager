@@ -39,6 +39,10 @@ const createEmployeeSchema = z.object({
   salary: z.string().optional(),
   commissionRate: z.string().optional(),
   territory: z.string().optional(),
+  baseAddress: z.string().optional(),
+  serviceRadius: z.string().optional(),
+  maxDailyOrders: z.string().optional(),
+  skillLevel: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -223,10 +227,6 @@ export default function Employees() {
       vehicleInfo: data.vehicleInfo || null,
       certifications: data.certifications ? data.certifications.split(',').map(s => s.trim()) : [],
       territory: data.territory || null,
-      baseAddress: data.baseAddress || null,
-      serviceRadius: data.serviceRadius || null,
-      maxDailyOrders: data.maxDailyOrders || null,
-      skillLevel: data.skillLevel || null,
       notes: data.notes || null,
       user: {
         name: data.name,
@@ -904,65 +904,19 @@ export default function Employees() {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={editForm.control}
-                  name="territory"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Territorio</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Zona Norte" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={editForm.control}
-                  name="serviceRadius"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Radio de Servicio (km)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="50" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={editForm.control}
-                  name="maxDailyOrders"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Máximo Órdenes Diarias</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="8" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={editForm.control}
-                  name="skillLevel"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nivel de Habilidad (1-10)</FormLabel>
-                      <FormControl>
-                        <Input type="number" min="1" max="10" placeholder="8" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={editForm.control}
+                name="territory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Territorio</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Zona Norte" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={editForm.control}
