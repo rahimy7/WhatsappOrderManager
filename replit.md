@@ -277,6 +277,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Webhook processing working correctly with proper customer registration flows for new users
   - Token authentication verified and functional (expires August 25, 2025)
   - WhatsApp Business API integration ready for production with authorized phone numbers
+- June 27, 2025. Customer registration flow optimized for better sales experience:
+  - Modified initial contact flow: new customers now see product/service menu directly without forced name registration
+  - Customer name collection moved to order completion process - only collected when customer makes an actual purchase
+  - Existing customers with complete profiles receive personalized greetings with name and order history
+  - Temporary customer records created automatically for new contacts with generic names (Cliente XXXX)
+  - Registration flows now activate only during order process: product selection → quantity → order → name → address → payment
+  - Enhanced customer experience: browse products freely, register details only when ready to purchase
+  - Sales-focused approach: prioritize showing value proposition before requesting personal information
 
 ## User Preferences
 
