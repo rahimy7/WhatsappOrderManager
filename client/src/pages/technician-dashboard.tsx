@@ -1,13 +1,31 @@
-import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, CheckCircle, AlertCircle, MapPin, Phone, User, DollarSign } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import type { Order } from "@shared/schema";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, Clock, AlertCircle, User, Phone, MapPin, DollarSign } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+type Order = {
+  id: number;
+  orderNumber: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  assignedTo: number | null;
+  customer: {
+    id: number;
+    name: string;
+    phone: string;
+    address: string | null;
+  };
+  product: {
+    id: number;
+    name: string;
+    type: string;
+  };
+};
 
 type OrderWithDetails = Order & {
   customer: {
@@ -23,370 +41,387 @@ type OrderWithDetails = Order & {
   };
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const variants = {
-    'pending': 'secondary',
-    'confirmed': 'default',
-    'assigned': 'outline',
-    'in_progress': 'default',
-    'completed': 'default',
-    'cancelled': 'destructive'
-  } as const;
+type TechnicianMetrics = {
+  ordersToday: number;
+  pendingOrders: number;
+  inProgressOrders: number;
+  completedOrders: number;
+  todayIncome: number;
+};
 
-  const colors = {
-    'pending': 'bg-yellow-100 text-yellow-800',
-    'confirmed': 'bg-blue-100 text-blue-800',
-    'assigned': 'bg-purple-100 text-purple-800',
-    'in_progress': 'bg-green-100 text-green-800',
-    'completed': 'bg-gray-100 text-gray-800',
-    'cancelled': 'bg-red-100 text-red-800'
+type User = {
+  id: number;
+  username: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return { label: 'Pendiente', variant: 'secondary' as const };
+      case 'confirmed':
+        return { label: 'Confirmado', variant: 'default' as const };
+      case 'assigned':
+        return { label: 'Asignado', variant: 'default' as const };
+      case 'in_progress':
+        return { label: 'En Progreso', variant: 'default' as const };
+      case 'completed':
+        return { label: 'Completado', variant: 'default' as const };
+      case 'cancelled':
+        return { label: 'Cancelado', variant: 'destructive' as const };
+      default:
+        return { label: status, variant: 'secondary' as const };
+    }
   };
 
-  return (
-    <Badge className={colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
-      {status.replace('_', ' ').toUpperCase()}
-    </Badge>
-  );
+  const config = getStatusConfig(status);
+  return <Badge variant={config.variant}>{config.label}</Badge>;
 }
 
 export default function TechnicianDashboard() {
-  const { user } = useAuth();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
 
-  // Obtener órdenes asignadas al técnico
-  const { data: orders = [], isLoading } = useQuery<OrderWithDetails[]>({
-    queryKey: ['/api/technician/orders'],
-    enabled: !!user?.id,
+  // Fetch current user
+  const { data: user } = useQuery<User>({
+    queryKey: ["/api/auth/me"],
   });
 
-  // Obtener métricas específicas del técnico
-  const { data: technicianMetrics = {}, isLoading: metricsLoading } = useQuery({
-    queryKey: ['/api/technician/metrics'],
-    enabled: !!user?.id,
+  // Fetch technician orders
+  const { data: orders = [], isLoading: ordersLoading } = useQuery<OrderWithDetails[]>({
+    queryKey: ["/api/orders/technician"],
   });
 
-  // Mutation para actualizar estado de orden
-  const updateOrderStatus = useMutation({
-    mutationFn: async ({ orderId, status }: { orderId: number; status: string }) => {
-      return apiRequest('PATCH', `/api/orders/${orderId}/status`, { status });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/orders/technician'] });
-      setSelectedOrder(null);
-    },
+  // Fetch technician metrics
+  const { data: technicianMetrics = {} as TechnicianMetrics } = useQuery<TechnicianMetrics>({
+    queryKey: ["/api/dashboard/technician/metrics"],
   });
 
-  // Mutation para actualizar estado del técnico
+  // Update user status mutation
   const updateUserStatus = useMutation({
     mutationFn: async (status: string) => {
-      return apiRequest('PATCH', `/api/users/${user?.id}/status`, { status });
+      return apiRequest("PATCH", `/api/users/${user?.id}/status`, { status });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({
+        title: "Estado actualizado",
+        description: "Tu estado ha sido actualizado correctamente",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el estado",
+        variant: "destructive",
+      });
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Update order status mutation
+  const updateOrderStatus = useMutation({
+    mutationFn: async ({ orderId, status }: { orderId: number; status: string }) => {
+      return apiRequest("PATCH", `/api/orders/${orderId}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/technician"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/technician/metrics"] });
+      toast({
+        title: "Orden actualizada",
+        description: "El estado de la orden ha sido actualizado",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar la orden",
+        variant: "destructive",
+      });
+    },
+  });
 
-  // Usar métricas del endpoint específico del técnico
-  const pendingOrders = orders.filter(order => order.status === 'pending' || order.status === 'confirmed');
-  const inProgressOrders = orders.filter(order => order.status === 'assigned' || order.status === 'in_progress');
+  // Filter orders by status
+  const pendingOrders = orders.filter(order => order.status === 'assigned' || order.status === 'pending');
+  const inProgressOrders = orders.filter(order => order.status === 'in_progress');
   const completedOrders = orders.filter(order => order.status === 'completed');
-  const completedToday = orders.filter(order => {
+  
+  // Calculate completed today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const completedToday = completedOrders.filter(order => {
     const orderDate = new Date(order.updatedAt);
     orderDate.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     return order.status === 'completed' && orderDate.getTime() === today.getTime();
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Panel de Técnico
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Bienvenido, {user?.name}
-          </p>
-        </div>
-        
-        <div className="flex gap-2 mt-4 md:mt-0">
-          <Button
-            variant={user?.status === 'active' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => updateUserStatus.mutate('active')}
-            disabled={updateUserStatus.isPending}
-          >
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Disponible
-          </Button>
-          <Button
-            variant={user?.status === 'busy' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => updateUserStatus.mutate('busy')}
-            disabled={updateUserStatus.isPending}
-          >
-            <Clock className="w-4 h-4 mr-2" />
-            Ocupado
-          </Button>
-          <Button
-            variant={user?.status === 'break' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => updateUserStatus.mutate('break')}
-            disabled={updateUserStatus.isPending}
-          >
-            <AlertCircle className="w-4 h-4 mr-2" />
-            En Descanso
-          </Button>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header móvil optimizado */}
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              Panel de Técnico
+            </h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {user?.name}
+            </p>
+          </div>
+          
+          {/* Estado del técnico - Compacto para móvil */}
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-gray-500 hidden sm:block">Estado:</div>
+            <div className="flex gap-1">
+              <Button
+                variant={user?.status === 'active' ? 'default' : 'ghost'}
+                size="sm"
+                className="px-2 py-1 text-xs"
+                onClick={() => updateUserStatus.mutate('active')}
+                disabled={updateUserStatus.isPending}
+              >
+                <CheckCircle className="w-3 h-3 mr-1" />
+                <span className="hidden sm:inline">Disponible</span>
+              </Button>
+              <Button
+                variant={user?.status === 'busy' ? 'default' : 'ghost'}
+                size="sm"
+                className="px-2 py-1 text-xs"
+                onClick={() => updateUserStatus.mutate('busy')}
+                disabled={updateUserStatus.isPending}
+              >
+                <Clock className="w-3 h-3 mr-1" />
+                <span className="hidden sm:inline">Ocupado</span>
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Estadísticas Rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Órdenes Pendientes</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{pendingOrders.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Asignadas a ti
-            </p>
-          </CardContent>
-        </Card>
+      <div className="p-4 space-y-6">
+        {/* Métricas del técnico - Optimizadas para móvil */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Pendientes</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{pendingOrders.length}</p>
+                </div>
+                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">En Progreso</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{inProgressOrders.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Trabajos activos
-            </p>
-          </CardContent>
-        </Card>
+          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">En Progreso</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{inProgressOrders.length}</p>
+                </div>
+                <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completadas Hoy</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{completedToday.length}</div>
-            <p className="text-xs text-muted-foreground">
-              {new Date().toLocaleDateString()}
-            </p>
-          </CardContent>
-        </Card>
+          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Hoy</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{completedToday.length}</p>
+                </div>
+                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Completadas</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{completedOrders.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Todas las órdenes completadas
-            </p>
-          </CardContent>
-        </Card>
+          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Total</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{completedOrders.length}</p>
+                </div>
+                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <CheckCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ingresos Hoy</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
+          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Ingresos</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">${technicianMetrics.todayIncome || 0}</p>
+                </div>
+                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Órdenes de Trabajo */}
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-semibold">Mis Órdenes</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${technicianMetrics.todayIncome || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Trabajos completados hoy
-            </p>
+          <CardContent className="p-0">
+            <Tabs defaultValue="pending" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 h-12 bg-gray-50 dark:bg-gray-700/50 rounded-lg m-4 mb-0">
+                <TabsTrigger value="pending" className="text-sm font-medium">
+                  Pendientes ({pendingOrders.length})
+                </TabsTrigger>
+                <TabsTrigger value="progress" className="text-sm font-medium">
+                  En Progreso ({inProgressOrders.length})
+                </TabsTrigger>
+                <TabsTrigger value="completed" className="text-sm font-medium">
+                  Historial ({completedOrders.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="pending" className="p-4 space-y-3">
+                {pendingOrders.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No tienes órdenes pendientes</p>
+                  </div>
+                ) : (
+                  pendingOrders.map((order) => (
+                    <div key={order.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border-l-4 border-l-blue-500">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white">#{order.orderNumber}</h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{order.product.name}</p>
+                        </div>
+                        <StatusBadge status={order.status} />
+                      </div>
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <User className="w-4 h-4 text-gray-500" />
+                          <span>{order.customer.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="w-4 h-4 text-gray-500" />
+                          <span>{order.customer.phone}</span>
+                        </div>
+                        {order.customer.address && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <MapPin className="w-4 h-4 text-gray-500" />
+                            <span className="truncate">{order.customer.address}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => updateOrderStatus.mutate({ orderId: order.id, status: 'in_progress' })}
+                          disabled={updateOrderStatus.isPending}
+                        >
+                          Iniciar Trabajo
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+
+              <TabsContent value="progress" className="p-4 space-y-3">
+                {inProgressOrders.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No tienes órdenes en progreso</p>
+                  </div>
+                ) : (
+                  inProgressOrders.map((order) => (
+                    <div key={order.id} className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border-l-4 border-l-orange-500">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white">#{order.orderNumber}</h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{order.product.name}</p>
+                        </div>
+                        <StatusBadge status={order.status} />
+                      </div>
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <User className="w-4 h-4 text-gray-500" />
+                          <span>{order.customer.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="w-4 h-4 text-gray-500" />
+                          <span>{order.customer.phone}</span>
+                        </div>
+                        {order.customer.address && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <MapPin className="w-4 h-4 text-gray-500" />
+                            <span className="truncate">{order.customer.address}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => updateOrderStatus.mutate({ orderId: order.id, status: 'completed' })}
+                          disabled={updateOrderStatus.isPending}
+                        >
+                          Completar
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+
+              <TabsContent value="completed" className="p-4 space-y-3">
+                {completedOrders.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>Aún no has completado órdenes</p>
+                  </div>
+                ) : (
+                  completedOrders.slice(0, 10).map((order) => (
+                    <div key={order.id} className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border-l-4 border-l-green-500">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 dark:text-white">#{order.orderNumber}</h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{order.product.name}</p>
+                        </div>
+                        <StatusBadge status={order.status} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <User className="w-4 h-4 text-gray-500" />
+                          <span>{order.customer.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <span>Completado: {new Date(order.updatedAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>
-
-      {/* Órdenes de Trabajo */}
-      <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="pending">Pendientes ({pendingOrders.length})</TabsTrigger>
-          <TabsTrigger value="progress">En Progreso ({inProgressOrders.length})</TabsTrigger>
-          <TabsTrigger value="completed">Historial ({completedOrders.length})</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pending" className="mt-6">
-          <div className="grid gap-4">
-            {pendingOrders.length === 0 ? (
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <p className="text-gray-500">No tienes órdenes pendientes</p>
-                </CardContent>
-              </Card>
-            ) : (
-              pendingOrders.map((order) => (
-                <Card key={order.id} className="cursor-pointer hover:shadow-md transition-shadow">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-lg">#{order.orderNumber}</CardTitle>
-                        <CardDescription>{order.product.name}</CardDescription>
-                      </div>
-                      <StatusBadge status={order.status} />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">{order.customer.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">{order.customer.phone}</span>
-                      </div>
-                      {order.customer.address && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm">{order.customer.address}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">
-                          Creado: {new Date(order.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button 
-                        size="sm"
-                        onClick={() => updateOrderStatus.mutate({ orderId: order.id, status: 'in_progress' })}
-                        disabled={updateOrderStatus.isPending}
-                      >
-                        Iniciar Trabajo
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="progress" className="mt-6">
-          <div className="grid gap-4">
-            {inProgressOrders.length === 0 ? (
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <p className="text-gray-500">No tienes trabajos en progreso</p>
-                </CardContent>
-              </Card>
-            ) : (
-              inProgressOrders.map((order) => (
-                <Card key={order.id} className="border-l-4 border-l-green-500">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-lg">#{order.orderNumber}</CardTitle>
-                        <CardDescription>{order.product.name}</CardDescription>
-                      </div>
-                      <StatusBadge status={order.status} />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">{order.customer.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">{order.customer.phone}</span>
-                      </div>
-                      {order.customer.address && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm">{order.customer.address}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button 
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateOrderStatus.mutate({ orderId: order.id, status: 'completed' })}
-                        disabled={updateOrderStatus.isPending}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Marcar Completado
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="completed" className="mt-6">
-          <div className="grid gap-4">
-            {completedOrders.length === 0 ? (
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <p className="text-gray-500">No tienes órdenes completadas</p>
-                </CardContent>
-              </Card>
-            ) : (
-              completedOrders.map((order) => (
-                <Card key={order.id} className="border-l-4 border-l-gray-500">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-lg">#{order.orderNumber}</CardTitle>
-                        <CardDescription>{order.product.name}</CardDescription>
-                      </div>
-                      <StatusBadge status={order.status} />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm">{order.customer.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                        <span className="text-sm">
-                          Completado: {new Date(order.updatedAt).toLocaleDateString()} - {new Date(order.updatedAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }
