@@ -14,7 +14,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, User, Users, Briefcase, Truck, Headphones, Shield, Search, Filter } from "lucide-react";
+import { Plus, User, Users, Briefcase, Truck, Headphones, Shield, Search, Filter, Edit2 } from "lucide-react";
 import type { User as UserType, EmployeeProfile, InsertEmployeeProfile, InsertUser } from "@shared/schema";
 
 // Validation schemas
@@ -695,6 +695,312 @@ export default function Employees() {
           </CardContent>
         </Card>
       )}
+
+      {/* Edit Employee Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Empleado</DialogTitle>
+            <DialogDescription>
+              Modifica la información del empleado
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Basic User Information */}
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre Completo</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Juan Pérez" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Rol</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar rol" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="technician">Técnico</SelectItem>
+                          <SelectItem value="seller">Vendedor</SelectItem>
+                          <SelectItem value="delivery">Delivery</SelectItem>
+                          <SelectItem value="support">Soporte</SelectItem>
+                          <SelectItem value="customer_service">Atención al Cliente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Teléfono</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+52 555 123 4567" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="juan@empresa.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="department"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Departamento</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar departamento" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="technical">Técnico</SelectItem>
+                          <SelectItem value="sales">Ventas</SelectItem>
+                          <SelectItem value="admin">Administrativo</SelectItem>
+                          <SelectItem value="delivery">Delivery</SelectItem>
+                          <SelectItem value="support">Soporte</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="position"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cargo</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Técnico Senior" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={editForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dirección</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Calle Principal 123, Colonia Centro" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="emergencyContact"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contacto de Emergencia</FormLabel>
+                      <FormControl>
+                        <Input placeholder="María Pérez" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="emergencyPhone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Teléfono de Emergencia</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+52 555 987 6543" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={editForm.control}
+                name="specializations"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Especializaciones (separadas por coma)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Aires Acondicionados, Refrigeración, Mantenimiento" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="vehicleInfo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Información del Vehículo</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Honda CRV 2020 - ABC-123" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="certifications"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Certificaciones (separadas por coma)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="EPA 608, NATE, HVAC Excellence" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="territory"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Territorio</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Zona Norte" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="serviceRadius"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Radio de Servicio (km)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="50" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="maxDailyOrders"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Máximo Órdenes Diarias</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="8" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="skillLevel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nivel de Habilidad (1-10)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="1" max="10" placeholder="8" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={editForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notas</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Notas adicionales sobre el empleado..."
+                        className="min-h-[100px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={updateEmployeeMutation.isPending}
+                >
+                  {updateEmployeeMutation.isPending ? "Actualizando..." : "Actualizar Empleado"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
