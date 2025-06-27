@@ -667,15 +667,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           // Find or create customer
+          await storage.addWhatsAppLog({
+            type: 'debug',
+            phoneNumber: from,
+            messageContent: 'Buscando cliente por teléfono',
+            status: 'processing',
+            rawData: JSON.stringify({ phoneNumber: from })
+          });
+
           let customer = await storage.getCustomerByPhone(from);
           let isNewCustomer = false;
           
+          await storage.addWhatsAppLog({
+            type: 'debug',
+            phoneNumber: from,
+            messageContent: `Cliente ${customer ? 'encontrado' : 'no encontrado'}`,
+            status: customer ? 'found' : 'not_found',
+            rawData: JSON.stringify({ 
+              customerId: customer?.id || null,
+              customerName: customer?.name || null
+            })
+          });
+          
           if (!customer) {
             // Check if there's an ongoing registration flow
+            await storage.addWhatsAppLog({
+              type: 'debug',
+              phoneNumber: from,
+              messageContent: 'Verificando flujo de registro existente',
+              status: 'processing'
+            });
+
             const registrationFlow = await storage.getRegistrationFlow(from);
             
             if (!registrationFlow) {
               // New customer, start registration flow
+              await storage.addWhatsAppLog({
+                type: 'debug',
+                phoneNumber: from,
+                messageContent: 'Iniciando flujo de registro para nuevo cliente',
+                status: 'processing'
+              });
+
               await storage.createRegistrationFlow({
                 phoneNumber: from,
                 step: 'awaiting_name',
@@ -683,9 +716,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
               
               await sendRegistrationWelcome(from);
+              
+              await storage.addWhatsAppLog({
+                type: 'debug',
+                phoneNumber: from,
+                messageContent: 'Mensaje de bienvenida enviado, esperando nombre',
+                status: 'success'
+              });
               return; // Don't process the message further, wait for name
             } else {
               // Handle registration flow
+              await storage.addWhatsAppLog({
+                type: 'debug',
+                phoneNumber: from,
+                messageContent: 'Procesando flujo de registro existente',
+                status: 'processing',
+                rawData: JSON.stringify({ step: registrationFlow.currentStep })
+              });
               await handleRegistrationFlow(from, messageText, registrationFlow);
               return;
             }
@@ -693,6 +740,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Existing customer - check if name is generic (needs completion)
             if (customer.name.startsWith('Cliente ')) {
               isNewCustomer = true;
+              await storage.addWhatsAppLog({
+                type: 'debug',
+                phoneNumber: from,
+                messageContent: 'Cliente existente necesita completar registro',
+                status: 'processing'
+              });
             }
           }
 
@@ -1947,26 +2000,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const body = req.body;
       
-      // Log incoming webhook
+      // Log incoming webhook with detailed structure
       await storage.addWhatsAppLog({
         type: 'incoming',
-        message: 'Webhook recibido de WhatsApp',
-        data: body
+        phoneNumber: null,
+        messageContent: 'Webhook recibido de WhatsApp',
+        status: 'received',
+        rawData: JSON.stringify(body)
       });
 
       // Check if it's a WhatsApp API POST request
       if (body.object === "whatsapp_business_account") {
         if (body.entry && body.entry.length > 0) {
           for (const entry of body.entry) {
+            await storage.addWhatsAppLog({
+              type: 'debug',
+              phoneNumber: null,
+              messageContent: `Procesando entry del webhook`,
+              status: 'processing',
+              rawData: JSON.stringify({ entryId: entry.id, changesCount: entry.changes?.length || 0 })
+            });
+
             if (entry.changes && entry.changes.length > 0) {
               for (const change of entry.changes) {
+                await storage.addWhatsAppLog({
+                  type: 'debug',
+                  phoneNumber: null,
+                  messageContent: `Procesando change: ${change.field}`,
+                  status: 'processing',
+                  rawData: JSON.stringify({ field: change.field, hasValue: !!change.value })
+                });
+
                 if (change.field === "messages") {
+                  await storage.addWhatsAppLog({
+                    type: 'debug',
+                    phoneNumber: null,
+                    messageContent: 'Iniciando procesamiento de mensaje WhatsApp',
+                    status: 'processing',
+                    rawData: JSON.stringify({ value: change.value })
+                  });
+                  
                   await processWhatsAppMessage(change.value);
+                  
+                  await storage.addWhatsAppLog({
+                    type: 'debug',
+                    phoneNumber: null,
+                    messageContent: 'Mensaje WhatsApp procesado exitosamente',
+                    status: 'success'
+                  });
                 }
               }
             }
           }
         }
+      } else {
+        await storage.addWhatsAppLog({
+          type: 'warning',
+          phoneNumber: null,
+          messageContent: `Webhook recibido con object: ${body.object}`,
+          status: 'ignored',
+          rawData: JSON.stringify(body)
+        });
       }
 
       res.status(200).send("EVENT_RECEIVED");
@@ -1974,8 +2068,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Webhook error:", error);
       await storage.addWhatsAppLog({
         type: 'error',
-        message: 'Error procesando webhook',
-        data: { error: error.message }
+        phoneNumber: null,
+        messageContent: 'Error procesando webhook',
+        status: 'error',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, body: req.body })
       });
       res.status(500).send("Internal Server Error");
     }
