@@ -117,6 +117,7 @@ export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => customers.id).notNull(),
   orderId: integer("order_id").references(() => orders.id),
+  conversationType: text("conversation_type").notNull().default("initial"), // 'initial', 'tracking', 'support'
   status: text("status").notNull().default("active"), // 'active', 'closed'
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
 });

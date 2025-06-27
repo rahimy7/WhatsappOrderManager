@@ -205,6 +205,9 @@ export interface IStorage {
   markAllNotificationsAsRead(userId: number): Promise<void>;
   deleteNotification(id: number): Promise<void>;
   getNotificationCount(userId: number): Promise<{ total: number; unread: number }>;
+  
+  // Conversation Type Determination for WhatsApp Segmentation
+  determineConversationType(customerId: number): Promise<'initial' | 'tracking' | 'support'>;
 }
 
 export class MemStorage implements IStorage {
@@ -2412,6 +2415,45 @@ export class DatabaseStorage implements IStorage {
       total: totalResult.count,
       unread: unreadResult.count,
     };
+  }
+
+  // Conversation Type Logic for WhatsApp Segmentation
+  async determineConversationType(customerId: number): Promise<'initial' | 'tracking' | 'support'> {
+    // Get customer's orders
+    const customerOrders = await db.select()
+      .from(orders)
+      .where(eq(orders.customerId, customerId))
+      .orderBy(desc(orders.createdAt));
+
+    // No orders = initial conversation
+    if (customerOrders.length === 0) {
+      return 'initial';
+    }
+
+    // Check for open orders (pending, confirmed, in_progress, assigned)
+    const openOrders = customerOrders.filter(order => 
+      ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+    );
+
+    if (openOrders.length > 0) {
+      return 'tracking';
+    }
+
+    // Check for recently completed/delivered orders (within last 30 days) that need feedback
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentCompletedOrders = customerOrders.filter(order => 
+      ['completed', 'delivered'].includes(order.status) &&
+      new Date(order.updatedAt) >= thirtyDaysAgo
+    );
+
+    if (recentCompletedOrders.length > 0) {
+      return 'support';
+    }
+
+    // Default to initial for new requests
+    return 'initial';
   }
 }
 
