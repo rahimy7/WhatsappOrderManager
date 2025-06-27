@@ -787,6 +787,47 @@ export class MemStorage implements IStorage {
       notes: "Pedido creado en el sistema",
     });
 
+    // Trigger automatic assignment if enabled
+    setTimeout(async () => {
+      try {
+        const assignmentResult = await this.autoAssignOrder(orderId);
+        if (assignmentResult.success && assignmentResult.assignedTechnician) {
+          console.log(`[AUTO-ASSIGN] Order ${orderNumber} automatically assigned to ${assignmentResult.assignedTechnician.user.name}`);
+          
+          // Create notification for assigned technician
+          await this.createNotification({
+            userId: assignmentResult.assignedTechnician.userId,
+            type: 'assignment',
+            title: 'Nuevo pedido asignado automáticamente',
+            message: `Se te ha asignado el pedido ${orderNumber} por el sistema automático`,
+            priority: 'high',
+            isRead: false,
+            relatedId: orderId,
+            relatedType: 'order'
+          });
+        } else {
+          console.log(`[AUTO-ASSIGN] Could not auto-assign order ${orderNumber}: ${assignmentResult.reason}`);
+          
+          // Create notification for admin about failed assignment
+          const adminUsers = await this.getUsersByRole('admin');
+          for (const admin of adminUsers) {
+            await this.createNotification({
+              userId: admin.id,
+              type: 'system',
+              title: 'Asignación automática fallida',
+              message: `No se pudo asignar automáticamente el pedido ${orderNumber}: ${assignmentResult.reason}`,
+              priority: 'medium',
+              isRead: false,
+              relatedId: orderId,
+              relatedType: 'order'
+            });
+          }
+        }
+      } catch (error) {
+        console.error(`[AUTO-ASSIGN] Error during automatic assignment for order ${orderNumber}:`, error);
+      }
+    }, 1000); // 1 second delay to ensure order is fully created
+
     return (await this.getOrder(orderId))!;
   }
 

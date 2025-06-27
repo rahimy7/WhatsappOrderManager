@@ -1379,7 +1379,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await handleContactNumberSelection(customer, phoneNumber, phoneNumber);
       } else if (buttonId === 'provide_different_number') {
         await handleContactNumberRequest(customer, phoneNumber);
+      } else if (buttonId === 'confirm_saved_address') {
+        await handleSavedAddressConfirmation(customer, phoneNumber);
+      } else if (buttonId === 'update_address') {
+        await handleAddressUpdate(customer, phoneNumber);
       }
+    }
+  }
+
+  // Function to handle saved address confirmation
+  async function handleSavedAddressConfirmation(customer: any, phoneNumber: string) {
+    try {
+      // Get registration flow to retrieve order data
+      const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+      if (!registrationFlow || registrationFlow.currentStep !== 'confirm_saved_address') {
+        await sendWhatsAppMessage(phoneNumber, 
+          "❌ Error: No se encontró información del pedido. Por favor, inicia un nuevo pedido escribiendo *menu*."
+        );
+        return;
+      }
+
+      const orderData = JSON.parse(registrationFlow.collectedData || '{}');
+      
+      // Since customer already has a phone number (WhatsApp), proceed directly to payment
+      // Update flow to next step - collect payment method
+      await storage.updateRegistrationFlow(phoneNumber, {
+        currentStep: 'collect_payment_method',
+        collectedData: JSON.stringify({
+          ...orderData,
+          customerName: customer.name,
+          customerAddress: customer.address,
+          contactNumber: phoneNumber
+        })
+      });
+
+      // Send payment method selection
+      const paymentMessage = {
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: "💳 *Método de Pago*\n\n" +
+                  "Selecciona tu método de pago preferido:\n\n" +
+                  "💳 *Tarjeta*: Pago seguro en línea\n" +
+                  "🏦 *Transferencia*: BBVA, Santander, etc.\n" +
+                  "💵 *Efectivo*: Al momento de la entrega"
+          },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: "payment_card",
+                  title: "💳 Tarjeta"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "payment_transfer",
+                  title: "🏦 Transferencia"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "payment_cash",
+                  title: "💵 Efectivo"
+                }
+              }
+            ]
+          }
+        }
+      };
+
+      await sendWhatsAppInteractiveMessage(phoneNumber, paymentMessage);
+
+    } catch (error) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error en confirmación de dirección guardada',
+        status: 'error',
+        errorMessage: (error as Error).message
+      });
+
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error. Por favor, intenta nuevamente o contacta a nuestro equipo."
+      );
+    }
+  }
+
+  // Function to handle address update
+  async function handleAddressUpdate(customer: any, phoneNumber: string) {
+    try {
+      // Get registration flow to retrieve order data
+      const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+      if (!registrationFlow || registrationFlow.currentStep !== 'confirm_saved_address') {
+        await sendWhatsAppMessage(phoneNumber, 
+          "❌ Error: No se encontró información del pedido. Por favor, inicia un nuevo pedido escribiendo *menu*."
+        );
+        return;
+      }
+
+      const orderData = JSON.parse(registrationFlow.collectedData || '{}');
+      
+      // Update flow to collect new address
+      await storage.updateRegistrationFlow(phoneNumber, {
+        currentStep: 'collect_customer_address',
+        collectedData: JSON.stringify({
+          ...orderData,
+          customerName: customer.name
+        })
+      });
+
+      // Request location sharing
+      await sendLocationRequest(phoneNumber);
+
+    } catch (error) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error en actualización de dirección',
+        status: 'error',
+        errorMessage: (error as Error).message
+      });
+
+      await sendWhatsAppMessage(phoneNumber, 
+        "❌ Hubo un error. Por favor, intenta nuevamente o contacta a nuestro equipo."
+      );
     }
   }
 
@@ -1728,38 +1856,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
         priority: "normal"
       }, orderItems);
 
-      // Store order in customer registration flow for data collection
-      await storage.createRegistrationFlow({
-        phoneNumber: phoneNumber,
-        currentStep: 'collect_customer_name',
-        collectedData: JSON.stringify({
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          productName: product.name,
-          quantity: quantity,
-          basePrice: basePrice,
-          deliveryCost: deliveryCost,
-          totalPrice: totalPrice
-        }),
-        requestedService: 'order_completion',
-        isCompleted: false,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-      });
+      // Check if customer already has complete data (name and address)
+      const hasCompleteData = customer.name && 
+                             customer.name !== 'Cliente temporal' && 
+                             !customer.name.startsWith('Cliente ') &&
+                             customer.address &&
+                             customer.address.trim() !== '';
 
-      // Send order confirmation and request customer name
-      const confirmationMessage = 
-        "✅ *¡Pedido Generado!*\n\n" +
-        `🆔 Orden: ${order.orderNumber}\n` +
-        `📦 ${product.name} x${quantity}\n` +
-        `💰 Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
-        (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
-        `*💳 Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
-        "👤 *Datos del Cliente*\n" +
-        "Para continuar con tu pedido, necesitamos tus datos:\n\n" +
-        "Por favor comparte tu *nombre completo*:\n" +
-        "_(Ejemplo: Juan Pérez López)_";
+      if (hasCompleteData) {
+        // Customer has complete data, proceed to address confirmation
+        await storage.createRegistrationFlow({
+          phoneNumber: phoneNumber,
+          currentStep: 'confirm_saved_address',
+          collectedData: JSON.stringify({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            productName: product.name,
+            quantity: quantity,
+            basePrice: basePrice,
+            deliveryCost: deliveryCost,
+            totalPrice: totalPrice
+          }),
+          requestedService: 'order_completion',
+          isCompleted: false,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        });
 
-      await sendWhatsAppMessage(phoneNumber, confirmationMessage);
+        // Send address confirmation message
+        const addressConfirmMessage = {
+          type: "interactive",
+          interactive: {
+            type: "button",
+            body: {
+              text: "✅ *¡Pedido Generado!*\n\n" +
+                   `🆔 Orden: ${order.orderNumber}\n` +
+                   `📦 ${product.name} x${quantity}\n` +
+                   `💰 Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
+                   (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
+                   `*💳 Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
+                   `👤 Cliente: ${customer.name}\n` +
+                   `📍 Dirección guardada: ${customer.address}\n\n` +
+                   "*¿Confirmas que enviemos a esta dirección?*"
+            },
+            action: {
+              buttons: [
+                {
+                  type: "reply",
+                  reply: {
+                    id: "confirm_saved_address",
+                    title: "✅ Confirmar dirección"
+                  }
+                },
+                {
+                  type: "reply",
+                  reply: {
+                    id: "update_address",
+                    title: "📍 Cambiar dirección"
+                  }
+                }
+              ]
+            }
+          }
+        };
+
+        await sendWhatsAppInteractiveMessage(phoneNumber, addressConfirmMessage);
+      } else {
+        // Customer needs to provide data, start with name collection
+        await storage.createRegistrationFlow({
+          phoneNumber: phoneNumber,
+          currentStep: 'collect_customer_name',
+          collectedData: JSON.stringify({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            productName: product.name,
+            quantity: quantity,
+            basePrice: basePrice,
+            deliveryCost: deliveryCost,
+            totalPrice: totalPrice
+          }),
+          requestedService: 'order_completion',
+          isCompleted: false,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        });
+
+        // Send order confirmation and request customer name
+        const confirmationMessage = 
+          "✅ *¡Pedido Generado!*\n\n" +
+          `🆔 Orden: ${order.orderNumber}\n` +
+          `📦 ${product.name} x${quantity}\n` +
+          `💰 Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
+          (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
+          `*💳 Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
+          "👤 *Datos del Cliente*\n" +
+          "Para continuar con tu pedido, necesitamos tus datos:\n\n" +
+          "Por favor comparte tu *nombre completo*:\n" +
+          "_(Ejemplo: Juan Pérez López)_";
+
+        await sendWhatsAppMessage(phoneNumber, confirmationMessage);
+      }
 
       // Log the order creation
       await storage.addWhatsAppLog({

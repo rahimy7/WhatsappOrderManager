@@ -301,6 +301,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Real-time frontend updates every 30 seconds with proper error handling and data validation
   - Complete storage interface implementation in both MemStorage and DatabaseStorage classes
   - System tested and verified working with sample notifications for user management and order updates
+- June 27, 2025. Enhanced WhatsApp order flow with smart customer data handling:
+  - Intelligent customer data detection: checks if registered customers have complete name and address information
+  - Streamlined flow for returning customers: skips name collection and proceeds directly to address confirmation
+  - Address confirmation system for registered customers with saved addresses
+  - Option to confirm saved address or update to new location during order process
+  - Automatic flow progression: registered customers with complete data → address confirmation → payment selection
+  - Maintains full data collection flow for new customers: product → quantity → order → name → address → contact → payment
+  - Enhanced user experience reduces friction for repeat customers while maintaining data integrity
 
 ## User Preferences
 
