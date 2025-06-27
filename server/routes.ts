@@ -872,6 +872,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Skip automatic name registration - we'll do it during order process
         // For new customers or those without names, we'll show menu directly
         
+        // Check if customer has active orders and add tracking option
+        const activeOrders = await storage.getOrdersByCustomer(customer.id);
+        const pendingOrders = activeOrders.filter(order => 
+          order.status === 'pending' || 
+          order.status === 'confirmed' || 
+          order.status === 'in_progress' || 
+          order.status === 'assigned'
+        );
+        
         // Check for auto responses based on triggers
         const autoResponses = await storage.getAllAutoResponses();
         let responseFound = false;
@@ -935,7 +944,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               const menuOptions = JSON.parse(autoResponse.menuOptions);
               if (Array.isArray(menuOptions) && menuOptions.length > 0) {
-                // Send interactive message with buttons
+                // Add order tracking option if customer has pending orders
+                let finalMenuOptions = [...menuOptions];
+                if (pendingOrders.length > 0) {
+                  // Add tracking option at the beginning
+                  finalMenuOptions.unshift({
+                    value: "track_orders",
+                    label: `📦 Ver mis pedidos (${pendingOrders.length})`
+                  });
+                  
+                  // Update the personalized message to mention pending orders
+                  if (pendingOrders.length === 1) {
+                    personalizedMessage += `\n\n📦 Tienes 1 pedido en proceso: ${pendingOrders[0].orderNumber}`;
+                  } else {
+                    personalizedMessage += `\n\n📦 Tienes ${pendingOrders.length} pedidos en proceso`;
+                  }
+                }
+                
+                // Send interactive message with buttons (limit to 3 buttons max)
                 const interactiveMessage = {
                   messaging_product: "whatsapp",
                   to: from,
@@ -950,7 +976,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       text: personalizedMessage
                     },
                     action: {
-                      buttons: menuOptions.slice(0, 3).map((option, index) => ({
+                      buttons: finalMenuOptions.slice(0, 3).map((option, index) => ({
                         type: "reply",
                         reply: {
                           id: option.value,
