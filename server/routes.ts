@@ -2308,6 +2308,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Send address confirmation message
         const addressConfirmMessage = {
+          messaging_product: "whatsapp",
+          to: phoneNumber,
           type: "interactive",
           interactive: {
             type: "button",
@@ -2485,49 +2487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return statusEmojis[status] || '📋';
   }
 
-  async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
-    try {
-      const config = await storage.getWhatsAppConfig();
-      
-      if (!config || !config.accessToken || !config.phoneNumberId) {
-        throw new Error('WhatsApp configuration missing');
-      }
-
-      const response = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(message)
-      });
-
-      const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
-      }
-
-      await storage.addWhatsAppLog({
-        type: 'outgoing',
-        message: 'Mensaje interactivo enviado',
-        data: {
-          to: phoneNumber,
-          messageId: result.messages?.[0]?.id,
-          messageType: message.type
-        }
-      });
-
-      return result;
-    } catch (error: any) {
-      await storage.addWhatsAppLog({
-        type: 'error',
-        message: 'Error enviando mensaje interactivo de WhatsApp',
-        data: { error: error.message, phoneNumber }
-      });
-      throw error;
-    }
-  }
+  // sendWhatsAppInteractiveMessage function is defined above (line 713)
 
   // WhatsApp Business API Webhook
   app.get("/webhook", (req, res) => {
