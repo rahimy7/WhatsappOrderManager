@@ -96,11 +96,12 @@ export default function TechnicianDashboard() {
     );
   }
 
-  const myOrders = orders.filter(order => order.assignedTo === user?.id);
+  // Ya tenemos solo las órdenes asignadas al técnico desde el endpoint
+  const myOrders = orders;
   const pendingOrders = myOrders.filter(order => order.status === 'assigned');
   const inProgressOrders = myOrders.filter(order => order.status === 'in_progress');
-  const completedToday = myOrders.filter(order => 
-    order.status === 'completed' && 
+  const completedOrders = myOrders.filter(order => order.status === 'completed');
+  const completedToday = completedOrders.filter(order => 
     new Date(order.updatedAt).toDateString() === new Date().toDateString()
   );
 
@@ -148,7 +149,7 @@ export default function TechnicianDashboard() {
       </div>
 
       {/* Estadísticas Rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Órdenes Pendientes</CardTitle>
@@ -187,6 +188,19 @@ export default function TechnicianDashboard() {
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Completadas</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{completedOrders.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Todas las órdenes completadas
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Órdenes de Trabajo */}
@@ -194,7 +208,7 @@ export default function TechnicianDashboard() {
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="pending">Pendientes ({pendingOrders.length})</TabsTrigger>
           <TabsTrigger value="progress">En Progreso ({inProgressOrders.length})</TabsTrigger>
-          <TabsTrigger value="completed">Completadas ({completedToday.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completadas ({completedOrders.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="mt-6">
@@ -313,14 +327,14 @@ export default function TechnicianDashboard() {
 
         <TabsContent value="completed" className="mt-6">
           <div className="grid gap-4">
-            {completedToday.length === 0 ? (
+            {completedOrders.length === 0 ? (
               <Card>
                 <CardContent className="p-6 text-center">
-                  <p className="text-gray-500">No has completado trabajos hoy</p>
+                  <p className="text-gray-500">No tienes órdenes completadas</p>
                 </CardContent>
               </Card>
             ) : (
-              completedToday.map((order) => (
+              completedOrders.map((order) => (
                 <Card key={order.id} className="border-l-4 border-l-gray-500">
                   <CardHeader>
                     <div className="flex justify-between items-start">
