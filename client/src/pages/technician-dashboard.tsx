@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Clock, AlertCircle, User, Phone, MapPin, DollarSign } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { CheckCircle, Clock, AlertCircle, User, Phone, MapPin, DollarSign, Search, Bell, Settings, Package, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 type Order = {
   id: number;
@@ -85,6 +87,8 @@ function StatusBadge({ status }: { status: string }) {
 export default function TechnicianDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
 
   // Fetch current user
   const { data: user } = useQuery<User>({
@@ -158,23 +162,68 @@ export default function TechnicianDashboard() {
     return order.status === 'completed' && orderDate.getTime() === today.getTime();
   });
 
+  // Fetch notification count
+  const { data: notificationCount } = useQuery<{ total: number; unread: number }>({
+    queryKey: ["/api/notifications/count"],
+    refetchInterval: 30000,
+  });
+
+  // Filter orders based on search and status
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         order.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === "all" || order.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Filtered orders by status
+  const filteredPendingOrders = filteredOrders.filter(order => order.status === 'assigned' || order.status === 'pending');
+  const filteredInProgressOrders = filteredOrders.filter(order => order.status === 'in_progress');
+  const filteredCompletedOrders = filteredOrders.filter(order => order.status === 'completed');
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header móvil optimizado */}
+      {/* Header con logo y saludo personalizado */}
       <div className="bg-white dark:bg-gray-800 shadow-sm border-b px-4 py-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              Panel de Técnico
-            </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {user?.name}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {/* Logo */}
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Package className="w-5 h-5 text-white" />
+              </div>
+              {/* Nombre de la App */}
+              <span className="font-bold text-lg text-gray-900 dark:text-white hidden sm:block">
+                ServicePro
+              </span>
+            </div>
           </div>
           
-          {/* Estado del técnico - Compacto para móvil */}
-          <div className="flex items-center gap-2">
-            <div className="text-xs text-gray-500 hidden sm:block">Estado:</div>
+          <div className="flex items-center gap-3">
+            {/* Notificaciones */}
+            <Button variant="ghost" size="sm" className="relative">
+              <Bell className="w-5 h-5" />
+              {notificationCount && notificationCount.unread > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {notificationCount.unread}
+                </span>
+              )}
+            </Button>
+            
+            {/* Perfil */}
+            <Button variant="ghost" size="sm">
+              <Settings className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Saludo personalizado */}
+        <div className="mt-3">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+            Hola, {user?.name || 'Técnico'} 👋
+          </h1>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="text-sm text-gray-600 dark:text-gray-400">Estado:</div>
             <div className="flex gap-1">
               <Button
                 variant={user?.status === 'active' ? 'default' : 'ghost'}
@@ -202,78 +251,86 @@ export default function TechnicianDashboard() {
       </div>
 
       <div className="p-4 space-y-6">
-        {/* Métricas del técnico - Optimizadas para móvil */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Pendientes</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{pendingOrders.length}</p>
-                </div>
-                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
+        {/* Resumen rápido - Como en el diseño */}
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-semibold">Resumen rápido</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">📦</div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white">{pendingOrders.length}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Asignados</div>
               </div>
-            </CardContent>
-          </Card>
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">✅</div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white">{completedOrders.length}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Finalizados</div>
+              </div>
+              <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">⏳</div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white">{inProgressOrders.length}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">En Proceso</div>
+              </div>
+              <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-red-600 dark:text-red-400">⚠️</div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white">{completedToday.length}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Hoy</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">En Progreso</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{inProgressOrders.length}</p>
-                </div>
-                <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                </div>
+        {/* Búsqueda y filtros */}
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              {/* Búsqueda */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="🔍 Buscar pedido"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Hoy</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{completedToday.length}</p>
-                </div>
-                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                </div>
+              
+              {/* Filtros */}
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant={filterStatus === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterStatus("all")}
+                >
+                  Todos
+                </Button>
+                <Button
+                  variant={filterStatus === "pending" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterStatus("pending")}
+                >
+                  Pendientes
+                </Button>
+                <Button
+                  variant={filterStatus === "in_progress" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterStatus("in_progress")}
+                >
+                  En Proceso
+                </Button>
+                <Button
+                  variant={filterStatus === "completed" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterStatus("completed")}
+                >
+                  Completados
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Total</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{completedOrders.length}</p>
-                </div>
-                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                  <CheckCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Ingresos</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">${technicianMetrics.todayIncome || 0}</p>
-                </div>
-                <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Órdenes de Trabajo */}
         <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
@@ -284,56 +341,71 @@ export default function TechnicianDashboard() {
             <Tabs defaultValue="pending" className="w-full">
               <TabsList className="grid w-full grid-cols-3 h-12 bg-gray-50 dark:bg-gray-700/50 rounded-lg m-4 mb-0">
                 <TabsTrigger value="pending" className="text-sm font-medium">
-                  Pendientes ({pendingOrders.length})
+                  Pendientes ({filteredPendingOrders.length})
                 </TabsTrigger>
                 <TabsTrigger value="progress" className="text-sm font-medium">
-                  En Progreso ({inProgressOrders.length})
+                  En Progreso ({filteredInProgressOrders.length})
                 </TabsTrigger>
                 <TabsTrigger value="completed" className="text-sm font-medium">
-                  Historial ({completedOrders.length})
+                  Historial ({filteredCompletedOrders.length})
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="pending" className="p-4 space-y-3">
-                {pendingOrders.length === 0 ? (
+                {filteredPendingOrders.length === 0 ? (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>No tienes órdenes pendientes</p>
+                    <p>No se encontraron órdenes pendientes</p>
                   </div>
                 ) : (
-                  pendingOrders.map((order) => (
-                    <div key={order.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border-l-4 border-l-blue-500">
+                  filteredPendingOrders.map((order) => (
+                    <div key={order.id} className="bg-white dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600 shadow-sm">
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-white">#{order.orderNumber}</h3>
                           <p className="text-sm text-gray-600 dark:text-gray-400">{order.product.name}</p>
                         </div>
-                        <StatusBadge status={order.status} />
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200 text-xs rounded-full">
+                            🟠 Pendiente
+                          </span>
+                        </div>
                       </div>
+                      
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center gap-2 text-sm">
-                          <User className="w-4 h-4 text-gray-500" />
+                          <span className="font-medium">Cliente:</span>
                           <span>{order.customer.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="w-4 h-4 text-gray-500" />
-                          <span>{order.customer.phone}</span>
                         </div>
                         {order.customer.address && (
                           <div className="flex items-center gap-2 text-sm">
-                            <MapPin className="w-4 h-4 text-gray-500" />
+                            <span className="text-lg">📍</span>
+                            <span className="font-medium">Dirección:</span>
                             <span className="truncate">{order.customer.address}</span>
                           </div>
                         )}
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-medium">Prioridad:</span>
+                          <span className="text-red-600 dark:text-red-400">Alta</span>
+                        </div>
                       </div>
+                      
                       <div className="flex gap-2">
                         <Button 
                           size="sm"
-                          className="flex-1"
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                           onClick={() => updateOrderStatus.mutate({ orderId: order.id, status: 'in_progress' })}
                           disabled={updateOrderStatus.isPending}
                         >
+                          <Play className="w-4 h-4 mr-2" />
                           Iniciar Trabajo
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          className="px-3"
+                        >
+                          Ver Detalle ▶️
                         </Button>
                       </div>
                     </div>
@@ -342,45 +414,60 @@ export default function TechnicianDashboard() {
               </TabsContent>
 
               <TabsContent value="progress" className="p-4 space-y-3">
-                {inProgressOrders.length === 0 ? (
+                {filteredInProgressOrders.length === 0 ? (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>No tienes órdenes en progreso</p>
+                    <p>No se encontraron órdenes en progreso</p>
                   </div>
                 ) : (
-                  inProgressOrders.map((order) => (
-                    <div key={order.id} className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border-l-4 border-l-orange-500">
+                  filteredInProgressOrders.map((order) => (
+                    <div key={order.id} className="bg-white dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600 shadow-sm">
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-white">#{order.orderNumber}</h3>
                           <p className="text-sm text-gray-600 dark:text-gray-400">{order.product.name}</p>
                         </div>
-                        <StatusBadge status={order.status} />
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 text-xs rounded-full">
+                            🟡 En Progreso
+                          </span>
+                        </div>
                       </div>
+                      
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center gap-2 text-sm">
-                          <User className="w-4 h-4 text-gray-500" />
+                          <span className="font-medium">Cliente:</span>
                           <span>{order.customer.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="w-4 h-4 text-gray-500" />
-                          <span>{order.customer.phone}</span>
                         </div>
                         {order.customer.address && (
                           <div className="flex items-center gap-2 text-sm">
-                            <MapPin className="w-4 h-4 text-gray-500" />
+                            <span className="text-lg">📍</span>
+                            <span className="font-medium">Dirección:</span>
                             <span className="truncate">{order.customer.address}</span>
                           </div>
                         )}
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-medium">Prioridad:</span>
+                          <span className="text-amber-600 dark:text-amber-400">Media</span>
+                        </div>
                       </div>
+                      
                       <div className="flex gap-2">
                         <Button 
                           size="sm"
-                          className="flex-1"
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                           onClick={() => updateOrderStatus.mutate({ orderId: order.id, status: 'completed' })}
                           disabled={updateOrderStatus.isPending}
                         >
+                          <CheckCircle className="w-4 h-4 mr-2" />
                           Completar
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          className="px-3"
+                        >
+                          Ver Detalle ▶️
                         </Button>
                       </div>
                     </div>
@@ -389,24 +476,29 @@ export default function TechnicianDashboard() {
               </TabsContent>
 
               <TabsContent value="completed" className="p-4 space-y-3">
-                {completedOrders.length === 0 ? (
+                {filteredCompletedOrders.length === 0 ? (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>Aún no has completado órdenes</p>
+                    <p>No se encontraron órdenes completadas</p>
                   </div>
                 ) : (
-                  completedOrders.slice(0, 10).map((order) => (
-                    <div key={order.id} className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border-l-4 border-l-green-500">
+                  filteredCompletedOrders.slice(0, 10).map((order) => (
+                    <div key={order.id} className="bg-white dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600 shadow-sm">
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h3 className="font-semibold text-gray-900 dark:text-white">#{order.orderNumber}</h3>
                           <p className="text-sm text-gray-600 dark:text-gray-400">{order.product.name}</p>
                         </div>
-                        <StatusBadge status={order.status} />
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 text-xs rounded-full">
+                            ✅ Completado
+                          </span>
+                        </div>
                       </div>
+                      
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-sm">
-                          <User className="w-4 h-4 text-gray-500" />
+                          <span className="font-medium">Cliente:</span>
                           <span>{order.customer.name}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm">
@@ -421,6 +513,35 @@ export default function TechnicianDashboard() {
             </Tabs>
           </CardContent>
         </Card>
+
+        {/* Acciones adicionales */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+            <CardContent className="p-4">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                size="lg"
+              >
+                <MapPin className="w-5 h-5 mr-3" />
+                🗺️ Ver mapa de ubicaciones asignadas
+              </Button>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-white dark:bg-gray-800 shadow-sm border-0 rounded-lg">
+            <CardContent className="p-4">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                size="lg"
+              >
+                <Package className="w-5 h-5 mr-3" />
+                ⊕ Nuevo Reporte
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
