@@ -28,9 +28,14 @@ export default function Header({
 }: HeaderProps) {
   const [isCreateOrderModalOpen, setIsCreateOrderModalOpen] = useState(false);
   const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
 
   const handleLogout = () => {
     logout();
+  };
+
+  const handleUserSettings = () => {
+    setLocation('/user-settings');
   };
 
   return (
@@ -85,7 +90,7 @@ export default function Header({
                   </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleUserSettings}>
                   <User className="mr-2 h-4 w-4" />
                   <span>Ajustes del Usuario</span>
                 </DropdownMenuItem>
