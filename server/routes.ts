@@ -2351,6 +2351,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Try interactive buttons for order management
       const interactiveMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
         type: "interactive",
         interactive: {
           type: "button",
@@ -2449,6 +2451,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (hasActiveOrders) {
         interactiveMessage = {
+          messaging_product: "whatsapp",
+          to: phoneNumber,
           type: "interactive",
           interactive: {
             type: "button",
@@ -2484,6 +2488,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       } else {
         interactiveMessage = {
+          messaging_product: "whatsapp",
+          to: phoneNumber,
           type: "interactive",
           interactive: {
             type: "button",
