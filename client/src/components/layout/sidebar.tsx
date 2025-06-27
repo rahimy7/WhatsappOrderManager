@@ -62,6 +62,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       badge: null,
     },
     {
+      href: "/customers",
+      icon: UserPlus,
+      label: "Clientes",
+      badge: null,
+    },
+    {
       href: "/employees",
       icon: UserPlus,
       label: "Empleados",
