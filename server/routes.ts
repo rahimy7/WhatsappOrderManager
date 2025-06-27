@@ -1081,6 +1081,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For any other message type, send welcome message
         await sendWelcomeMessage(from, customer);
       }
+    } // Close messageType condition
     } catch (error) {
       await storage.addWhatsAppLog({
         type: 'error',
