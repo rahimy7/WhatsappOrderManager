@@ -629,6 +629,365 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper function to send WhatsApp messages
+  async function sendWhatsAppMessage(phoneNumber: string, message: string) {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config || !config.accessToken || !config.phoneNumberId) {
+        throw new Error('WhatsApp configuration missing');
+      }
+
+      const messagePayload = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "text",
+        text: {
+          body: message
+        }
+      };
+
+      const response = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messagePayload)
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        // Check if it's the development restriction error (phone not in allowed list)
+        if (result.error?.code === 131030) {
+          await storage.addWhatsAppLog({
+            type: 'warning',
+            phoneNumber: phoneNumber,
+            messageContent: 'Número no autorizado en cuenta de desarrollo',
+            status: 'restricted',
+            errorMessage: 'Account limitation: Phone number not in allowed list',
+            rawData: JSON.stringify({
+              error: result.error,
+              isDevelopmentRestriction: true,
+              recommendation: 'Add phone number to allowed list in Meta Business settings'
+            })
+          });
+          return { 
+            messages: [{ id: 'dev_restricted' }], 
+            isDevelopmentRestriction: true,
+            phoneNumber 
+          };
+        }
+        throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      await storage.addWhatsAppLog({
+        type: 'outgoing',
+        phoneNumber: phoneNumber,
+        messageContent: 'Mensaje enviado exitosamente',
+        messageId: result.messages?.[0]?.id,
+        status: 'sent',
+        rawData: JSON.stringify({
+          to: phoneNumber,
+          messageId: result.messages?.[0]?.id,
+          content: message.substring(0, 100)
+        })
+      });
+
+      return result;
+    } catch (error: any) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error enviando mensaje de WhatsApp',
+        status: 'error',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, phoneNumber, content: message.substring(0, 100) })
+      });
+      throw error;
+    }
+  }
+
+  // Helper function to send WhatsApp interactive messages
+  async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config || !config.accessToken || !config.phoneNumberId) {
+        throw new Error('WhatsApp configuration missing');
+      }
+
+      const response = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(message)
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        // Check if it's the development restriction error (phone not in allowed list)
+        if (result.error?.code === 131030) {
+          await storage.addWhatsAppLog({
+            type: 'warning',
+            phoneNumber: phoneNumber,
+            messageContent: 'Número no autorizado en cuenta de desarrollo (mensaje interactivo)',
+            status: 'restricted',
+            errorMessage: 'Account limitation: Phone number not in allowed list',
+            rawData: JSON.stringify({
+              error: result.error,
+              isDevelopmentRestriction: true,
+              recommendation: 'Add phone number to allowed list in Meta Business settings'
+            })
+          });
+          return { 
+            messages: [{ id: 'dev_restricted' }], 
+            isDevelopmentRestriction: true,
+            phoneNumber 
+          };
+        }
+        throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      await storage.addWhatsAppLog({
+        type: 'outgoing',
+        phoneNumber: phoneNumber,
+        messageContent: 'Mensaje interactivo enviado exitosamente',
+        messageId: result.messages?.[0]?.id,
+        status: 'sent',
+        rawData: JSON.stringify({
+          to: phoneNumber,
+          messageId: result.messages?.[0]?.id,
+          messageType: 'interactive'
+        })
+      });
+
+      return result;
+    } catch (error: any) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error enviando mensaje interactivo de WhatsApp',
+        status: 'error',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, phoneNumber })
+      });
+      throw error;
+    }
+  }
+
+  // Function to process customer messages and responses
+  async function processCustomerMessage(customer: any, conversation: any, message: any, from: string, isNewCustomer: boolean = false) {
+    try {
+      const text = message.text?.body || '';
+
+      // Determine conversation type based on customer's order history
+      const conversationType = await storage.determineConversationType(customer.id);
+
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: from,
+        messageContent: `Tipo de conversación determinado: ${conversationType}`,
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          customerId: customer.id,
+          conversationType: conversationType,
+          customerName: customer.name,
+          isNewCustomer: isNewCustomer
+        })
+      });
+
+      // Update conversation type in database
+      if (conversation) {
+        await storage.updateConversation(conversation.id, { conversationType });
+      }
+
+      // HANDLE DIFFERENT CONVERSATION FLOWS BASED ON TYPE
+      if (conversationType === 'tracking') {
+        await handleTrackingConversation(customer, from, text);
+        return;
+      } else if (conversationType === 'support') {
+        await handleSupportConversation(customer, from, text);
+        return;
+      }
+      
+      // Skip automatic name registration - we'll do it during order process
+      // For new customers or those without names, we'll show menu directly
+      
+      // Check for auto responses based on triggers (INITIAL CONVERSATION TYPE)
+      const autoResponses = await storage.getAllAutoResponses();
+      let responseFound = false;
+      
+      // Check common triggers
+      const triggers = [
+        { keywords: ['hola', 'hello', 'hi', 'buenos dias', 'buenas tardes'], trigger: 'welcome' },
+        { keywords: ['menu', 'menú', 'opciones', 'catalogo', 'catálogo'], trigger: 'menu' },
+        { keywords: ['productos', 'product', 'comprar'], trigger: 'product_inquiry' },
+        { keywords: ['servicios', 'service', 'reparacion', 'reparación'], trigger: 'service_inquiry' },
+        { keywords: ['ayuda', 'help', 'contacto', 'soporte'], trigger: 'contact_request' }
+      ];
+      
+      // Find matching trigger
+      let matchedTrigger = null;
+      for (const triggerGroup of triggers) {
+        if (triggerGroup.keywords.some(keyword => text.toLowerCase().includes(keyword))) {
+          matchedTrigger = triggerGroup.trigger;
+          break;
+        }
+      }
+      
+      if (matchedTrigger) {
+        const responses = autoResponses.filter(response => response.trigger === matchedTrigger && response.isActive);
+        
+        if (responses.length > 0) {
+          for (const response of responses) {
+            if (response.isInteractive && response.interactiveData) {
+              // Send interactive message
+              const interactiveMessage = {
+                messaging_product: "whatsapp",
+                to: from,
+                type: "interactive",
+                interactive: JSON.parse(response.interactiveData)
+              };
+              
+              await sendWhatsAppInteractiveMessage(from, interactiveMessage);
+            } else {
+              // Send text message
+              await sendWhatsAppMessage(from, response.message);
+            }
+            
+            responseFound = true;
+          }
+        }
+      }
+      
+      // If no specific trigger matched but customer is new or message is simple greeting
+      if (!responseFound && (isNewCustomer || ['hola', 'hi', 'hello'].some(greeting => text.toLowerCase().includes(greeting)))) {
+        // Welcome message for new or greeting customers
+        await sendWelcomeMessage(from);
+        responseFound = true;
+      }
+      
+      // If still no response found, send general help
+      if (!responseFound) {
+        await sendHelpMenu(from);
+      }
+
+    } catch (error) {
+      console.error('Error in processCustomerMessage:', error);
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: from,
+        messageContent: 'Error procesando mensaje del cliente',
+        status: 'error',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, messageType: message.type })
+      });
+    }
+  }
+
+  // Helper function for tracking conversations
+  async function handleTrackingConversation(customer: any, phoneNumber: string, messageText: string) {
+    try {
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: phoneNumber,
+        messageContent: `Procesando conversación de seguimiento para cliente ${customer.id}`,
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          customerId: customer.id,
+          conversationType: 'tracking',
+          messageReceived: messageText
+        })
+      });
+
+      // Get customer's active orders
+      const orders = await storage.getAllOrders();
+      const activeOrders = orders.filter(order => 
+        order.customer.id === customer.id && 
+        ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+      );
+
+      if (activeOrders.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos en este momento. ¿Te gustaría hacer un nuevo pedido?");
+        return;
+      }
+
+      // Process tracking commands
+      const lowerText = messageText.toLowerCase();
+      
+      if (lowerText.includes('estado') || lowerText.includes('status')) {
+        await sendOrderTrackingStatus(customer, phoneNumber, activeOrders);
+      } else if (lowerText.includes('modificar') || lowerText.includes('cambiar')) {
+        await sendOrderModificationOptions(customer, phoneNumber, activeOrders);
+      } else if (lowerText.includes('tiempo') || lowerText.includes('cuando')) {
+        await sendEstimatedTime(customer, phoneNumber, activeOrders);
+      } else if (lowerText.includes('tecnico') || lowerText.includes('técnico') || lowerText.includes('quien')) {
+        await sendTechnicianInfo(customer, phoneNumber, activeOrders);
+      } else {
+        // Show tracking menu
+        await sendTrackingMenu(customer, phoneNumber, activeOrders);
+      }
+
+    } catch (error) {
+      console.error('Error in handleTrackingConversation:', error);
+      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error procesando tu consulta. ¿Puedes intentar de nuevo?");
+    }
+  }
+
+  // Helper function for support conversations
+  async function handleSupportConversation(customer: any, phoneNumber: string, messageText: string) {
+    try {
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: phoneNumber,
+        messageContent: `Procesando conversación de soporte para cliente ${customer.id}`,
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          customerId: customer.id,
+          conversationType: 'support',
+          messageReceived: messageText
+        })
+      });
+
+      // Get customer's recent completed orders
+      const orders = await storage.getAllOrders();
+      const recentOrders = orders.filter(order => 
+        order.customer.id === customer.id && 
+        ['completed', 'delivered'].includes(order.status)
+      ).slice(0, 5); // Last 5 completed orders
+
+      if (recentOrders.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, "No tienes servicios completados para consultar. ¿Necesitas información sobre nuestros servicios?");
+        return;
+      }
+
+      // Process support commands
+      const lowerText = messageText.toLowerCase();
+      
+      if (lowerText.includes('garantia') || lowerText.includes('garantía') || lowerText.includes('warranty')) {
+        await sendWarrantyInfo(customer, phoneNumber, recentOrders);
+      } else if (lowerText.includes('tecnico') || lowerText.includes('técnico') || lowerText.includes('problema')) {
+        await sendTechnicalSupportOptions(customer, phoneNumber, recentOrders);
+      } else if (lowerText.includes('factura') || lowerText.includes('recibo') || lowerText.includes('invoice')) {
+        await sendInvoiceOptions(customer, phoneNumber, recentOrders);
+      } else if (lowerText.includes('opinion') || lowerText.includes('opinión') || lowerText.includes('feedback')) {
+        await sendFeedbackRequest(customer, phoneNumber, recentOrders);
+      } else {
+        // Show support menu
+        await sendSupportMenu(customer, phoneNumber, recentOrders);
+      }
+
+    } catch (error) {
+      console.error('Error in handleSupportConversation:', error);
+      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error procesando tu consulta de soporte. ¿Puedes intentar de nuevo?");
+    }
+  }
+
   // Function to process incoming WhatsApp messages
   async function processWhatsAppMessage(value: any) {
     try {
