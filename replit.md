@@ -309,6 +309,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Automatic flow progression: registered customers with complete data → address confirmation → payment selection
   - Maintains full data collection flow for new customers: product → quantity → order → name → address → contact → payment
   - Enhanced user experience reduces friction for repeat customers while maintaining data integrity
+- June 27, 2025. Customer order tracking system fully implemented for WhatsApp integration:
+  - Dynamic welcome menu that automatically shows "📋 Mis pedidos" button for customers with active orders
+  - Comprehensive order status display with order numbers, dates, assigned technicians, and progress tracking
+  - Real-time order filtering for active orders (pending, confirmed, assigned, in_progress)
+  - Interactive button handler for "track_orders" command with detailed order information
+  - Order status messages include product/service lists, delivery dates, and total amounts
+  - Complete integration with existing customer history and VIP status system
+  - Database method getOrdersByCustomer added to both MemStorage and DatabaseStorage implementations
+  - Enhanced welcome message function with customer-aware dynamic menu generation
 
 ## User Preferences
 

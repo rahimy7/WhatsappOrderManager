@@ -1399,7 +1399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (buttonId === 'confirm_order') {
         await handleOrderConfirmation(customer, conversation, phoneNumber);
       } else if (buttonId === 'cancel_order') {
-        await sendWelcomeMessage(phoneNumber);
+        await sendWelcomeMessage(phoneNumber, customer);
       } else if (buttonId.startsWith('payment_')) {
         const paymentMethod = buttonId.split('_')[1];
         await handlePaymentMethodSelection(customer, paymentMethod, phoneNumber);
