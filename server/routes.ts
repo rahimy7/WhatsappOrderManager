@@ -1169,59 +1169,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   async function sendProductMenu(phoneNumber: string) {
-    const products = await storage.getAllProducts();
-    const productItems = products.filter(p => p.category === 'product').slice(0, 5);
-    const serviceItems = products.filter(p => p.category === 'service').slice(0, 5);
+    try {
+      const products = await storage.getAllProducts();
+      const productItems = products.filter(p => p.category === 'product').slice(0, 5);
+      const serviceItems = products.filter(p => p.category === 'service').slice(0, 5);
 
-    const menuMessage = {
-      messaging_product: "whatsapp",
-      to: phoneNumber,
-      type: "interactive",
-      interactive: {
-        type: "list",
-        header: {
-          type: "text",
-          text: "🛍️ Catálogo de Productos"
-        },
-        body: {
-          text: "Selecciona una categoría para ver nuestros productos disponibles:"
-        },
-        footer: {
-          text: "Precio incluye entrega basada en tu ubicación"
-        },
-        action: {
-          button: "Ver Productos",
-          sections: [
-            {
-              title: "🔧 Productos",
-              rows: productItems.map(product => ({
-                id: `product_${product.id}`,
-                title: product.name.substring(0, 24),
-                description: `$${parseFloat(product.price).toLocaleString('es-MX')}`
-              }))
-            },
-            {
-              title: "⚙️ Servicios",
-              rows: serviceItems.map(service => ({
-                id: `service_${service.id}`,
-                title: service.name.substring(0, 24),
-                description: `Desde $${parseFloat(service.price).toLocaleString('es-MX')}`
-              }))
-            },
-            {
-              title: "📍 Ubicación",
-              rows: [{
-                id: "request_location",
-                title: "Compartir Ubicación",
-                description: "Para calcular costo de entrega"
-              }]
-            }
-          ]
+      const menuMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: {
+          type: "list",
+          header: {
+            type: "text",
+            text: "🛍️ Catálogo de Productos"
+          },
+          body: {
+            text: "Selecciona una categoría para ver nuestros productos disponibles:"
+          },
+          footer: {
+            text: "Precio incluye entrega basada en tu ubicación"
+          },
+          action: {
+            button: "Ver Productos",
+            sections: [
+              {
+                title: "🔧 Productos",
+                rows: productItems.map(product => ({
+                  id: `product_${product.id}`,
+                  title: product.name.substring(0, 24),
+                  description: `$${parseFloat(product.price).toLocaleString('es-MX')}`
+                }))
+              },
+              {
+                title: "⚙️ Servicios",
+                rows: serviceItems.map(service => ({
+                  id: `service_${service.id}`,
+                  title: service.name.substring(0, 24),
+                  description: `Desde $${parseFloat(service.price).toLocaleString('es-MX')}`
+                }))
+              },
+              {
+                title: "📍 Ubicación",
+                rows: [{
+                  id: "request_location",
+                  title: "Compartir Ubicación",
+                  description: "Para calcular costo de entrega"
+                }]
+              }
+            ]
+          }
         }
-      }
-    };
+      };
 
-    await sendWhatsAppInteractiveMessage(phoneNumber, menuMessage);
+      // Try interactive list first
+      await sendWhatsAppInteractiveMessage(phoneNumber, menuMessage);
+      
+    } catch (error) {
+      console.log('Interactive list failed, sending text menu fallback:', error);
+      
+      // Fallback to text-based menu
+      const products = await storage.getAllProducts();
+      const productItems = products.filter(p => p.category === 'product').slice(0, 8);
+      const serviceItems = products.filter(p => p.category === 'service').slice(0, 8);
+      
+      let textMenu = "🛍️ *Catálogo de Productos*\n\n";
+      textMenu += "*🔧 PRODUCTOS:*\n";
+      
+      productItems.forEach((product, index) => {
+        textMenu += `${index + 1}. ${product.name}\n`;
+        textMenu += `   💰 $${parseFloat(product.price).toLocaleString('es-MX')}\n`;
+      });
+      
+      textMenu += "\n*⚙️ SERVICIOS:*\n";
+      serviceItems.forEach((service, index) => {
+        textMenu += `${productItems.length + index + 1}. ${service.name}\n`;
+        textMenu += `   💰 Desde $${parseFloat(service.price).toLocaleString('es-MX')}\n`;
+      });
+      
+      textMenu += "\n*📍 UBICACIÓN:*\n";
+      textMenu += `${productItems.length + serviceItems.length + 1}. Compartir ubicación\n`;
+      
+      textMenu += "\n*Instrucciones:*\n";
+      textMenu += "• Escribe el número del producto/servicio que deseas\n";
+      textMenu += "• Ejemplo: escribe *3* para seleccionar el producto #3\n";
+      textMenu += "• Escribe *ubicacion* para compartir tu ubicación\n\n";
+      textMenu += "💡 Precio incluye entrega basada en tu ubicación";
+      
+      await sendWhatsAppMessage(phoneNumber, textMenu);
+      
+      // Log the fallback for debugging
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: 'Fallback automático: menú de texto enviado',
+        status: 'processed',
+        rawData: JSON.stringify({ originalError: error.message, productsCount: products.length })
+      });
+    }
   }
 
   async function sendLocationRequest(phoneNumber: string) {

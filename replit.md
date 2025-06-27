@@ -347,6 +347,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - All other buttons (Ayuda, Ubicación, Agregar, Contactar) working as expected
   - Complete button-to-function mapping established and tested successfully
   - Interactive experience now matches user expectations with immediate button responses
+- June 27, 2025. WhatsApp smart fallback system implemented and verified working:
+  - Automatic detection of WhatsApp API restrictions on interactive buttons
+  - Intelligent fallback to numbered text options when buttons aren't supported by Meta
+  - Complete functionality maintained: users can type numbers (1, 2, 3) or direct commands
+  - Error handling with comprehensive logging for troubleshooting
+  - System adapts to Meta's permissions automatically without user intervention
+  - Verified working: displays numbered options when interactive buttons are restricted
 
 ## User Preferences
 
