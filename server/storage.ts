@@ -568,8 +568,16 @@ export class MemStorage implements IStorage {
     return this.customers.get(id);
   }
 
+  // Normalize phone number for comparison (remove spaces, dashes, and country codes)
+  private normalizePhoneNumber(phone: string): string {
+    return phone.replace(/[\s\-\+]/g, '');
+  }
+
   async getCustomerByPhone(phone: string): Promise<Customer | undefined> {
-    return Array.from(this.customers.values()).find(customer => customer.phone === phone);
+    const normalizedSearchPhone = this.normalizePhoneNumber(phone);
+    return Array.from(this.customers.values()).find(customer => 
+      this.normalizePhoneNumber(customer.phone) === normalizedSearchPhone
+    );
   }
 
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
