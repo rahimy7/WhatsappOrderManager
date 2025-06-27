@@ -88,6 +88,8 @@ export default function Employees() {
   const [filterDepartment, setFilterDepartment] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeWithUser | null>(null);
 
   // Fetch employees
   const { data: employees = [], isLoading } = useQuery<EmployeeWithUser[]>({
@@ -162,6 +164,37 @@ export default function Employees() {
     },
   });
 
+  // Update employee mutation
+  const updateEmployeeMutation = useMutation({
+    mutationFn: async (data: { employeeId: number; updates: Partial<InsertEmployeeProfile> & { user?: Partial<InsertUser> } }) => {
+      // Update employee profile
+      const profileResponse = await apiRequest("PUT", `/api/employees/${data.employeeId}`, data.updates);
+      
+      // Update user info if provided
+      if (data.updates.user && editingEmployee?.user?.id) {
+        await apiRequest("PUT", `/api/users/${editingEmployee.user.id}`, data.updates.user);
+      }
+      
+      return profileResponse.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      setIsEditDialogOpen(false);
+      setEditingEmployee(null);
+      toast({
+        title: "Empleado actualizado",
+        description: "Los datos del empleado se han actualizado correctamente.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const form = useForm<CreateEmployeeForm>({
     resolver: zodResolver(createEmployeeSchema),
     defaultValues: {
@@ -172,6 +205,69 @@ export default function Employees() {
 
   const onSubmit = (data: CreateEmployeeForm) => {
     createEmployeeMutation.mutate(data);
+  };
+
+  // Edit form
+  const editForm = useForm<CreateEmployeeForm>({
+    resolver: zodResolver(createEmployeeSchema),
+  });
+
+  const onEditSubmit = (data: CreateEmployeeForm) => {
+    if (!editingEmployee) return;
+    
+    const updates = {
+      position: data.position,
+      specializations: data.specializations ? data.specializations.split(',').map(s => s.trim()) : [],
+      emergencyContact: data.emergencyContact || null,
+      emergencyPhone: data.emergencyPhone || null,
+      vehicleInfo: data.vehicleInfo || null,
+      certifications: data.certifications ? data.certifications.split(',').map(s => s.trim()) : [],
+      territory: data.territory || null,
+      baseAddress: data.baseAddress || null,
+      serviceRadius: data.serviceRadius || null,
+      maxDailyOrders: data.maxDailyOrders || null,
+      skillLevel: data.skillLevel || null,
+      notes: data.notes || null,
+      user: {
+        name: data.name,
+        phone: data.phone || null,
+        email: data.email || null,
+        address: data.address || null,
+        role: data.role,
+      }
+    };
+
+    updateEmployeeMutation.mutate({
+      employeeId: editingEmployee.id,
+      updates
+    });
+  };
+
+  const openEditModal = (employee: EmployeeWithUser) => {
+    setEditingEmployee(employee);
+    editForm.reset({
+      name: employee.user?.name || "",
+      username: employee.user?.username || "",
+      password: "", // Don't populate password for security
+      role: employee.user?.role || "technician",
+      phone: employee.user?.phone || "",
+      email: employee.user?.email || "",
+      address: employee.user?.address || "",
+      department: employee.department,
+      position: employee.position,
+      specializations: employee.specializations?.join(', ') || "",
+      emergencyContact: employee.emergencyContact || "",
+      emergencyPhone: employee.emergencyPhone || "",
+      vehicleInfo: employee.vehicleInfo || "",
+      certifications: employee.certifications?.join(', ') || "",
+      territory: employee.territory || "",
+      baseAddress: employee.baseAddress || "",
+      serviceRadius: employee.serviceRadius?.toString() || "",
+      maxDailyOrders: employee.maxDailyOrders?.toString() || "",
+      skillLevel: employee.skillLevel?.toString() || "",
+      notes: employee.notes || "",
+    });
+    setIsEditDialogOpen(true);
   };
 
   // Filter employees
@@ -545,6 +641,18 @@ export default function Employees() {
                       </div>
                     </div>
                   )}
+                  
+                  <div className="pt-4 border-t mt-4">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full"
+                      onClick={() => openEditModal(employee)}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Editar Empleado
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
