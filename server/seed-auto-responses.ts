@@ -69,6 +69,16 @@ export async function seedAutoResponses() {
       nextAction: "collect_name"
     },
     {
+      name: "Seguimiento de Pedidos",
+      trigger: "order_tracking",
+      messageText: "📋 *Seguimiento de Pedidos*\n\nEsta función te mostrará el estado detallado de tus pedidos activos.\n\n¿Te gustaría ver el estado de tus pedidos?",
+      isActive: true,
+      priority: 5,
+      requiresRegistration: false,
+      menuOptions: null,
+      nextAction: "show_order_status"
+    },
+    {
       name: "Mensaje de Ayuda",
       trigger: "help",
       messageText: "ℹ️ *Centro de Ayuda*\n\nComandos disponibles:\n• *menu* - Mostrar menú principal\n• *productos* - Ver catálogo de productos\n• *servicios* - Ver servicios disponibles\n• *pedido* - Estado de tu pedido\n• *ubicacion* - Actualizar ubicación\n• *ayuda* - Mostrar esta ayuda\n\n¿Necesitas hablar con un técnico? Escribe *técnico*",

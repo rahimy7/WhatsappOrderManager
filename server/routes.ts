@@ -920,9 +920,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         if (autoResponse) {
-          // Personalize message for existing customers with history
-          let personalizedMessage = autoResponse.messageText;
-          if (matchedTrigger === 'welcome' && !isNewCustomer && customer.name && !customer.name.startsWith('Cliente ')) {
+          // Special handling for order tracking - show order status directly
+          if (matchedTrigger === 'order_tracking') {
+            await sendOrderStatus(customer, from);
+            responseFound = true;
+          } else {
+            // Personalize message for existing customers with history
+            let personalizedMessage = autoResponse.messageText;
+            if (matchedTrigger === 'welcome' && !isNewCustomer && customer.name && !customer.name.startsWith('Cliente ')) {
             // Get customer history to personalize further
             try {
               await storage.updateCustomerStats(customer.id);
@@ -1040,7 +1045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 responseText: autoResponse.messageText
               })
             });
-          }
+          } // Close the else block for non-order_tracking triggers
         }
         
         // If no auto response found, send default welcome
@@ -2257,7 +2262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         statusMessage += `${i + 1}. *Pedido ${order.orderNumber}*\n`;
         statusMessage += `${statusEmoji} Estado: ${order.status}\n`;
         statusMessage += `📅 Fecha: ${orderDate}\n`;
-        statusMessage += `💰 Total: $${parseFloat(order.total).toFixed(2)}\n`;
+        statusMessage += `💰 Total: $${parseFloat(order.totalAmount).toFixed(2)}\n`;
         
         if (order.assignedUser) {
           statusMessage += `👨‍🔧 Técnico: ${order.assignedUser}\n`;
