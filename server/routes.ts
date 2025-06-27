@@ -837,6 +837,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const priorityCommands = ['menu', 'menú', 'hola', 'hello', 'ayuda', 'help'];
         const isPriorityCommand = priorityCommands.some(cmd => text === cmd);
         
+        // Handle greeting commands directly with personalized welcome
+        if (text === 'hola' || text === 'hello') {
+          await sendWelcomeMessage(from, customer);
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Mensaje de bienvenida personalizado enviado a ${customer?.name || 'cliente'}`,
+            status: 'processed',
+            rawData: JSON.stringify({ customerMessage: text, response: 'personalized_welcome', customerName: customer?.name })
+          });
+          return; // Exit function after sending welcome message
+        }
+        
+        // Handle order tracking commands directly 
+        if (text === 'seguimiento' || text === 'pedido' || text === 'mis pedidos' || text === 'pedidos') {
+          await sendOrderStatus(customer, from);
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Estado de pedidos enviado a ${customer?.name || 'cliente'}`,
+            status: 'processed',
+            rawData: JSON.stringify({ customerMessage: text, response: 'order_status', customerName: customer?.name })
+          });
+          return; // Exit function after sending order status
+        }
+        
+        // Handle new order commands directly
+        if (text === 'nuevo' || text === 'menu' || text === 'menú') {
+          await sendProductMenu(from);
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Menú de productos enviado a ${customer?.name || 'cliente'}`,
+            status: 'processed',
+            rawData: JSON.stringify({ customerMessage: text, response: 'product_menu', customerName: customer?.name })
+          });
+          return; // Exit function after sending product menu
+        }
+        
         // FIRST CHECK: Handle registration flows (but allow priority commands to override)
         const registrationFlow = await storage.getRegistrationFlow(from);
         if (registrationFlow && !registrationFlow.isCompleted && !isPriorityCommand) {
