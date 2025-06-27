@@ -701,52 +701,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const registrationFlow = await storage.getRegistrationFlow(from);
             
             if (!registrationFlow) {
-              // New customer, start registration flow
+              // New customer - create basic customer record and continue with message processing
               await storage.addWhatsAppLog({
                 type: 'debug',
                 phoneNumber: from,
-                messageContent: 'Iniciando flujo de registro para nuevo cliente',
+                messageContent: 'Nuevo cliente detectado - creando registro básico',
                 status: 'processing'
               });
 
-              await storage.createRegistrationFlow({
-                phoneNumber: from,
-                currentStep: 'awaiting_name',
-                collectedData: JSON.stringify({ phone: from }),
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
+              customer = await storage.createCustomer({
+                name: `Cliente ${from.slice(-4)}`, // Temporary name until they order
+                phone: from,
+                whatsappId: from
               });
               
               await storage.addWhatsAppLog({
-                type: 'debug',
+                type: 'info',
                 phoneNumber: from,
-                messageContent: 'Flujo de registro creado, enviando mensaje de bienvenida',
-                status: 'processing'
+                messageContent: `Cliente básico creado: ID ${customer.id}`,
+                status: 'processed'
               });
 
-              try {
-                await sendRegistrationWelcome(from);
-                
-                await storage.addWhatsAppLog({
-                  type: 'debug',
-                  phoneNumber: from,
-                  messageContent: 'Mensaje de bienvenida enviado exitosamente',
-                  status: 'success'
-                });
-              } catch (welcomeError: any) {
-                await storage.addWhatsAppLog({
-                  type: 'error',
-                  phoneNumber: from,
-                  messageContent: 'Error enviando mensaje de bienvenida',
-                  status: 'error',
-                  errorMessage: welcomeError.message || welcomeError.toString(),
-                  rawData: JSON.stringify({ 
-                    error: welcomeError.message || welcomeError.toString(),
-                    stack: welcomeError.stack || 'No stack'
-                  })
-                });
-                // No re-throw, just log the error and continue
-              }
-              return; // Don't process the message further, wait for name
+              // Mark as new customer and continue processing message
+              isNewCustomer = true;
             } else {
               // Handle registration flow
               await storage.addWhatsAppLog({
@@ -891,16 +868,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        // Check if customer needs basic registration (new customer without name)
-        if (isNewCustomer || (customer && customer.name && customer.name.startsWith('Cliente '))) {
-          // Handle basic customer registration
-          await handleRegistrationFlow(from, message.text.body, {
-            currentStep: 'awaiting_name',
-            collectedData: JSON.stringify({}),
-            phoneNumber: from
-          });
-          return;
-        }
+        // Skip automatic name registration - we'll do it during order process
+        // For new customers or those without names, we'll show menu directly
         
         // Check for auto responses based on triggers
         const autoResponses = await storage.getAllAutoResponses();
@@ -937,7 +906,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (autoResponse) {
           // Personalize message for existing customers with history
           let personalizedMessage = autoResponse.messageText;
-          if (matchedTrigger === 'welcome' && !isNewCustomer && !customer.name.startsWith('Cliente ')) {
+          if (matchedTrigger === 'welcome' && !isNewCustomer && customer.name && !customer.name.startsWith('Cliente ')) {
             // Get customer history to personalize further
             try {
               await storage.updateCustomerStats(customer.id);
@@ -955,6 +924,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log('Error getting customer history:', error);
               personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
             }
+          } else if (matchedTrigger === 'welcome' && (isNewCustomer || !customer.name || customer.name.startsWith('Cliente '))) {
+            // New customer or customer without name - show direct welcome with menu
+            personalizedMessage = `👋 ¡Hola! Bienvenido a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
           }
           
           // Check if this response has menu options for interactive message
