@@ -1176,9 +1176,26 @@ export class DatabaseStorage implements IStorage {
     return customer || undefined;
   }
 
+  // Normalize phone number for comparison (remove spaces, dashes, and country codes)
+  private normalizePhoneNumber(phone: string): string {
+    return phone.replace(/[\s\-\+]/g, '');
+  }
+
   async getCustomerByPhone(phone: string): Promise<Customer | undefined> {
-    const [customer] = await db.select().from(customers).where(eq(customers.phone, phone));
-    return customer || undefined;
+    const normalizedSearchPhone = this.normalizePhoneNumber(phone);
+    const allCustomers = await db.select().from(customers);
+    
+    console.log(`[DEBUG] Searching for phone: ${phone}, normalized: ${normalizedSearchPhone}`);
+    console.log(`[DEBUG] Found ${allCustomers.length} customers in database`);
+    
+    for (const customer of allCustomers) {
+      const normalizedCustomerPhone = this.normalizePhoneNumber(customer.phone);
+      console.log(`[DEBUG] Customer ${customer.id}: phone=${customer.phone}, normalized=${normalizedCustomerPhone}, match=${normalizedCustomerPhone === normalizedSearchPhone}`);
+    }
+    
+    return allCustomers.find(customer => 
+      this.normalizePhoneNumber(customer.phone) === normalizedSearchPhone
+    );
   }
 
   async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
