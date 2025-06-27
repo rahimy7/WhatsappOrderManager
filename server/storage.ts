@@ -1141,7 +1141,7 @@ export class MemStorage implements IStorage {
     return [...this.whatsappLogs].reverse(); // Most recent first
   }
 
-  async addWhatsAppLog(log: any): Promise<void> {
+  async addWhatsAppLog(log: any): Promise<any> {
     const logEntry = {
       id: Date.now(),
       timestamp: new Date().toISOString(),
@@ -1153,6 +1153,40 @@ export class MemStorage implements IStorage {
     if (this.whatsappLogs.length > 100) {
       this.whatsappLogs = this.whatsappLogs.slice(-100);
     }
+    return logEntry;
+  }
+
+  // Notification stubs - not used since we're using DatabaseStorage
+  async getNotification(id: number): Promise<Notification | undefined> {
+    return undefined;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    throw new Error("Notifications not supported in MemStorage");
+  }
+
+  async getUserNotifications(userId: number): Promise<Notification[]> {
+    return [];
+  }
+
+  async getUnreadNotifications(userId: number): Promise<Notification[]> {
+    return [];
+  }
+
+  async markNotificationAsRead(id: number): Promise<Notification | undefined> {
+    return undefined;
+  }
+
+  async markAllNotificationsAsRead(userId: number): Promise<void> {
+    // No-op
+  }
+
+  async deleteNotification(id: number): Promise<void> {
+    // No-op
+  }
+
+  async getNotificationCount(userId: number): Promise<{ total: number; unread: number }> {
+    return { total: 0, unread: 0 };
   }
 }
 
