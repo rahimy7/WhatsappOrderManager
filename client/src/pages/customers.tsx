@@ -641,9 +641,15 @@ export default function CustomersPage() {
             
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
               <p className="text-sm text-yellow-800">
-                <strong>Advertencia:</strong> Si este cliente tiene pedidos o conversaciones asociadas, 
-                también podrían verse afectadas.
+                <strong>Advertencia:</strong> Se eliminarán automáticamente todos los datos relacionados:
               </p>
+              <ul className="list-disc list-inside text-xs text-yellow-700 mt-2 space-y-1">
+                <li>Historial del cliente</li>
+                <li>Conversaciones de WhatsApp</li>
+                <li>Mensajes intercambiados</li>
+                <li>Pedidos realizados</li>
+                <li>Historial de pedidos</li>
+              </ul>
             </div>
 
             <div className="flex justify-end space-x-2">

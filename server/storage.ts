@@ -1155,8 +1155,41 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCustomer(id: number): Promise<boolean> {
     try {
-      const result = await db.delete(customers).where(eq(customers.id, id));
-      return true; // If no error is thrown, deletion was successful
+      // Delete customer history first
+      await db.delete(customerHistory).where(eq(customerHistory.customerId, id));
+      
+      // Delete related messages first
+      const relatedConversations = await db.select().from(conversations).where(eq(conversations.customerId, id));
+      
+      if (relatedConversations.length > 0) {
+        for (const conversation of relatedConversations) {
+          await db.delete(messages).where(eq(messages.conversationId, conversation.id));
+        }
+        // Delete conversations
+        await db.delete(conversations).where(eq(conversations.customerId, id));
+      }
+
+      // Check if customer has related orders
+      const relatedOrders = await db.select().from(orders).where(eq(orders.customerId, id));
+      
+      if (relatedOrders.length > 0) {
+        // Delete order history first
+        for (const order of relatedOrders) {
+          await db.delete(orderHistory).where(eq(orderHistory.orderId, order.id));
+        }
+        
+        // Delete related order items
+        for (const order of relatedOrders) {
+          await db.delete(orderItems).where(eq(orderItems.orderId, order.id));
+        }
+        
+        // Then delete orders
+        await db.delete(orders).where(eq(orders.customerId, id));
+      }
+
+      // Now delete the customer
+      await db.delete(customers).where(eq(customers.id, id));
+      return true;
     } catch (error) {
       console.error('Error deleting customer:', error);
       return false;
