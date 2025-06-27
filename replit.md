@@ -354,6 +354,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Error handling with comprehensive logging for troubleshooting
   - System adapts to Meta's permissions automatically without user intervention
   - Verified working: displays numbered options when interactive buttons are restricted
+- June 27, 2025. RESOLVED: WhatsApp interactive button flow issue for registered vs new users:
+  - Fixed differential behavior between registered customers and new users
+  - Implemented comprehensive fallback for product menu (sendProductMenu) with text-based catalog
+  - Added numeric selection handler for text-based menu navigation
+  - Both interactive buttons and text fallbacks now work seamlessly for all user types
+  - Enhanced error detection and automatic fallback for list-type interactive messages
+  - Complete flow verification: welcome → menu → product selection → order generation working for all users
 
 ## User Preferences
 

@@ -950,6 +950,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (await handleOrderManagementCommands(customer, text, from)) {
           return; // Exit early if command was handled
         }
+
+        // Handle numeric menu selections (for text-based fallback menus)
+        if (/^[1-9]\d*$/.test(text.trim())) {
+          const products = await storage.getAllProducts();
+          const productItems = products.filter(p => p.category === 'product').slice(0, 8);
+          const serviceItems = products.filter(p => p.category === 'service').slice(0, 8);
+          const allItems = [...productItems, ...serviceItems];
+          
+          const selectedNumber = parseInt(text.trim());
+          
+          if (selectedNumber <= allItems.length) {
+            const selectedProduct = allItems[selectedNumber - 1];
+            await handleProductSelection(customer, conversation, selectedProduct.id, from);
+            return;
+          } else if (selectedNumber === allItems.length + 1) {
+            // Location sharing option
+            await sendLocationRequest(from);
+            return;
+          }
+          // If number is out of range, continue to normal processing
+        }
         
         // Check if customer has active orders and add tracking option
         const activeOrders = await storage.getOrdersByCustomer(customer.id);
