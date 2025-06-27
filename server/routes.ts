@@ -818,10 +818,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         if (autoResponse) {
-          // Personalize message for existing customers
+          // Personalize message for existing customers with history
           let personalizedMessage = autoResponse.messageText;
           if (matchedTrigger === 'welcome' && !isNewCustomer && !customer.name.startsWith('Cliente ')) {
-            personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+            // Get customer history to personalize further
+            try {
+              await storage.updateCustomerStats(customer.id);
+              const customerWithHistory = await storage.getCustomerWithHistory(customer.id);
+              
+              if (customerWithHistory && customerWithHistory.totalOrders && customerWithHistory.totalOrders > 0) {
+                const vipMessage = customerWithHistory.isVip ? ' ⭐ Cliente VIP ⭐' : '';
+                personalizedMessage = `👋 ¡Hola ${customer.name}!${vipMessage} Bienvenido de nuevo a nuestro servicio.\n\n` +
+                  `📊 Historial: ${customerWithHistory.totalOrders} pedidos realizados por $${customerWithHistory.totalSpent}\n\n` +
+                  `¿En qué podemos ayudarte hoy?`;
+              } else {
+                personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+              }
+            } catch (error) {
+              console.log('Error getting customer history:', error);
+              personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+            }
           }
           
           // Check if this response has menu options for interactive message
@@ -1411,6 +1427,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Update order status to confirmed
         await storage.updateOrderStatus(orderData.orderId, 'confirmed', undefined, `Método de pago: ${paymentText}`);
+        
+        // Add to customer history
+        await storage.addCustomerHistoryEntry({
+          customerId: customer.id,
+          action: 'order_confirmed',
+          description: `Pedido confirmado: ${orderData.productName} x${orderData.quantity} - Pago: ${paymentText}`,
+          amount: orderData.totalAmount || '0.00',
+          metadata: JSON.stringify({
+            orderId: orderData.orderId,
+            paymentMethod: paymentText,
+            channel: 'whatsapp',
+            productName: orderData.productName,
+            quantity: orderData.quantity
+          })
+        });
+
+        // Update customer statistics
+        await storage.updateCustomerStats(customer.id);
       }
 
       // Delete registration flow as process is complete
@@ -2507,6 +2541,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching registration flows:", error);
       res.status(500).json({ error: "Failed to fetch registration flows" });
+    }
+  });
+
+  // Customer history routes
+  app.get("/api/customers/:id/history", async (req, res) => {
+    try {
+      const customerId = parseInt(req.params.id);
+      const history = await storage.getCustomerHistory(customerId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching customer history:", error);
+      res.status(500).json({ error: "Failed to fetch customer history" });
+    }
+  });
+
+  app.get("/api/customers/:id/details", async (req, res) => {
+    try {
+      const customerId = parseInt(req.params.id);
+      const customerWithHistory = await storage.getCustomerWithHistory(customerId);
+      if (!customerWithHistory) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customerWithHistory);
+    } catch (error) {
+      console.error("Error fetching customer details:", error);
+      res.status(500).json({ error: "Failed to fetch customer details" });
+    }
+  });
+
+  app.get("/api/customers/vip", async (req, res) => {
+    try {
+      const vipCustomers = await storage.getVipCustomers();
+      res.json(vipCustomers);
+    } catch (error) {
+      console.error("Error fetching VIP customers:", error);
+      res.status(500).json({ error: "Failed to fetch VIP customers" });
     }
   });
 

@@ -1709,6 +1709,55 @@ export class DatabaseStorage implements IStorage {
     
     return `${prefix}-${formattedNumber}`;
   }
+
+  // Customer History methods
+  async getCustomerHistory(customerId: number): Promise<CustomerHistory[]> {
+    return await db.select()
+      .from(customerHistory)
+      .where(eq(customerHistory.customerId, customerId))
+      .orderBy(desc(customerHistory.createdAt));
+  }
+
+  async addCustomerHistoryEntry(entry: InsertCustomerHistory): Promise<CustomerHistory> {
+    const [newEntry] = await db.insert(customerHistory).values(entry).returning();
+    return newEntry;
+  }
+
+  async updateCustomerStats(customerId: number): Promise<void> {
+    // Calculate total orders and total spent for the customer
+    const customerOrders = await db.select()
+      .from(orders)
+      .where(eq(orders.customerId, customerId));
+
+    const totalOrders = customerOrders.length;
+    const totalSpent = customerOrders.reduce((sum, order) => {
+      return sum + parseFloat(order.totalAmount);
+    }, 0);
+
+    // Update customer statistics
+    await db.update(customers)
+      .set({
+        totalOrders,
+        totalSpent: totalSpent.toFixed(2),
+        isVip: totalSpent > 10000 || totalOrders > 10, // VIP if spent > 10k or 10+ orders
+      })
+      .where(eq(customers.id, customerId));
+  }
+
+  async getCustomerWithHistory(customerId: number): Promise<Customer & { history: CustomerHistory[] } | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.id, customerId));
+    if (!customer) return undefined;
+
+    const history = await this.getCustomerHistory(customerId);
+    return { ...customer, history };
+  }
+
+  async getVipCustomers(): Promise<Customer[]> {
+    return await db.select()
+      .from(customers)
+      .where(eq(customers.isVip, true))
+      .orderBy(desc(customers.totalSpent));
+  }
 }
 
 export const storage = new DatabaseStorage();
