@@ -1759,8 +1759,16 @@ export class DatabaseStorage implements IStorage {
     return profile || undefined;
   }
 
-  async getAllEmployeeProfiles(): Promise<EmployeeProfile[]> {
-    return await db.select().from(employeeProfiles).orderBy(employeeProfiles.createdAt);
+  async getAllEmployeeProfiles(): Promise<(EmployeeProfile & { user: User })[]> {
+    const results = await db.select()
+      .from(employeeProfiles)
+      .innerJoin(users, eq(employeeProfiles.userId, users.id))
+      .orderBy(employeeProfiles.createdAt);
+
+    return results.map(result => ({
+      ...result.employee_profiles,
+      user: result.users
+    }));
   }
 
   async createEmployeeProfile(profile: InsertEmployeeProfile): Promise<EmployeeProfile> {
@@ -1780,11 +1788,17 @@ export class DatabaseStorage implements IStorage {
     await db.delete(employeeProfiles).where(eq(employeeProfiles.id, id));
   }
 
-  async getEmployeesByDepartment(department: string): Promise<EmployeeProfile[]> {
-    return await db.select()
+  async getEmployeesByDepartment(department: string): Promise<(EmployeeProfile & { user: User })[]> {
+    const results = await db.select()
       .from(employeeProfiles)
+      .innerJoin(users, eq(employeeProfiles.userId, users.id))
       .where(eq(employeeProfiles.department, department))
       .orderBy(employeeProfiles.createdAt);
+
+    return results.map(result => ({
+      ...result.employee_profiles,
+      user: result.users
+    }));
   }
 
   async generateEmployeeId(department: string): Promise<string> {
