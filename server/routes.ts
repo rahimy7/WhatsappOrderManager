@@ -1470,7 +1470,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const buttonId = interactive.button_reply.id;
       
       // Handle menu buttons from welcome message
-      if (buttonId === 'products') {
+      if (buttonId === 'seguimiento') {
+        await sendOrderStatus(customer, phoneNumber);
+      } else if (buttonId === 'nuevo') {
+        await sendProductMenu(phoneNumber);
+      } else if (buttonId === 'menu') {
+        await sendProductMenu(phoneNumber);
+      } else if (buttonId === 'ubicacion') {
+        await sendLocationRequest(phoneNumber);
+      } else if (buttonId === 'ayuda') {
+        await sendHelpMenu(phoneNumber);
+      } else if (buttonId === 'agregar_productos') {
+        await sendWhatsAppMessage(phoneNumber, 
+          "➕ *Agregar Productos*\n\n" +
+          "Para agregar productos a un pedido existente:\n" +
+          "1. Escribe *agregar* seguido del número de pedido\n" +
+          "2. Ejemplo: *agregar 1*\n\n" +
+          "O escribe *menu* para ver el catálogo completo."
+        );
+      } else if (buttonId === 'contactar_tecnico') {
+        const orders = await storage.getOrdersByCustomer(customer.id);
+        const assignedOrder = orders.find(order => order.assignedUser);
+        
+        if (!assignedOrder) {
+          await sendWhatsAppMessage(phoneNumber, 
+            "📞 *Contactar Técnico*\n\n" +
+            "Aún no hay un técnico asignado a tus pedidos.\n\n" +
+            "Nuestro equipo se comunicará contigo cuando asignen el técnico."
+          );
+        } else {
+          await sendWhatsAppMessage(phoneNumber, 
+            "📞 *Información de Contacto*\n\n" +
+            `👨‍🔧 Técnico: ${assignedOrder.assignedUser}\n` +
+            `📋 Pedido: ${assignedOrder.orderNumber}\n\n` +
+            "Para contactar directamente al técnico, llama a nuestra oficina y menciona el número de pedido.\n\n" +
+            "📱 Teléfono: (55) 1234-5678\n" +
+            "🕐 Horario: Lunes a Viernes 8:00 AM - 6:00 PM"
+          );
+        }
+      } else if (buttonId === 'nuevo_pedido') {
+        await sendProductMenu(phoneNumber);
+      } else if (buttonId === 'products') {
         await sendProductMenu(phoneNumber);
       } else if (buttonId === 'services') {
         await sendProductMenu(phoneNumber); // Same menu, but focuses on services
