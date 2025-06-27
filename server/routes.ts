@@ -928,27 +928,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Personalize message for existing customers with history
             let personalizedMessage = autoResponse.messageText;
             if (matchedTrigger === 'welcome' && !isNewCustomer && customer.name && !customer.name.startsWith('Cliente ')) {
-            // Get customer history to personalize further
-            try {
-              await storage.updateCustomerStats(customer.id);
-              const customerWithHistory = await storage.getCustomerWithHistory(customer.id);
-              
-              if (customerWithHistory && customerWithHistory.totalOrders && customerWithHistory.totalOrders > 0) {
-                const vipMessage = customerWithHistory.isVip ? ' ⭐ Cliente VIP ⭐' : '';
-                personalizedMessage = `👋 ¡Hola ${customer.name}!${vipMessage} Bienvenido de nuevo a nuestro servicio.\n\n` +
-                  `📊 Historial: ${customerWithHistory.totalOrders} pedidos realizados por $${customerWithHistory.totalSpent}\n\n` +
-                  `¿En qué podemos ayudarte hoy?`;
-              } else {
+              // Get customer history to personalize further
+              try {
+                await storage.updateCustomerStats(customer.id);
+                const customerWithHistory = await storage.getCustomerWithHistory(customer.id);
+                
+                if (customerWithHistory && customerWithHistory.totalOrders && customerWithHistory.totalOrders > 0) {
+                  const vipMessage = customerWithHistory.isVip ? ' ⭐ Cliente VIP ⭐' : '';
+                  personalizedMessage = `👋 ¡Hola ${customer.name}!${vipMessage} Bienvenido de nuevo a nuestro servicio.\n\n` +
+                    `📊 Historial: ${customerWithHistory.totalOrders} pedidos realizados por $${customerWithHistory.totalSpent}\n\n` +
+                    `¿En qué podemos ayudarte hoy?`;
+                } else {
+                  personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+                }
+              } catch (error) {
+                console.log('Error getting customer history:', error);
                 personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
               }
-            } catch (error) {
-              console.log('Error getting customer history:', error);
-              personalizedMessage = `👋 ¡Hola ${customer.name}! Bienvenido de nuevo a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
+            } else if (matchedTrigger === 'welcome' && (isNewCustomer || !customer.name || customer.name.startsWith('Cliente '))) {
+              // New customer or customer without name - show direct welcome with menu
+              personalizedMessage = `👋 ¡Hola! Bienvenido a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
             }
-          } else if (matchedTrigger === 'welcome' && (isNewCustomer || !customer.name || customer.name.startsWith('Cliente '))) {
-            // New customer or customer without name - show direct welcome with menu
-            personalizedMessage = `👋 ¡Hola! Bienvenido a nuestro servicio de aires acondicionados.\n\n¿En qué podemos ayudarte hoy?`;
-          }
           
           // Check if this response has menu options for interactive message
           if (autoResponse.menuOptions) {
@@ -1045,7 +1045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 responseText: autoResponse.messageText
               })
             });
-          } // Close the else block for non-order_tracking triggers
+          }
         }
         
         // If no auto response found, send default welcome
