@@ -921,16 +921,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const lowerText = messageText.toLowerCase();
       
       if (lowerText.includes('estado') || lowerText.includes('status')) {
-        await sendOrderTrackingStatus(customer, phoneNumber, activeOrders);
+        // Send order status
+        let statusMessage = `📋 *Estado de tus pedidos activos:*\n\n`;
+        for (const order of activeOrders) {
+          const statusEmoji = order.status === 'pending' ? '⏳' : 
+                             order.status === 'confirmed' ? '✅' : 
+                             order.status === 'in_progress' ? '🔧' : '📋';
+          statusMessage += `${statusEmoji} *Pedido ${order.orderNumber}*\n`;
+          statusMessage += `   Estado: ${order.status}\n`;
+          statusMessage += `   Total: $${order.totalAmount}\n\n`;
+        }
+        statusMessage += `Para más información, escribe "detalles" o contacta a nuestro equipo.`;
+        await sendWhatsAppMessage(phoneNumber, statusMessage);
       } else if (lowerText.includes('modificar') || lowerText.includes('cambiar')) {
-        await sendOrderModificationOptions(customer, phoneNumber, activeOrders);
+        await sendWhatsAppMessage(phoneNumber, `Para modificar tu pedido, por favor contacta a nuestro equipo de soporte. Menciona tu número de pedido: ${activeOrders[0]?.orderNumber || 'N/A'}`);
       } else if (lowerText.includes('tiempo') || lowerText.includes('cuando')) {
-        await sendEstimatedTime(customer, phoneNumber, activeOrders);
+        await sendWhatsAppMessage(phoneNumber, `El tiempo estimado para completar tu pedido es de 24-48 horas. Te notificaremos cuando esté listo.`);
       } else if (lowerText.includes('tecnico') || lowerText.includes('técnico') || lowerText.includes('quien')) {
-        await sendTechnicianInfo(customer, phoneNumber, activeOrders);
+        await sendWhatsAppMessage(phoneNumber, `Tu pedido será asignado a uno de nuestros técnicos especializados. Te contactaremos con los detalles del técnico asignado.`);
       } else {
         // Show tracking menu
-        await sendTrackingMenu(customer, phoneNumber, activeOrders);
+        let menuMessage = `📱 *Menú de Seguimiento*\n\n`;
+        menuMessage += `Tienes ${activeOrders.length} pedido(s) activo(s):\n\n`;
+        for (const order of activeOrders) {
+          menuMessage += `• *${order.orderNumber}* - ${order.status}\n`;
+        }
+        menuMessage += `\n*Opciones disponibles:*\n`;
+        menuMessage += `• Escribe "estado" para ver el estado actual\n`;
+        menuMessage += `• Escribe "tiempo" para tiempo estimado\n`;
+        menuMessage += `• Escribe "técnico" para información del técnico\n`;
+        menuMessage += `• Escribe "modificar" para cambios en el pedido\n`;
+        await sendWhatsAppMessage(phoneNumber, menuMessage);
       }
 
     } catch (error) {
@@ -970,16 +991,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const lowerText = messageText.toLowerCase();
       
       if (lowerText.includes('garantia') || lowerText.includes('garantía') || lowerText.includes('warranty')) {
-        await sendWarrantyInfo(customer, phoneNumber, recentOrders);
+        let warrantyMessage = `🛡️ *Información de Garantía*\n\n`;
+        warrantyMessage += `Tus servicios recientes:\n\n`;
+        for (const order of recentOrders.slice(0, 3)) {
+          warrantyMessage += `• *${order.orderNumber}* - Completado\n`;
+          warrantyMessage += `  Garantía: 6 meses en servicios, 1 año en productos\n\n`;
+        }
+        warrantyMessage += `Para hacer válida tu garantía, contacta nuestro soporte técnico.`;
+        await sendWhatsAppMessage(phoneNumber, warrantyMessage);
       } else if (lowerText.includes('tecnico') || lowerText.includes('técnico') || lowerText.includes('problema')) {
-        await sendTechnicalSupportOptions(customer, phoneNumber, recentOrders);
+        await sendWhatsAppMessage(phoneNumber, `🔧 *Soporte Técnico*\n\nNuestro equipo técnico está disponible para ayudarte. Por favor describe tu problema y mencionael número de pedido: ${recentOrders[0]?.orderNumber || 'N/A'}`);
       } else if (lowerText.includes('factura') || lowerText.includes('recibo') || lowerText.includes('invoice')) {
-        await sendInvoiceOptions(customer, phoneNumber, recentOrders);
+        await sendWhatsAppMessage(phoneNumber, `📄 *Facturación*\n\nPodemos enviarte una copia de tu factura. Menciona el número de pedido que necesitas: ${recentOrders[0]?.orderNumber || 'Consulta disponible'}`);
       } else if (lowerText.includes('opinion') || lowerText.includes('opinión') || lowerText.includes('feedback')) {
-        await sendFeedbackRequest(customer, phoneNumber, recentOrders);
+        await sendWhatsAppMessage(phoneNumber, `⭐ *Tu Opinión es Importante*\n\n¿Cómo calificarías nuestro servicio del 1 al 5?\n\nEscribe cualquier comentario sobre tu experiencia con nosotros.`);
       } else {
         // Show support menu
-        await sendSupportMenu(customer, phoneNumber, recentOrders);
+        let supportMessage = `🎧 *Menú de Soporte*\n\n`;
+        supportMessage += `Servicios completados: ${recentOrders.length}\n\n`;
+        supportMessage += `*Opciones disponibles:*\n`;
+        supportMessage += `• Escribe "garantía" para información de garantía\n`;
+        supportMessage += `• Escribe "técnico" para soporte técnico\n`;
+        supportMessage += `• Escribe "factura" para solicitar factura\n`;
+        supportMessage += `• Escribe "opinión" para enviar feedback\n`;
+        await sendWhatsAppMessage(phoneNumber, supportMessage);
       }
 
     } catch (error) {
@@ -2448,85 +2483,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       'cancelled': '❌'
     };
     return statusEmojis[status] || '📋';
-  }
-
-  async function sendWhatsAppMessage(phoneNumber: string, message: string) {
-    try {
-      const config = await storage.getWhatsAppConfig();
-      
-      if (!config || !config.accessToken || !config.phoneNumberId) {
-        throw new Error('WhatsApp configuration missing');
-      }
-
-      const messagePayload = {
-        messaging_product: "whatsapp",
-        to: phoneNumber,
-        type: "text",
-        text: {
-          body: message
-        }
-      };
-
-      const response = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(messagePayload)
-      });
-
-      const result = await response.json();
-      
-      if (!response.ok) {
-        // Check if it's the development restriction error (phone not in allowed list)
-        if (result.error?.code === 131030) {
-          await storage.addWhatsAppLog({
-            type: 'warning',
-            phoneNumber: phoneNumber,
-            messageContent: 'Número no autorizado en cuenta de desarrollo',
-            status: 'restricted',
-            errorMessage: 'Account limitation: Phone number not in allowed list',
-            rawData: JSON.stringify({
-              error: result.error,
-              isDevelopmentRestriction: true,
-              recommendation: 'Add phone number to allowed list in Meta Business settings'
-            })
-          });
-          return { 
-            messages: [{ id: 'dev_restricted' }], 
-            isDevelopmentRestriction: true,
-            phoneNumber 
-          };
-        }
-        throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
-      }
-
-      await storage.addWhatsAppLog({
-        type: 'outgoing',
-        phoneNumber: phoneNumber,
-        messageContent: 'Mensaje enviado exitosamente',
-        messageId: result.messages?.[0]?.id,
-        status: 'sent',
-        rawData: JSON.stringify({
-          to: phoneNumber,
-          messageId: result.messages?.[0]?.id,
-          content: message.substring(0, 100)
-        })
-      });
-
-      return result;
-    } catch (error: any) {
-      await storage.addWhatsAppLog({
-        type: 'error',
-        phoneNumber: phoneNumber,
-        messageContent: 'Error enviando mensaje de WhatsApp',
-        status: 'error',
-        errorMessage: error.message,
-        rawData: JSON.stringify({ error: error.message, phoneNumber, content: message.substring(0, 100) })
-      });
-      throw error;
-    }
   }
 
   async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
