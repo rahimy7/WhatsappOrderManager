@@ -2314,15 +2314,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           interactive: {
             type: "button",
             body: {
-              text: "✅ *¡Pedido Generado!*\n\n" +
-                   `🆔 Orden: ${order.orderNumber}\n` +
-                   `📦 ${product.name} x${quantity}\n` +
-                   `💰 Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
-                   (deliveryCost > 0 ? `🚛 Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
-                   `*💳 Total: $${totalPrice.toLocaleString('es-MX')}*\n\n` +
-                   `👤 Cliente: ${customer.name}\n` +
-                   `📍 Dirección guardada: ${customer.address}\n\n` +
-                   "*¿Confirmas que enviemos a esta dirección?*"
+              text: "Pedido Generado\n\n" +
+                   `Orden: ${order.orderNumber}\n` +
+                   `${product.name} x${quantity}\n` +
+                   `Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
+                   (deliveryCost > 0 ? `Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
+                   `Total: $${totalPrice.toLocaleString('es-MX')}\n\n` +
+                   `Cliente: ${customer.name}\n` +
+                   `Direccion guardada: ${customer.address}\n\n` +
+                   "Confirmas que enviemos a esta direccion?"
             },
             action: {
               buttons: [
@@ -2330,14 +2330,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   type: "reply",
                   reply: {
                     id: "confirm_saved_address",
-                    title: "✅ Confirmar dirección"
+                    title: "Confirmar direccion"
                   }
                 },
                 {
                   type: "reply",
                   reply: {
                     id: "update_address",
-                    title: "📍 Cambiar dirección"
+                    title: "Cambiar direccion"
                   }
                 }
               ]
@@ -2345,7 +2345,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         };
 
-        await sendWhatsAppInteractiveMessage(phoneNumber, addressConfirmMessage);
+        // Send simplified confirmation message instead of interactive message
+        const confirmationText = 
+          "Pedido Generado\n\n" +
+          `Orden: ${order.orderNumber}\n` +
+          `${product.name} x${quantity}\n` +
+          `Subtotal: $${basePrice.toLocaleString('es-MX')}\n` +
+          (deliveryCost > 0 ? `Entrega: $${deliveryCost.toLocaleString('es-MX')}\n` : '') +
+          `Total: $${totalPrice.toLocaleString('es-MX')}\n\n` +
+          `Cliente: ${customer.name}\n` +
+          `Direccion guardada: ${customer.address}\n\n` +
+          "Responde 'CONFIRMAR' para proceder con esta direccion o 'CAMBIAR' para actualizar tu ubicacion.";
+        
+        await sendWhatsAppMessage(phoneNumber, confirmationText);
       } else {
         // Customer needs to provide data, start with name collection
         await storage.createRegistrationFlow({
