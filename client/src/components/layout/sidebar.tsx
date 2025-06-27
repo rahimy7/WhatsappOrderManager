@@ -16,6 +16,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const [location] = useLocation();
   const [isMobile, setIsMobile] = useState(false);
+  const { user } = useAuth();
   
   // Check if mobile view
   useEffect(() => {
@@ -30,103 +31,145 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   const { data: orders = [] } = useQuery({
     queryKey: ["/api/orders"],
+    enabled: !!user && hasPermission(user.role, 'view_orders'),
   });
 
   const { data: conversations = [] } = useQuery({
     queryKey: ["/api/conversations"],
+    enabled: !!user && hasPermission(user.role, 'view_conversations'),
   });
 
-  // Fetch notification counts for the current user (demo user ID 6)
+  // Fetch notification counts for the current user
   const { data: notificationCounts = { total: 0, unread: 0 } } = useQuery({
-    queryKey: ["/api/notifications/count", { userId: 6 }],
-    queryFn: () => apiRequest("GET", "/api/notifications/count?userId=6"),
+    queryKey: ["/api/notifications/count", { userId: user?.id }],
+    queryFn: () => apiRequest("GET", `/api/notifications/count?userId=${user?.id}`),
     refetchInterval: 30000, // Refetch every 30 seconds
+    enabled: !!user && hasPermission(user.role, 'view_notifications'),
   });
 
   const pendingOrders = Array.isArray(orders) ? orders.filter((order: any) => order.status === "pending").length : 0;
   const activeConversations = Array.isArray(conversations) ? conversations.filter((conv: any) => conv.unreadCount > 0).length : 0;
   const unreadNotifications = notificationCounts.unread || 0;
 
-  const navItems = [
+  // Configurar elementos del menú basado en el rol del usuario
+  const allNavItems = [
+    // Items básicos para todos los roles
     {
       href: "/dashboard",
       icon: ChartLine,
       label: "Dashboard",
       badge: null,
+      permission: "view_dashboard",
     },
     {
       href: "/orders",
       icon: ShoppingCart,
       label: "Pedidos",
       badge: pendingOrders > 0 ? pendingOrders : null,
+      permission: "view_orders",
     },
     {
       href: "/conversations",
       icon: MessageCircle,
       label: "Conversaciones",
       badge: activeConversations > 0 ? activeConversations : null,
+      permission: "view_conversations",
     },
     {
       href: "/notifications",
       icon: Bell,
       label: "Notificaciones",
       badge: unreadNotifications > 0 ? unreadNotifications : null,
+      permission: "view_notifications",
     },
+    // Items específicos para técnicos
+    {
+      href: "/technician-dashboard",
+      icon: Wrench,
+      label: "Mi Trabajo",
+      badge: null,
+      permission: "technician_work",
+      roles: ["technician"],
+    },
+    // Items para managers y admins
     {
       href: "/team",
       icon: Users,
       label: "Equipo",
       badge: null,
+      permission: "manage_users",
     },
     {
       href: "/customers",
       icon: UserPlus,
       label: "Clientes",
       badge: null,
+      permission: "view_customers",
     },
     {
       href: "/employees",
       icon: UserPlus,
       label: "Empleados",
       badge: null,
+      permission: "manage_users",
     },
     {
       href: "/products",
       icon: Package,
       label: "Productos",
       badge: null,
+      permission: "view_products",
     },
     {
       href: "/reports",
       icon: BarChart3,
       label: "Reportes",
       badge: null,
+      permission: "view_reports",
     },
+    // Items solo para admins
     {
       href: "/settings",
       icon: Settings,
       label: "Configuración",
       badge: null,
+      permission: "manage_settings",
     },
     {
       href: "/whatsapp-settings",
       icon: Smartphone,
       label: "WhatsApp API",
       badge: null,
+      permission: "manage_settings",
     },
     {
       href: "/auto-responses",
       icon: Bot,
       label: "Respuestas Automáticas",
       badge: null,
+      permission: "manage_settings",
     },
     {
       href: "/assignment-rules",
       icon: Zap,
       label: "Asignación Automática",
       badge: null,
+      permission: "manage_assignments",
     },
   ];
+
+  // Filtrar elementos del menú según permisos del usuario
+  const navItems = allNavItems.filter(item => {
+    if (!user) return false;
+    
+    // Si el item tiene roles específicos, verificar si el usuario tiene ese rol
+    if (item.roles && !item.roles.includes(user.role)) {
+      return false;
+    }
+    
+    // Verificar permisos
+    return hasPermission(user.role, item.permission);
+  });
 
   if (isMobile && !isOpen) return null;
 

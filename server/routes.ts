@@ -126,6 +126,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoint específico para técnicos - obtener sus órdenes asignadas
+  app.get("/api/technician/orders", authenticateToken, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const orders = await storage.getTechnicianOrders(userId);
+      res.json(orders);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch technician orders" });
+    }
+  });
+
   app.get("/api/orders/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);

@@ -97,6 +97,7 @@ export interface IStorage {
     notes?: string;
   }>): Promise<OrderWithDetails>;
   getAllOrders(): Promise<OrderWithDetails[]>;
+  getTechnicianOrders(userId: number): Promise<OrderWithDetails[]>;
   updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined>;
   assignOrder(orderId: number, userId: number): Promise<Order | undefined>;
   updateOrderStatus(orderId: number, status: string, userId?: number, notes?: string): Promise<Order | undefined>;

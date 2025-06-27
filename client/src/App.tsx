@@ -20,6 +20,7 @@ import Employees from "@/pages/employees";
 import Customers from "@/pages/customers";
 import AssignmentRules from "@/pages/assignment-rules";
 import Notifications from "@/pages/notifications";
+import TechnicianDashboard from "@/pages/technician-dashboard";
 import AppLayout from "@/components/layout/app-layout";
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -60,6 +61,7 @@ function Router() {
     <Switch>
       <Route path="/" component={() => <ProtectedRoute component={Dashboard} permission="view_dashboard" />} />
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} permission="view_dashboard" />} />
+      <Route path="/technician-dashboard" component={() => <ProtectedRoute component={TechnicianDashboard} permission="technician_work" />} />
       <Route path="/orders" component={() => <ProtectedRoute component={Orders} permission="view_orders" />} />
       <Route path="/conversations" component={() => <ProtectedRoute component={Conversations} permission="view_conversations" />} />
       <Route path="/team" component={() => <ProtectedRoute component={Team} permission="manage_users" />} />
