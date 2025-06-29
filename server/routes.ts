@@ -1384,7 +1384,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Parse the order message to extract products
-      const orderItems = parseOrderFromMessage(orderText);
+      let orderItems;
+      try {
+        orderItems = parseOrderFromMessage(orderText);
+        await storage.addWhatsAppLog({
+          type: 'debug',
+          phoneNumber: phoneNumber,
+          messageContent: `Productos parseados: ${orderItems.length}`,
+          status: 'processing',
+          rawData: JSON.stringify({ orderItems })
+        });
+      } catch (parseError: any) {
+        await storage.addWhatsAppLog({
+          type: 'error',
+          phoneNumber: phoneNumber,
+          messageContent: 'Error parseando productos del mensaje',
+          status: 'error',
+          errorMessage: parseError.message
+        });
+        throw parseError;
+      }
       
       if (orderItems.length === 0) {
         await sendWhatsAppMessage(phoneNumber, 
@@ -1398,14 +1417,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate total from parsed items
       const total = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       
-      // Prepare order items for createOrder method
-      const orderItemsForCreation = orderItems.map(item => ({
-        productId: item.productId || 0, // Use 0 for unknown products
-        quantity: item.quantity,
-        unitPrice: item.price.toString(),
-        totalPrice: (item.price * item.quantity).toString(),
-        notes: item.name
-      }));
+      // Prepare order items for createOrder method - create products if they don't exist
+      const orderItemsForCreation = [];
+      
+      for (const item of orderItems) {
+        let productId = item.productId;
+        
+        // If no productId, try to find product by name or create new one
+        if (!productId) {
+          const existingProducts = await storage.getAllProducts();
+          const existingProduct = existingProducts.find(p => 
+            p.name.toLowerCase().includes(item.name.toLowerCase()) || 
+            item.name.toLowerCase().includes(p.name.toLowerCase())
+          );
+          
+          if (existingProduct) {
+            productId = existingProduct.id;
+            await storage.addWhatsAppLog({
+              type: 'debug',
+              phoneNumber: phoneNumber,
+              messageContent: `Producto encontrado: ${item.name} -> ID ${productId}`,
+              status: 'processing'
+            });
+          } else {
+            // Create new product dynamically
+            const newProduct = await storage.createProduct({
+              name: item.name,
+              price: item.price.toString(),
+              category: 'Catálogo Web',
+              description: `Producto agregado automáticamente desde pedido de WhatsApp`,
+              isActive: true
+            });
+            productId = newProduct.id;
+            await storage.addWhatsAppLog({
+              type: 'info',
+              phoneNumber: phoneNumber,
+              messageContent: `Nuevo producto creado: ${item.name} -> ID ${productId}`,
+              status: 'processing'
+            });
+          }
+        }
+        
+        orderItemsForCreation.push({
+          productId: productId,
+          quantity: item.quantity,
+          unitPrice: item.price.toString(),
+          totalPrice: (item.price * item.quantity).toString(),
+          notes: item.name
+        });
+      }
       
       await storage.addWhatsAppLog({
         type: 'debug',
@@ -1419,12 +1479,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       });
 
-      const order = await storage.createOrder({
-        customerId: customer.id,
-        status: 'pending',
-        totalAmount: total.toString(),
-        notes: `Pedido automático desde catálogo web. Productos: ${orderItems.map(item => `${item.name} (${item.quantity})`).join(', ')}`
-      }, orderItemsForCreation);
+      let order;
+      try {
+        order = await storage.createOrder({
+          customerId: customer.id,
+          status: 'pending',
+          totalAmount: total.toString(),
+          notes: `Pedido automático desde catálogo web. Productos: ${orderItems.map(item => `${item.name} (${item.quantity})`).join(', ')}`
+        }, orderItemsForCreation);
+      } catch (createOrderError: any) {
+        await storage.addWhatsAppLog({
+          type: 'error',
+          phoneNumber: phoneNumber,
+          messageContent: 'Error creando pedido en base de datos',
+          status: 'error',
+          errorMessage: createOrderError.message,
+          rawData: JSON.stringify({ 
+            customerId: customer.id,
+            total: total,
+            itemsCount: orderItemsForCreation.length
+          })
+        });
+        throw createOrderError;
+      }
 
       await storage.addWhatsAppLog({
         type: 'info',
