@@ -1924,6 +1924,18 @@ export class DatabaseStorage implements IStorage {
     return orderItem;
   }
 
+  async getOrderItems(orderId: number): Promise<OrderItemWithProduct[]> {
+    const items = await db.select()
+      .from(orderItems)
+      .leftJoin(products, eq(orderItems.productId, products.id))
+      .where(eq(orderItems.orderId, orderId));
+
+    return items.map(({ order_items, products: product }) => ({
+      ...order_items,
+      product: product || undefined
+    })) as OrderItemWithProduct[];
+  }
+
   async calculateServicePrice(
     serviceId: number, 
     installationComplexity: number, 
