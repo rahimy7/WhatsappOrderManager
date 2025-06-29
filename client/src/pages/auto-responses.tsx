@@ -34,7 +34,7 @@ export default function AutoResponsesPage() {
   const { toast } = useToast();
 
   // Fetch auto responses
-  const { data: responses, isLoading } = useQuery({
+  const { data: responses, isLoading } = useQuery<AutoResponse[]>({
     queryKey: ["/api/auto-responses"],
   });
 
@@ -284,7 +284,7 @@ export default function AutoResponsesPage() {
                     <Label htmlFor="menuOptions">Opciones de Menú (JSON)</Label>
                     <Textarea
                       id="menuOptions"
-                      value={formData.menuOptions}
+                      value={formData.menuOptions || ""}
                       onChange={(e) => setFormData({ ...formData, menuOptions: e.target.value })}
                       placeholder='[{"label": "Opción 1", "value": "1", "action": "next"}]'
                       rows={3}
@@ -293,7 +293,7 @@ export default function AutoResponsesPage() {
                   <div className="space-y-2">
                     <Label htmlFor="nextAction">Siguiente Acción</Label>
                     <Select
-                      value={formData.nextAction}
+                      value={formData.nextAction || ""}
                       onValueChange={(value) => setFormData({ ...formData, nextAction: value })}
                     >
                       <SelectTrigger>
@@ -313,7 +313,7 @@ export default function AutoResponsesPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="isActive"
-                    checked={formData.isActive}
+                    checked={Boolean(formData.isActive)}
                     onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
                   />
                   <Label htmlFor="isActive">Respuesta activa</Label>
