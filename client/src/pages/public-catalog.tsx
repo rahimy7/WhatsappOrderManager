@@ -27,20 +27,6 @@ export default function PublicCatalog() {
     queryKey: ["/api/products"],
   });
 
-  // Obtener categorías
-  const { data: categories = [], isLoading: loadingCategories } = useQuery({
-    queryKey: ["/api/categories"],
-  });
-
-  // Obtener carrito
-  const { data: cart = { items: [], subtotal: 0 } } = useQuery({
-    queryKey: ["/api/cart"],
-    queryFn: async () => {
-      const sessionId = getSessionId();
-      return apiRequest("GET", `/api/cart?sessionId=${sessionId}`);
-    },
-  });
-
   // Función para obtener/crear sessionId único
   const getSessionId = () => {
     let sessionId = localStorage.getItem('cart-session-id');
@@ -51,6 +37,22 @@ export default function PublicCatalog() {
     return sessionId;
   };
 
+  // Obtener sessionId
+  const sessionId = getSessionId();
+
+  // Obtener categorías
+  const { data: categories = [], isLoading: loadingCategories } = useQuery({
+    queryKey: ["/api/categories"],
+  });
+
+  // Obtener carrito
+  const { data: cart = { items: [], subtotal: 0 } } = useQuery({
+    queryKey: ["/api/cart", sessionId],
+    queryFn: async () => {
+      return apiRequest("GET", `/api/cart?sessionId=${sessionId}`);
+    },
+  });
+
   // Agregar al carrito
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
@@ -58,7 +60,7 @@ export default function PublicCatalog() {
       return apiRequest("POST", "/api/cart/add", { productId, quantity, sessionId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", sessionId] });
       toast({
         title: "Producto agregado",
         description: "El producto se agregó al carrito exitosamente",
@@ -102,7 +104,7 @@ export default function PublicCatalog() {
       return apiRequest("PUT", "/api/cart/update", { productId, quantity, sessionId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", sessionId] });
     },
     onError: (error) => {
       toast({
@@ -145,6 +147,9 @@ export default function PublicCatalog() {
 
   // Obtener total de items en carrito
   const getTotalCartItems = () => {
+    console.log('Cart data in getTotalCartItems:', cart);
+    console.log('Cart items:', cart.items);
+    console.log('Is array?', Array.isArray(cart.items));
     if (!cart.items || !Array.isArray(cart.items)) return 0;
     return cart.items.reduce((total: number, item: any) => total + item.quantity, 0);
   };
