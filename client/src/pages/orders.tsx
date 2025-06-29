@@ -160,11 +160,13 @@ export default function OrdersPage() {
   };
 
   const handleEditOrder = (order: OrderWithDetails) => {
+    console.log("handleEditOrder called with order:", order);
     setSelectedOrder(order);
     setIsEditDialogOpen(true);
   };
 
   const handleViewOrder = (order: OrderWithDetails) => {
+    console.log("handleViewOrder called with order:", order);
     setSelectedOrder(order);
     setIsViewDialogOpen(true);
   };
@@ -439,6 +441,9 @@ export default function OrdersPage() {
               <Package className="w-5 h-5" />
               Detalles de la Orden {selectedOrder?.orderNumber}
             </DialogTitle>
+            <DialogDescription>
+              Información completa de la orden incluyendo productos, servicios y costos
+            </DialogDescription>
           </DialogHeader>
           
           {selectedOrder && (
