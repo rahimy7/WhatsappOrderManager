@@ -1024,19 +1024,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (responses.length > 0) {
           for (const response of responses) {
-            if (response.isInteractive && response.interactiveData) {
-              // Send interactive message
-              const interactiveMessage = {
-                messaging_product: "whatsapp",
-                to: from,
-                type: "interactive",
-                interactive: JSON.parse(response.interactiveData)
-              };
-              
-              await sendWhatsAppInteractiveMessage(from, interactiveMessage);
+            if (response.menuOptions && response.menuType && response.menuType !== 'text_only') {
+              // Send interactive message with menu options
+              try {
+                const menuOptions = JSON.parse(response.menuOptions);
+                const interactiveMessage = {
+                  messaging_product: "whatsapp",
+                  to: from,
+                  type: "interactive",
+                  interactive: {
+                    type: "button",
+                    body: {
+                      text: response.messageText
+                    },
+                    action: {
+                      buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                        type: "reply",
+                        reply: {
+                          id: option.value || `option_${index}`,
+                          title: option.label.substring(0, 20) // WhatsApp button limit
+                        }
+                      }))
+                    }
+                  }
+                };
+                
+                await sendWhatsAppInteractiveMessage(from, interactiveMessage);
+              } catch (error) {
+                // If menu parsing fails, send text message
+                await sendWhatsAppMessage(from, response.messageText);
+              }
             } else {
               // Send text message
-              await sendWhatsAppMessage(from, response.message);
+              await sendWhatsAppMessage(from, response.messageText);
             }
             
             responseFound = true;
