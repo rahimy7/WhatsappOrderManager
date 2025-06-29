@@ -1410,9 +1410,41 @@ export class MemStorage implements IStorage {
 
   async getAllCategories(): Promise<ProductCategory[]> {
     return [
-      { id: 1, name: 'Aires Acondicionados', description: 'Equipos de climatización', isActive: true, createdAt: new Date(), updatedAt: new Date() },
-      { id: 2, name: 'Servicios', description: 'Servicios de instalación y mantenimiento', isActive: true, createdAt: new Date(), updatedAt: new Date() }
+      { id: 1, name: 'Aires Acondicionados', description: 'Equipos de climatización', isActive: true, imageUrl: null, parentId: null, sortOrder: null, createdAt: new Date(), updatedAt: new Date() },
+      { id: 2, name: 'Servicios', description: 'Servicios de instalación y mantenimiento', isActive: true, imageUrl: null, parentId: null, sortOrder: null, createdAt: new Date(), updatedAt: new Date() }
     ];
+  }
+
+  // Store Configuration
+  async getStoreConfig(): Promise<StoreSettings | undefined> {
+    // Return default store config for in-memory storage
+    return {
+      id: 1,
+      storeWhatsAppNumber: '',
+      storeName: 'Mi Tienda',
+      storeAddress: null,
+      storeEmail: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+  }
+
+  async updateStoreConfig(config: { 
+    storeWhatsAppNumber: string; 
+    storeName: string; 
+    storeAddress?: string; 
+    storeEmail?: string; 
+  }): Promise<StoreSettings> {
+    // Return updated config for in-memory storage
+    return {
+      id: 1,
+      storeWhatsAppNumber: config.storeWhatsAppNumber,
+      storeName: config.storeName,
+      storeAddress: config.storeAddress || null,
+      storeEmail: config.storeEmail || null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
   }
 }
 
