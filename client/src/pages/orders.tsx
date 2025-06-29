@@ -30,6 +30,29 @@ type OrderWithDetails = {
     phone: string;
     address: string | null;
   };
+  items: Array<{
+    id: number;
+    orderId: number;
+    productId: number;
+    quantity: number;
+    unitPrice: string;
+    totalPrice: string;
+    installationCost: string;
+    partsCost: string;
+    laborHours: string;
+    laborRate: string;
+    deliveryCost: string;
+    deliveryDistance: string;
+    notes: string | null;
+    product: {
+      id: number;
+      name: string;
+      description: string;
+      price: string;
+      category: string;
+      status: string;
+    };
+  }>;
 };
 
 export default function OrdersPage() {
@@ -269,6 +292,33 @@ export default function OrdersPage() {
                         <span>{assignedUser(order.assignedUserId)}</span>
                       </div>
                     </div>
+                    
+                    {/* Products/Services Section */}
+                    {order.items && order.items.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                          Productos/Servicios:
+                        </h4>
+                        <div className="space-y-1">
+                          {order.items.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <Package className="w-4 h-4 text-blue-500" />
+                                <span className="font-medium">{item.product.name}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {item.product.category === 'product' ? 'Producto' : 'Servicio'}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <span>Cant: {item.quantity}</span>
+                                <span>•</span>
+                                <span>{formatCurrency(item.unitPrice)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -429,6 +479,48 @@ export default function OrdersPage() {
                   </div>
                 )}
               </div>
+              
+              </div>
+              
+              {/* Products/Services Section */}
+              {selectedOrder.items && selectedOrder.items.length > 0 && (
+                <div className="mt-6">
+                  <Label className="text-sm font-medium text-muted-foreground">Productos/Servicios</Label>
+                  <div className="mt-3 space-y-3">
+                    {selectedOrder.items.map((item, index) => (
+                      <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Package className="w-4 h-4 text-blue-500" />
+                            <span className="font-medium">{item.product.name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {item.product.category === 'product' ? 'Producto' : 'Servicio'}
+                            </Badge>
+                          </div>
+                          <div className="text-sm font-medium text-green-600">
+                            {formatCurrency(item.totalPrice)}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                          <div>Cantidad: {item.quantity}</div>
+                          <div>Precio unitario: {formatCurrency(item.unitPrice)}</div>
+                          {item.deliveryCost !== "0.00" && (
+                            <>
+                              <div>Costo de entrega: {formatCurrency(item.deliveryCost)}</div>
+                              <div>Distancia: {item.deliveryDistance} km</div>
+                            </>
+                          )}
+                        </div>
+                        {item.product.description && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {item.product.description}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
@@ -440,11 +532,12 @@ export default function OrdersPage() {
               setIsViewDialogOpen(false);
               if (selectedOrder) handleEditOrder(selectedOrder);
             }}>
-              Editar Orden
+              Editar
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </DialogContent>
+    </Dialog>
+
     </div>
   );
 }
