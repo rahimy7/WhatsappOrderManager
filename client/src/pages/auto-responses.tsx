@@ -583,14 +583,20 @@ export default function AutoResponsesPage() {
               
               {response.menuOptions && (
                 <div className="mb-3">
-                  <div className="text-xs font-medium text-gray-500 mb-1">
-                    Opciones de menú:
+                  <div className="text-xs font-medium text-gray-500 mb-2">
+                    Botones de menú interactivo:
                   </div>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="grid grid-cols-2 gap-2">
                     {JSON.parse(response.menuOptions).map((option: MenuOption, index: number) => (
-                      <span key={index} className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">
-                        {option.label}
-                      </span>
+                      <div key={index} className="border border-gray-200 rounded-lg p-2 bg-gray-50">
+                        <div className="text-xs font-medium text-gray-800">{option.label}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          <span className="bg-blue-100 text-blue-700 px-1 rounded text-xs">{option.value}</span>
+                          {option.action && (
+                            <span className="ml-1 bg-green-100 text-green-700 px-1 rounded text-xs">{option.action}</span>
+                          )}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

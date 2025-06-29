@@ -1001,13 +1001,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const autoResponses = await storage.getAllAutoResponses();
       let responseFound = false;
       
-      // Check common triggers
+      // Check common triggers including button responses
       const triggers = [
         { keywords: ['hola', 'hello', 'hi', 'buenos dias', 'buenas tardes'], trigger: 'welcome' },
         { keywords: ['menu', 'menú', 'opciones', 'catalogo', 'catálogo'], trigger: 'menu' },
-        { keywords: ['productos', 'product', 'comprar'], trigger: 'product_inquiry' },
-        { keywords: ['servicios', 'service', 'reparacion', 'reparación'], trigger: 'service_inquiry' },
-        { keywords: ['ayuda', 'help', 'contacto', 'soporte'], trigger: 'contact_request' }
+        { keywords: ['productos', 'product', 'comprar', 'ver productos'], trigger: 'product_inquiry' },
+        { keywords: ['servicios', 'service', 'reparacion', 'reparación', 'ver servicios'], trigger: 'service_inquiry' },
+        { keywords: ['ayuda', 'help', 'contacto', 'soporte', 'obtener ayuda'], trigger: 'help' }
       ];
       
       // Find matching trigger

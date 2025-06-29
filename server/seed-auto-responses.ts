@@ -96,6 +96,36 @@ export async function seedAutoResponses() {
       nextAction: "wait_selection"
     },
     {
+      name: "Consulta de Productos",
+      trigger: "product_inquiry",
+      messageText: "🛍️ *Catálogo de Productos*\n\nNuestros productos de aires acondicionados:\n\n• Mini Split 12,000 BTU - $15,000\n• Mini Split 18,000 BTU - $18,500\n• Mini Split 24,000 BTU - $22,000\n• Aire Central 36,000 BTU - $35,000\n\n¿Te interesa algún producto específico?",
+      isActive: true,
+      priority: 8,
+      requiresRegistration: false,
+      menuOptions: JSON.stringify([
+        { label: "Mini Split 12K BTU", value: "product_12k", action: "select_product" },
+        { label: "Mini Split 18K BTU", value: "product_18k", action: "select_product" },
+        { label: "Mini Split 24K BTU", value: "product_24k", action: "select_product" },
+        { label: "Hacer Pedido", value: "order", action: "start_order" }
+      ]),
+      nextAction: "wait_selection"
+    },
+    {
+      name: "Consulta de Servicios", 
+      trigger: "service_inquiry",
+      messageText: "⚙️ *Servicios Disponibles*\n\nOfrecemos los siguientes servicios:\n\n• Instalación de Aires - $2,500\n• Mantenimiento Preventivo - $800\n• Reparación de Equipos - $1,200\n• Limpieza Profunda - $600\n\n¿Qué servicio necesitas?",
+      isActive: true,
+      priority: 9,
+      requiresRegistration: false,
+      menuOptions: JSON.stringify([
+        { label: "Instalación", value: "service_install", action: "select_service" },
+        { label: "Mantenimiento", value: "service_maintenance", action: "select_service" },
+        { label: "Reparación", value: "service_repair", action: "select_service" },
+        { label: "Solicitar Servicio", value: "order", action: "start_order" }
+      ]),
+      nextAction: "wait_selection"
+    },
+    {
       name: "Mensaje de Despedida",
       trigger: "goodbye",
       messageText: "👋 ¡Gracias por contactarnos!\n\nSi necesitas ayuda adicional, no dudes en escribirnos.\n\n¡Que tengas un excelente día!",
