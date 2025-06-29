@@ -512,6 +512,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Botón "⬅️ Volver al Menú" en mensaje separado para navegación completa sin escritura manual
   - Eliminación de productos registrada en notas del pedido con timestamp para auditoria
   - Interface completamente libre de escritura manual - todas las acciones mediante botones interactivos
+- June 29, 2025. CRÍTICO: Error de botones interactivos en eliminación de productos resuelto:
+  - Corregido error #131009 "Parameter value is not valid" en WhatsApp API durante eliminación de productos
+  - Reemplazado sistema de botones interactivos problemático con interfaz de texto numerado simple
+  - Sistema ahora usa mensajes de texto con productos numerados del 1 al N para selección
+  - Implementado flujo de registro 'removing_product' para capturar número de producto a eliminar
+  - Manejo robusto de validación de números con mensajes de error claros para entradas inválidas
+  - Eliminación de productos funciona completamente con solo escribir el número del producto (1, 2, 3, etc.)
+  - Opción de cancelación escribiendo 'menu' durante el proceso de eliminación
+  - Sistema más confiable y compatible con limitaciones de WhatsApp Business API
 - June 29, 2025. MENÚ INTERACTIVO PARA CLIENTES CON PEDIDOS ACTIVOS COMPLETAMENTE IMPLEMENTADO:
   - Sistema inteligente de detección: clientes con pedidos activos reciben menú especializado con 3 opciones
   - Opción 1 "📋 Seguimiento": muestra estado detallado de todos los pedidos activos con emojis de estado
