@@ -987,20 +987,32 @@ export class MemStorage implements IStorage {
   }
 
   async deleteOrder(id: number): Promise<void> {
-    this.orders.delete(id);
-    // Also delete related order items and history
+    // Update conversations to remove order reference (set to null instead of deleting)
+    Array.from(this.conversations.keys()).forEach(convId => {
+      const conversation = this.conversations.get(convId);
+      if (conversation && conversation.orderId === id) {
+        this.conversations.set(convId, { ...conversation, orderId: null });
+      }
+    });
+    
+    // Delete related order items
     Array.from(this.orderItems.keys()).forEach(itemId => {
       const item = this.orderItems.get(itemId);
       if (item && item.orderId === id) {
         this.orderItems.delete(itemId);
       }
     });
+    
+    // Delete related order history
     Array.from(this.orderHistory.keys()).forEach(historyId => {
       const history = this.orderHistory.get(historyId);
       if (history && history.orderId === id) {
         this.orderHistory.delete(historyId);
       }
     });
+    
+    // Finally delete the order itself
+    this.orders.delete(id);
   }
 
   // Order Items
@@ -1872,9 +1884,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOrder(id: number): Promise<void> {
-    // Delete in order: order_history -> order_items -> orders (foreign key constraints)
+    // Delete in order of foreign key dependencies:
+    // 1. Update conversations to remove order reference (set to null instead of deleting conversations)
+    await db.update(conversations).set({ orderId: null }).where(eq(conversations.orderId, id));
+    
+    // 2. Delete order history
     await db.delete(orderHistory).where(eq(orderHistory.orderId, id));
+    
+    // 3. Delete order items
     await db.delete(orderItems).where(eq(orderItems.orderId, id));
+    
+    // 4. Finally delete the order itself
     await db.delete(orders).where(eq(orders.id, id));
   }
 
