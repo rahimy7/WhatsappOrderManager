@@ -36,12 +36,12 @@ export default function OrdersPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
 
   // Fetch orders
-  const { data: orders = [], isLoading } = useQuery<Order[]>({
+  const { data: orders = [], isLoading } = useQuery<OrderWithDetails[]>({
     queryKey: ["/api/orders"],
   });
 
@@ -52,7 +52,7 @@ export default function OrdersPage() {
 
   // Update order mutation
   const updateOrderMutation = useMutation({
-    mutationFn: async ({ id, ...data }: { id: number } & Partial<Order>) => {
+    mutationFn: async ({ id, ...data }: { id: number } & Partial<OrderWithDetails>) => {
       return apiRequest("PUT", `/api/orders/${id}`, data);
     },
     onSuccess: () => {
@@ -128,19 +128,20 @@ export default function OrdersPage() {
     );
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: string | number) => {
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN'
-    }).format(amount);
+    }).format(numAmount);
   };
 
-  const handleEditOrder = (order: Order) => {
+  const handleEditOrder = (order: OrderWithDetails) => {
     setSelectedOrder(order);
     setIsEditDialogOpen(true);
   };
 
-  const handleViewOrder = (order: Order) => {
+  const handleViewOrder = (order: OrderWithDetails) => {
     setSelectedOrder(order);
     setIsViewDialogOpen(true);
   };
@@ -153,7 +154,7 @@ export default function OrdersPage() {
     const updates = {
       id: selectedOrder.id,
       status: formData.get("status") as string,
-      assignedToId: formData.get("assignedToId") ? Number(formData.get("assignedToId")) : null,
+      assignedUserId: formData.get("assignedUserId") ? Number(formData.get("assignedUserId")) : null,
       notes: formData.get("notes") as string,
     };
 
@@ -252,19 +253,19 @@ export default function OrdersPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">
                         <UserCheck className="w-4 h-4" />
-                        <span>{order.customerName || "Cliente no especificado"}</span>
+                        <span>{order.customer?.name || "Cliente no especificado"}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span>📞</span>
-                        <span>{order.customerPhone || "Teléfono no disponible"}</span>
+                        <span>{order.customer?.phone || "Teléfono no disponible"}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4" />
-                        <span>{order.deliveryAddress || "Dirección no especificada"}</span>
+                        <span>{order.customer?.address || order.description || "Dirección no especificada"}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span>👷</span>
-                        <span>{assignedUser(order.assignedToId)}</span>
+                        <span>{assignedUser(order.assignedUserId)}</span>
                       </div>
                     </div>
                   </div>
@@ -340,8 +341,8 @@ export default function OrdersPage() {
               </div>
               
               <div className="grid gap-2">
-                <Label htmlFor="assignedToId">Asignar a</Label>
-                <Select name="assignedToId" defaultValue={selectedOrder?.assignedToId?.toString() || ""}>
+                <Label htmlFor="assignedUserId">Asignar a</Label>
+                <Select name="assignedUserId" defaultValue={selectedOrder?.assignedUserId?.toString() || ""}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar técnico" />
                   </SelectTrigger>
@@ -394,11 +395,11 @@ export default function OrdersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Cliente</Label>
-                  <p className="text-sm">{selectedOrder.customerName || "No especificado"}</p>
+                  <p className="text-sm">{selectedOrder.customer?.name || "No especificado"}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Teléfono</Label>
-                  <p className="text-sm">{selectedOrder.customerPhone || "No disponible"}</p>
+                  <p className="text-sm">{selectedOrder.customer?.phone || "No disponible"}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Estado</Label>
@@ -410,11 +411,11 @@ export default function OrdersPage() {
                 </div>
                 <div className="col-span-2">
                   <Label className="text-sm font-medium text-muted-foreground">Dirección de Entrega</Label>
-                  <p className="text-sm">{selectedOrder.deliveryAddress || "No especificada"}</p>
+                  <p className="text-sm">{selectedOrder.customer?.address || selectedOrder.description || "No especificada"}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Asignado a</Label>
-                  <p className="text-sm">{assignedUser(selectedOrder.assignedToId)}</p>
+                  <p className="text-sm">{assignedUser(selectedOrder.assignedUserId)}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Fecha de Creación</Label>

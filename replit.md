@@ -343,6 +343,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Enhanced error logging and debugging for better troubleshooting
   - Auto-responses now support real-time toggle functionality with visual feedback
   - Backend PUT endpoint verified and working correctly for status updates
+- June 29, 2025. Administrator order management system implemented:
+  - Added comprehensive orders/pedidos management page accessible to admin users
+  - Integrated new menu item "Órdenes/Pedidos" in sidebar with appropriate permissions
+  - Created complete CRUD interface for order management with filtering and search
+  - Fixed apiRequest parameter order issues throughout application (method, url, data)
+  - Implemented proper TypeScript types for OrderWithDetails structure
+  - Added order viewing, editing, and deletion capabilities with proper error handling
+  - Enhanced admin dashboard with full order management access and assignment controls
 
 ## User Preferences
 
