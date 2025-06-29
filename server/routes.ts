@@ -1571,11 +1571,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createRegistrationFlow({
         phoneNumber: phoneNumber,
         currentStep: 'collect_address',
-        customerData: JSON.stringify({ 
+        collectedData: JSON.stringify({ 
           orderId: order.id,
           orderNumber: orderNumber,
           hasName: !customer.name.startsWith('Cliente ')
-        })
+        }),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
       });
 
       await storage.addWhatsAppLog({
