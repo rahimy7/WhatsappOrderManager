@@ -522,10 +522,8 @@ export default function PublicCatalog() {
 
             {/* Items del carrito */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4 max-h-96">
-              {(() => {
-                const cartData = cart as any;
-                return cartData?.items && Array.isArray(cartData.items) && cartData.items.length > 0 ? (
-                cartData.items.map((item: any) => (
+              {(cart as any)?.items && Array.isArray((cart as any).items) && (cart as any).items.length > 0 ? (
+                (cart as any).items.map((item: any) => (
                   <div key={item.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
                       <ShoppingBag className="w-6 h-6 text-blue-600" />
@@ -586,8 +584,7 @@ export default function PublicCatalog() {
                   <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500">Tu carrito está vacío</p>
                 </div>
-              );
-              })()}
+              )}
             </div>
 
             {/* Footer con total y botón de WhatsApp */}
