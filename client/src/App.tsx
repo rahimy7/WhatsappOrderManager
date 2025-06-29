@@ -120,6 +120,7 @@ function AppWithAuth() {
       <Route path="/public-catalog" component={PublicCatalogClean} />
       <Route path="/simple-catalog" component={SimpleCatalog} />
       <Route path="/login" component={Login} />
+      <Route path="/multi-tenant-login" component={MultiTenantLogin} />
       
       {/* Rutas que requieren autenticación con layout */}
       <Route>
