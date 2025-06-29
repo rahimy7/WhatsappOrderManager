@@ -67,6 +67,27 @@ export const products = pgTable("products", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   category: text("category").notNull(), // 'product', 'service'
   status: text("status").notNull().default("active"), // 'active', 'inactive'
+  // Catalog functionality
+  imageUrl: text("image_url"),
+  images: text("images").array(), // Array of image URLs for gallery
+  sku: text("sku").unique(), // Product SKU/code
+  brand: text("brand"),
+  model: text("model"),
+  specifications: text("specifications"), // JSON string for technical specs
+  features: text("features").array(), // Array of feature descriptions
+  warranty: text("warranty"),
+  availability: text("availability").notNull().default("in_stock"), // 'in_stock', 'out_of_stock', 'limited', 'pre_order'
+  stockQuantity: integer("stock_quantity").default(0),
+  minQuantity: integer("min_quantity").default(1),
+  maxQuantity: integer("max_quantity"),
+  weight: decimal("weight", { precision: 8, scale: 2 }), // kg
+  dimensions: text("dimensions"), // JSON string: {"length": 100, "width": 50, "height": 30}
+  tags: text("tags").array(), // Array of search tags
+  salePrice: decimal("sale_price", { precision: 10, scale: 2 }), // Optional discounted price
+  isPromoted: boolean("is_promoted").default(false),
+  promotionText: text("promotion_text"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const orders = pgTable("orders", {
@@ -251,6 +272,31 @@ export const assignmentRules = pgTable("assignment_rules", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Shopping cart for catalog system
+export const shoppingCart = pgTable("shopping_cart", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(), // For guest users
+  userId: integer("user_id").references(() => users.id), // For logged-in users
+  productId: integer("product_id").references(() => products.id).notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  notes: text("notes"), // Special instructions
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Product categories for better organization
+export const productCategories = pgTable("product_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  parentId: integer("parent_id"), // For subcategories - self-reference
+  imageUrl: text("image_url"),
+  sortOrder: integer("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -332,6 +378,18 @@ export const insertAssignmentRuleSchema = createInsertSchema(assignmentRules).om
   updatedAt: true,
 });
 
+export const insertShoppingCartSchema = createInsertSchema(shoppingCart).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProductCategorySchema = createInsertSchema(productCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -374,6 +432,12 @@ export type InsertEmployeeProfile = z.infer<typeof insertEmployeeProfileSchema>;
 
 export type AssignmentRule = typeof assignmentRules.$inferSelect;
 export type InsertAssignmentRule = z.infer<typeof insertAssignmentRuleSchema>;
+
+export type ShoppingCart = typeof shoppingCart.$inferSelect;
+export type InsertShoppingCart = z.infer<typeof insertShoppingCartSchema>;
+
+export type ProductCategory = typeof productCategories.$inferSelect;
+export type InsertProductCategory = z.infer<typeof insertProductCategorySchema>;
 
 export const insertCustomerHistorySchema = createInsertSchema(customerHistory);
 export type CustomerHistory = typeof customerHistory.$inferSelect;
