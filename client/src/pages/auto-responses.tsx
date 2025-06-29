@@ -84,6 +84,27 @@ export default function AutoResponsesPage() {
     },
   });
 
+  // Toggle active status mutation
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      return apiRequest(`/api/auto-responses/${id}`, "PUT", { isActive });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
+      toast({
+        title: "Estado actualizado",
+        description: "El estado de la respuesta se ha actualizado correctamente.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el estado de la respuesta.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Reset to defaults mutation
   const resetToDefaultsMutation = useMutation({
     mutationFn: async () => {
@@ -338,15 +359,24 @@ export default function AutoResponsesPage() {
                   {response.name}
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  {response.isActive ? (
-                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                      Activo
-                    </span>
-                  ) : (
-                    <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
-                      Inactivo
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={Boolean(response.isActive)}
+                      onCheckedChange={(checked) => 
+                        toggleActiveMutation.mutate({ id: response.id, isActive: checked })
+                      }
+                      disabled={toggleActiveMutation.isPending}
+                    />
+                    {response.isActive ? (
+                      <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                        Activo
+                      </span>
+                    ) : (
+                      <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
+                        Inactivo
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"
