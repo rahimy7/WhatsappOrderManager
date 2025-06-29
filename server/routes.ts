@@ -1913,6 +1913,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (buttonId === 'help') {
         // Use configured auto-response for help
         await processAutoResponse('help', phoneNumber);
+      } else if (buttonId === 'main_menu') {
+        // Use configured auto-response for menu
+        await processAutoResponse('menu', phoneNumber);
+      } else if (buttonId === 'show_products') {
+        // Use configured auto-response for product_inquiry
+        await processAutoResponse('product_inquiry', phoneNumber);
+      } else if (buttonId === 'show_services') {
+        // Use configured auto-response for service_inquiry
+        await processAutoResponse('service_inquiry', phoneNumber);
+      } else if (buttonId === 'show_help') {
+        // Use configured auto-response for help
+        await processAutoResponse('help', phoneNumber);
+      } else if (buttonId === 'product_12k' || buttonId === 'product_18k' || buttonId === 'product_24k') {
+        // Handle specific product selections - redirect to order flow
+        await sendWhatsAppMessage(phoneNumber, 
+          "Para realizar un pedido, por favor escribe *pedido* o selecciona el producto específico desde el menú."
+        );
+      } else if (buttonId === 'service_install' || buttonId === 'service_maintenance' || buttonId === 'service_repair') {
+        // Handle specific service selections - redirect to order flow
+        await sendWhatsAppMessage(phoneNumber, 
+          "Para solicitar un servicio, por favor escribe *servicio* o contacta con un técnico."
+        );
+      } else if (buttonId === 'order' || buttonId === 'start_order') {
+        // Start order process - redirect to menu or product selection
+        await processAutoResponse('menu', phoneNumber);
       } else if (buttonId.startsWith('quantity_')) {
         const [, productId, quantity] = buttonId.split('_');
         await handleQuantitySelection(customer, parseInt(productId), parseInt(quantity), phoneNumber);
