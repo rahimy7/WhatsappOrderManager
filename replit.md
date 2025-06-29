@@ -372,6 +372,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Beautiful gradient avatars and comprehensive employee information display including email, phone, department, and hire date
   - Maintained status management functionality with proper user ID routing for status updates
   - Complete integration between employee management system and team monitoring interface
+- June 29, 2025. CRITICAL FIX: WhatsApp auto-response system completely restructured to follow configured responses:
+  - Eliminated hardcoded messages that bypassed configured auto-responses ("soy tu asistente virtual")
+  - Modified sendWelcomeMessage() and sendHelpMenu() functions to use database-configured responses exclusively
+  - Fixed duplicate function implementations causing system conflicts and response inconsistencies
+  - Corrected property references (isInteractive, interactiveData, message) to match actual schema
+  - Auto-response filtering by isActive status now working correctly with proper database queries
+  - System now strictly follows configured response sequences and respects activation/deactivation settings
+  - WhatsApp integration fully operational with customizable, database-driven message flows
 
 ## User Preferences
 

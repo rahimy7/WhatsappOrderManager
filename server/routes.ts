@@ -2397,34 +2397,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   async function sendWelcomeMessage(phoneNumber: string) {
-    const welcomeMessage = 
-      "👋 *¡Bienvenido!*\n\n" +
-      "Soy tu asistente virtual para pedidos.\n\n" +
-      "*Comandos disponibles:*\n" +
-      "🛍️ *menu* - Ver catálogo\n" +
-      "📍 *ubicacion* - Compartir ubicación\n" +
-      "📋 *pedido* - Estado de pedidos\n" +
-      "❓ *ayuda* - Ver opciones\n\n" +
-      "¿En qué puedo ayudarte hoy?";
-
-    await sendWhatsAppMessage(phoneNumber, welcomeMessage);
+    // Use configured auto-response for welcome instead of hardcoded message
+    const welcomeResponses = await storage.getAutoResponsesByTrigger('welcome');
+    
+    if (welcomeResponses.length > 0) {
+      const welcomeResponse = welcomeResponses[0]; // Get first active welcome response
+      
+      if (welcomeResponse.menuOptions) {
+        try {
+          const menuOptions = JSON.parse(welcomeResponse.menuOptions);
+          // Create interactive menu message
+          const interactiveMessage = {
+            messaging_product: "whatsapp",
+            to: phoneNumber,
+            type: "interactive",
+            interactive: {
+              type: "button",
+              body: {
+                text: welcomeResponse.messageText
+              },
+              action: {
+                buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                  type: "reply",
+                  reply: {
+                    id: option.value || `option_${index}`,
+                    title: option.label.substring(0, 20) // WhatsApp button limit
+                  }
+                }))
+              }
+            }
+          };
+          
+          await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+        } catch (error) {
+          // If menu parsing fails, send text message
+          await sendWhatsAppMessage(phoneNumber, welcomeResponse.messageText);
+        }
+      } else {
+        // Send text message
+        await sendWhatsAppMessage(phoneNumber, welcomeResponse.messageText);
+      }
+    } else {
+      // Fallback only if no welcome response is configured
+      const fallbackMessage = "👋 ¡Hola! Bienvenido a nuestro servicio. Escribe 'menu' para ver las opciones disponibles.";
+      await sendWhatsAppMessage(phoneNumber, fallbackMessage);
+    }
   }
 
   async function sendHelpMenu(phoneNumber: string) {
-    const helpMessage = 
-      "❓ *Centro de Ayuda*\n\n" +
-      "*Comandos de texto:*\n" +
-      "• *menu* o *catalogo* - Ver productos\n" +
-      "• *ubicacion* - Compartir tu ubicación\n" +
-      "• *pedido* - Ver estado de pedidos\n" +
-      "• *ayuda* - Ver este menú\n\n" +
-      "*Botones interactivos:*\n" +
-      "• Usa los botones para navegar fácilmente\n" +
-      "• Selecciona productos del menú\n" +
-      "• Confirma cantidades\n\n" +
-      "💬 También puedes escribir cualquier pregunta.";
-
-    await sendWhatsAppMessage(phoneNumber, helpMessage);
+    // Use configured auto-response for help instead of hardcoded message
+    const helpResponses = await storage.getAutoResponsesByTrigger('help');
+    
+    if (helpResponses.length > 0) {
+      const helpResponse = helpResponses[0]; // Get first active help response
+      
+      if (helpResponse.menuOptions) {
+        try {
+          const menuOptions = JSON.parse(helpResponse.menuOptions);
+          // Create interactive menu message
+          const interactiveMessage = {
+            messaging_product: "whatsapp",
+            to: phoneNumber,
+            type: "interactive",
+            interactive: {
+              type: "button",
+              body: {
+                text: helpResponse.messageText
+              },
+              action: {
+                buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                  type: "reply",
+                  reply: {
+                    id: option.value || `option_${index}`,
+                    title: option.label.substring(0, 20) // WhatsApp button limit
+                  }
+                }))
+              }
+            }
+          };
+          
+          await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+        } catch (error) {
+          // If menu parsing fails, send text message
+          await sendWhatsAppMessage(phoneNumber, helpResponse.messageText);
+        }
+      } else {
+        // Send text message
+        await sendWhatsAppMessage(phoneNumber, helpResponse.messageText);
+      }
+    } else {
+      // Fallback only if no help response is configured
+      const fallbackMessage = "❓ Centro de Ayuda\n\nPuedes escribir 'menu' para ver las opciones disponibles o contactarnos directamente.";
+      await sendWhatsAppMessage(phoneNumber, fallbackMessage);
+    }
   }
 
   function getStatusEmoji(status: string): string {
