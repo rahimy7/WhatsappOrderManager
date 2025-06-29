@@ -15,6 +15,8 @@ import {
   customerHistory,
   assignmentRules,
   notifications,
+  shoppingCart,
+  productCategories,
   type User,
   type Customer,
   type Product,
@@ -30,6 +32,8 @@ import {
   type EmployeeProfile,
   type AssignmentRule,
   type Notification,
+  type ShoppingCart,
+  type ProductCategory,
   type InsertUser,
   type InsertCustomer,
   type InsertProduct,
@@ -45,13 +49,15 @@ import {
   type InsertEmployeeProfile,
   type InsertAssignmentRule,
   type InsertNotification,
+  type InsertShoppingCart,
+  type InsertProductCategory,
   type CustomerHistory,
   type InsertCustomerHistory,
   type OrderWithDetails,
   type ConversationWithDetails,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, count } from "drizzle-orm";
+import { eq, desc, and, count, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -212,6 +218,22 @@ export interface IStorage {
   
   // Conversation Type Determination for WhatsApp Segmentation
   determineConversationType(customerId: number): Promise<'initial' | 'tracking' | 'support'>;
+  
+  // Shopping Cart Management
+  getCartItems(sessionId: string, userId?: number): Promise<(ShoppingCart & { product: Product })[]>;
+  addToCart(item: InsertShoppingCart): Promise<ShoppingCart>;
+  updateCartItem(id: number, quantity: number): Promise<ShoppingCart | undefined>;
+  removeFromCart(id: number): Promise<void>;
+  clearCart(sessionId: string, userId?: number): Promise<void>;
+  getCartTotal(sessionId: string, userId?: number): Promise<number>;
+  
+  // Product Categories
+  getAllCategories(): Promise<ProductCategory[]>;
+  getActiveCategories(): Promise<ProductCategory[]>;
+  getCategory(id: number): Promise<ProductCategory | undefined>;
+  createCategory(category: InsertProductCategory): Promise<ProductCategory>;
+  updateCategory(id: number, updates: Partial<InsertProductCategory>): Promise<ProductCategory | undefined>;
+  deleteCategory(id: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -2581,6 +2603,157 @@ export class DatabaseStorage implements IStorage {
 
     // Default to initial for new requests
     return 'initial';
+  }
+
+  // Shopping Cart Management
+  async getCartItems(sessionId: string, userId?: number): Promise<(ShoppingCart & { product: Product })[]> {
+    let conditions = [eq(shoppingCart.sessionId, sessionId)];
+    
+    if (userId) {
+      conditions.push(eq(shoppingCart.userId, userId));
+    }
+
+    const result = await db
+      .select({
+        cart: shoppingCart,
+        product: products,
+      })
+      .from(shoppingCart)
+      .innerJoin(products, eq(shoppingCart.productId, products.id))
+      .where(and(...conditions));
+
+    return result.map(row => ({ ...row.cart, product: row.product }));
+  }
+
+  async addToCart(item: InsertShoppingCart): Promise<ShoppingCart> {
+    // Check if item already exists in cart
+    const existingItems = await db
+      .select()
+      .from(shoppingCart)
+      .where(
+        and(
+          eq(shoppingCart.sessionId, item.sessionId),
+          eq(shoppingCart.productId, item.productId),
+          item.userId ? eq(shoppingCart.userId, item.userId) : isNull(shoppingCart.userId)
+        )
+      );
+
+    if (existingItems.length > 0) {
+      // Update quantity instead of creating new item
+      const existingItem = existingItems[0];
+      const newQuantity = existingItem.quantity + (item.quantity || 1);
+      
+      const [updatedItem] = await db
+        .update(shoppingCart)
+        .set({ 
+          quantity: newQuantity,
+          updatedAt: new Date()
+        })
+        .where(eq(shoppingCart.id, existingItem.id))
+        .returning();
+      
+      return updatedItem;
+    }
+
+    const [newItem] = await db
+      .insert(shoppingCart)
+      .values(item)
+      .returning();
+    
+    return newItem;
+  }
+
+  async updateCartItem(id: number, quantity: number): Promise<ShoppingCart | undefined> {
+    const [updatedItem] = await db
+      .update(shoppingCart)
+      .set({ 
+        quantity,
+        updatedAt: new Date()
+      })
+      .where(eq(shoppingCart.id, id))
+      .returning();
+    
+    return updatedItem;
+  }
+
+  async removeFromCart(id: number): Promise<void> {
+    await db
+      .delete(shoppingCart)
+      .where(eq(shoppingCart.id, id));
+  }
+
+  async clearCart(sessionId: string, userId?: number): Promise<void> {
+    const conditions = [eq(shoppingCart.sessionId, sessionId)];
+    
+    if (userId) {
+      conditions.push(eq(shoppingCart.userId, userId));
+    }
+
+    await db
+      .delete(shoppingCart)
+      .where(and(...conditions));
+  }
+
+  async getCartTotal(sessionId: string, userId?: number): Promise<number> {
+    const cartItems = await this.getCartItems(sessionId, userId);
+    
+    return cartItems.reduce((total, item) => {
+      const price = parseFloat(item.product.salePrice || item.product.price);
+      return total + (price * item.quantity);
+    }, 0);
+  }
+
+  // Product Categories
+  async getAllCategories(): Promise<ProductCategory[]> {
+    return await db
+      .select()
+      .from(productCategories)
+      .orderBy(productCategories.sortOrder, productCategories.name);
+  }
+
+  async getActiveCategories(): Promise<ProductCategory[]> {
+    return await db
+      .select()
+      .from(productCategories)
+      .where(eq(productCategories.isActive, true))
+      .orderBy(productCategories.sortOrder, productCategories.name);
+  }
+
+  async getCategory(id: number): Promise<ProductCategory | undefined> {
+    const [category] = await db
+      .select()
+      .from(productCategories)
+      .where(eq(productCategories.id, id));
+    
+    return category;
+  }
+
+  async createCategory(category: InsertProductCategory): Promise<ProductCategory> {
+    const [newCategory] = await db
+      .insert(productCategories)
+      .values(category)
+      .returning();
+    
+    return newCategory;
+  }
+
+  async updateCategory(id: number, updates: Partial<InsertProductCategory>): Promise<ProductCategory | undefined> {
+    const [updatedCategory] = await db
+      .update(productCategories)
+      .set({ 
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(productCategories.id, id))
+      .returning();
+    
+    return updatedCategory;
+  }
+
+  async deleteCategory(id: number): Promise<void> {
+    await db
+      .delete(productCategories)
+      .where(eq(productCategories.id, id));
   }
 }
 
