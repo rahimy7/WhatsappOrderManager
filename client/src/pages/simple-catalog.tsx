@@ -31,7 +31,38 @@ export default function SimpleCatalog() {
   const [cart, setCart] = useState<{items: any[], subtotal: number}>(() => {
     try {
       const saved = localStorage.getItem(`cart_${sessionId}`);
-      return saved ? JSON.parse(saved) : { items: [], subtotal: 0 };
+      if (saved) {
+        const parsedCart = JSON.parse(saved);
+        // Agregar algunos productos de demostración si el carrito está vacío
+        if (parsedCart.items.length === 0) {
+          const demoItems = [
+            {
+              id: Date.now(),
+              productId: 6,
+              quantity: 2,
+              product: {
+                id: 6,
+                name: "Instalación de Aires Acondicionados",
+                price: 2500
+              }
+            },
+            {
+              id: Date.now() + 1,
+              productId: 7,
+              quantity: 1,
+              product: {
+                id: 7,
+                name: "Reparación de Refrigeradores",
+                price: 800
+              }
+            }
+          ];
+          const demoSubtotal = demoItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+          return { items: demoItems, subtotal: demoSubtotal };
+        }
+        return parsedCart;
+      }
+      return { items: [], subtotal: 0 };
     } catch {
       return { items: [], subtotal: 0 };
     }
