@@ -48,6 +48,7 @@ import {
   type InsertWhatsAppLog,
   type InsertAutoResponse,
   type InsertCustomerRegistrationFlow,
+  type OrderItemWithProduct,
   type InsertEmployeeProfile,
   type InsertAssignmentRule,
   type InsertNotification,
@@ -115,6 +116,7 @@ export interface IStorage {
   
   // Order Items
   createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem>;
+  getOrderItems(orderId: number): Promise<OrderItemWithProduct[]>;
   
   // Order History
   getOrderHistory(orderId: number): Promise<OrderHistory[]>;
@@ -1024,6 +1026,24 @@ export class MemStorage implements IStorage {
     };
     this.orderItems.set(itemId, orderItem);
     return orderItem;
+  }
+
+  async getOrderItems(orderId: number): Promise<OrderItemWithProduct[]> {
+    const orderItems = Array.from(this.orderItems.values())
+      .filter(item => item.orderId === orderId);
+    
+    const itemsWithProducts: OrderItemWithProduct[] = [];
+    for (const item of orderItems) {
+      const product = this.products.get(item.productId);
+      if (product) {
+        itemsWithProducts.push({
+          ...item,
+          product
+        });
+      }
+    }
+    
+    return itemsWithProducts;
   }
 
   async calculateDeliveryCost(

@@ -447,6 +447,10 @@ export type CustomerHistory = typeof customerHistory.$inferSelect;
 export type InsertCustomerHistory = z.infer<typeof insertCustomerHistorySchema>;
 
 // Extended types for API responses
+export type OrderItemWithProduct = OrderItem & {
+  product: Product;
+};
+
 export type OrderWithDetails = Order & {
   customer: Customer;
   assignedUser?: User;
