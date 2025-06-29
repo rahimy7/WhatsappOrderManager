@@ -1,20 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, MessageCircle, Star, ShoppingBag } from "lucide-react";
+import { Search, MessageCircle, Star, ShoppingBag, Plus, Minus, Trash2, ShoppingCart } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Product, ProductCategory } from "@shared/schema";
 
 type ProductWithCategory = Product & { category: ProductCategory };
 
+interface CartItem {
+  id: number;
+  product: any;
+  quantity: number;
+}
+
 export default function PublicCatalogClean() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [showCart, setShowCart] = useState(false);
 
   // Obtener productos
   const { data: products = [], isLoading: loadingProducts } = useQuery({
@@ -26,16 +34,99 @@ export default function PublicCatalogClean() {
     queryKey: ["/api/categories"],
   });
 
-  // Función para enviar producto por WhatsApp
-  const sendToWhatsApp = (product: any) => {
-    const whatsappMessage = `¡Hola! Me interesa cotizar este producto:\n\n• ${product.name}\n• Precio: $${product.price}\n• Categoría: ${product.category}\n\n¿Podrían ayudarme con más información?`;
+  // Cargar carrito desde localStorage al iniciar
+  useEffect(() => {
+    const savedCart = localStorage.getItem("publicCatalogCart");
+    if (savedCart) {
+      try {
+        setCart(JSON.parse(savedCart));
+      } catch (error) {
+        console.error("Error loading cart:", error);
+      }
+    }
+  }, []);
+
+  // Guardar carrito en localStorage cuando cambie
+  useEffect(() => {
+    localStorage.setItem("publicCatalogCart", JSON.stringify(cart));
+  }, [cart]);
+
+  // Agregar producto al carrito
+  const addToCart = (product: any) => {
+    setCart(prevCart => {
+      const existingItem = prevCart.find(item => item.product.id === product.id);
+      if (existingItem) {
+        return prevCart.map(item =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      } else {
+        return [...prevCart, { id: Date.now(), product, quantity: 1 }];
+      }
+    });
+
+    toast({
+      title: "Producto agregado",
+      description: `${product.name} agregado al carrito`,
+    });
+  };
+
+  // Actualizar cantidad en carrito
+  const updateQuantity = (itemId: number, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeFromCart(itemId);
+      return;
+    }
+    setCart(prevCart =>
+      prevCart.map(item =>
+        item.id === itemId ? { ...item, quantity: newQuantity } : item
+      )
+    );
+  };
+
+  // Remover del carrito
+  const removeFromCart = (itemId: number) => {
+    setCart(prevCart => prevCart.filter(item => item.id !== itemId));
+  };
+
+  // Calcular total del carrito
+  const getCartTotal = () => {
+    return cart.reduce((total, item) => {
+      const price = parseFloat(item.product.price) || 0;
+      return total + (price * item.quantity);
+    }, 0);
+  };
+
+  // Obtener cantidad total de items
+  const getTotalItems = () => {
+    return cart.reduce((total, item) => total + item.quantity, 0);
+  };
+
+  // Enviar carrito por WhatsApp
+  const sendCartToWhatsApp = () => {
+    if (cart.length === 0) {
+      toast({
+        title: "Carrito vacío",
+        description: "Agrega productos al carrito antes de enviar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const cartMessage = cart.map(item => 
+      `• ${item.product.name} - Cantidad: ${item.quantity} - Precio: $${item.product.price} c/u`
+    ).join('\n');
+
+    const total = getCartTotal();
+    const whatsappMessage = `¡Hola! Me interesa cotizar estos productos:\n\n${cartMessage}\n\nSubtotal: $${total.toFixed(2)}\n\n¿Podrían ayudarme con más información y el costo de instalación?`;
     const whatsappUrl = `https://wa.me/5215512345678?text=${encodeURIComponent(whatsappMessage)}`;
 
     window.open(whatsappUrl, '_blank');
 
     toast({
       title: "Redirigiendo a WhatsApp",
-      description: "Se abrirá WhatsApp con la información del producto",
+      description: "Se abrirá WhatsApp con tu lista de productos",
     });
   };
 
@@ -135,11 +226,11 @@ export default function PublicCatalogClean() {
                 </div>
                 
                 <Button
-                  onClick={() => sendToWhatsApp(product)}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => addToCart(product)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  Cotizar por WhatsApp
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar al carrito
                 </Button>
               </CardContent>
             </Card>
@@ -164,6 +255,102 @@ export default function PublicCatalogClean() {
           </Button>
         </div>
       </div>
+
+      {/* Botón flotante del carrito */}
+      {getTotalItems() > 0 && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <Button
+            onClick={() => setShowCart(!showCart)}
+            className="bg-green-600 hover:bg-green-700 text-white rounded-full w-16 h-16 shadow-lg relative"
+          >
+            <ShoppingCart className="w-6 h-6" />
+            <Badge className="absolute -top-2 -right-2 bg-red-500 text-white min-w-[24px] h-6 rounded-full flex items-center justify-center text-xs">
+              {getTotalItems()}
+            </Badge>
+          </Button>
+
+          {/* Panel del carrito */}
+          {showCart && (
+            <div className="absolute bottom-20 right-0 bg-white rounded-lg shadow-xl border w-96 max-h-96 overflow-y-auto">
+              <div className="p-4 border-b">
+                <h3 className="font-semibold text-lg flex items-center justify-between">
+                  Carrito de compras
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCart(false)}
+                  >
+                    ×
+                  </Button>
+                </h3>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {cart.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3 p-3 border rounded-lg">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-100 rounded flex items-center justify-center">
+                      <ShoppingBag className="w-6 h-6 text-blue-600" />
+                    </div>
+                    
+                    <div className="flex-1">
+                      <h4 className="font-medium text-sm">{item.product.name}</h4>
+                      <p className="text-green-600 font-semibold">${item.product.price}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        className="w-8 h-8 p-0"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </Button>
+                      
+                      <span className="w-8 text-center font-medium">{item.quantity}</span>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        className="w-8 h-8 p-0"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeFromCart(item.id)}
+                        className="w-8 h-8 p-0 text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t bg-gray-50 rounded-b-lg">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="font-semibold">Total:</span>
+                  <span className="font-bold text-green-600 text-lg">
+                    ${getCartTotal().toFixed(2)}
+                  </span>
+                </div>
+                
+                <Button
+                  onClick={sendCartToWhatsApp}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Solicitar por WhatsApp
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
