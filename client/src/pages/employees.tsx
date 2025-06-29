@@ -234,7 +234,7 @@ export default function Employees() {
         phone: data.phone || null,
         email: data.email || null,
         address: data.address || null,
-        role: data.role,
+        role: data.role as "admin" | "technician" | "seller" | "delivery" | "support" | "customer_service",
         ...(data.password && { password: data.password }),
       }
     };
@@ -251,7 +251,7 @@ export default function Employees() {
       name: employee.user?.name || "",
       username: employee.user?.username || "",
       password: "", // Don't populate password for security
-      role: employee.user?.role || "technician",
+      role: (employee.user?.role || "technician") as "admin" | "technician" | "seller" | "delivery" | "support" | "customer_service",
       phone: employee.user?.phone || "",
       email: employee.user?.email || "",
       address: employee.user?.address || "",
