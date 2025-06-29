@@ -480,6 +480,17 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Eliminado procesamiento duplicado donde mensajes se trataban como flujo Y conversación normal
   - Sistema de logging detallado para debugging y monitoreo de flujos activos
   - Proceso completo de recolección de datos por pasos totalmente funcional y listo para producción
+- June 29, 2025. SISTEMA DE BOTONES INTERACTIVOS Y RECOPILACIÓN DE NOTAS IMPLEMENTADO:
+  - Actualizado sistema de respuestas automáticas para usar botones interactivos en lugar de texto
+  - Número de contacto: agregada opción "Usar este número" con botones interactivos
+  - Método de pago: convertido a sistema de botones (💳 Tarjeta, 🏦 Transferencia, 💵 Efectivo)
+  - Agregado nuevo paso collect_notes para recopilar información adicional del cliente
+  - Campo de notas incluye: horario disponible, notas de ubicación, instrucciones especiales
+  - Flujo completo actualizado: nombre → dirección → contacto → pago → notas → confirmación
+  - Botones con IDs específicos (use_current, use_other, payment_card, payment_transfer, payment_cash, skip_notes)
+  - Manejo completo de botones interactivos en función handleInteractiveMessage
+  - Sistema robusto de manejo de errores en parsing de opciones de menú
+  - Flujo de pedidos mejorado con experiencia de usuario más intuitiva y amigable
 
 ## User Preferences
 
