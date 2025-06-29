@@ -464,6 +464,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Conversaciones mantienen historial pero se desvinculan de órdenes eliminadas (order_id = null)
   - Sistema de eliminación seguro que preserva integridad referencial de la base de datos
   - Verificado funcionamiento correcto con múltiples órdenes de prueba eliminadas exitosamente
+- June 29, 2025. MENSAJE DE ERROR "HUBO UN ERROR PROCESANDO TU PEDIDO" ELIMINADO COMPLETAMENTE:
+  - Corregido error de schema en customer_registration_flows: cambio de customerData a collectedData
+  - Agregado campo obligatorio expiresAt en creación de flujos de registro
+  - Eliminados mensajes confusos de error enviados a clientes después de pedidos exitosos
+  - Flujo de pedidos desde catálogo web ahora completamente limpio sin mensajes de error innecesarios
+  - Verificado con múltiples pruebas: clientes reciben solo confirmaciones de pedido, no mensajes de error
+  - Sistema operacional sin interrupciones molestas para la experiencia del cliente
 
 ## User Preferences
 
