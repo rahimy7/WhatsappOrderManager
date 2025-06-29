@@ -1340,6 +1340,75 @@ export class MemStorage implements IStorage {
 
     return 'initial';
   }
+
+  // Shopping Cart Management
+  private carts = new Map<string, Map<number, { productId: number; quantity: number; }>>();
+
+  async getCart(sessionId: string, userId?: number): Promise<{ items: (ShoppingCart & { product: Product })[], subtotal: number }> {
+    const cart = this.carts.get(sessionId) || new Map();
+    const items: (ShoppingCart & { product: Product })[] = [];
+    let subtotal = 0;
+
+    for (const [productId, cartData] of cart.entries()) {
+      const product = this.products.get(productId);
+      if (product) {
+        const item = {
+          id: productId,
+          sessionId,
+          userId: userId || null,
+          productId,
+          quantity: cartData.quantity,
+          addedAt: new Date(),
+          updatedAt: new Date(),
+          product
+        };
+        items.push(item);
+        subtotal += parseFloat(product.price) * cartData.quantity;
+      }
+    }
+
+    return { items, subtotal };
+  }
+
+  async addToCart(sessionId: string, productId: number, quantity: number, userId?: number): Promise<void> {
+    if (!this.carts.has(sessionId)) {
+      this.carts.set(sessionId, new Map());
+    }
+    
+    const cart = this.carts.get(sessionId)!;
+    const existing = cart.get(productId);
+    
+    if (existing) {
+      cart.set(productId, { productId, quantity: existing.quantity + quantity });
+    } else {
+      cart.set(productId, { productId, quantity });
+    }
+  }
+
+  async updateCartQuantity(sessionId: string, productId: number, quantity: number, userId?: number): Promise<void> {
+    const cart = this.carts.get(sessionId);
+    if (cart && cart.has(productId)) {
+      cart.set(productId, { productId, quantity });
+    }
+  }
+
+  async removeFromCart(sessionId: string, productId: number, userId?: number): Promise<void> {
+    const cart = this.carts.get(sessionId);
+    if (cart) {
+      cart.delete(productId);
+    }
+  }
+
+  async clearCart(sessionId: string, userId?: number): Promise<void> {
+    this.carts.delete(sessionId);
+  }
+
+  async getAllCategories(): Promise<ProductCategory[]> {
+    return [
+      { id: 1, name: 'Aires Acondicionados', description: 'Equipos de climatización', isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      { id: 2, name: 'Servicios', description: 'Servicios de instalación y mantenimiento', isActive: true, createdAt: new Date(), updatedAt: new Date() }
+    ];
+  }
 }
 
 // Database Storage Implementation
@@ -2754,6 +2823,86 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(productCategories)
       .where(eq(productCategories.id, id));
+  }
+
+  // Shopping Cart Management
+  async getCart(sessionId: string, userId?: number): Promise<{ items: (ShoppingCart & { product: Product })[], subtotal: number }> {
+    const cartItems = await db.select({
+      cart: shoppingCart,
+      product: products
+    })
+    .from(shoppingCart)
+    .innerJoin(products, eq(shoppingCart.productId, products.id))
+    .where(eq(shoppingCart.sessionId, sessionId));
+
+    let subtotal = 0;
+    const items = cartItems.map(item => {
+      const itemTotal = parseFloat(item.product.price) * item.cart.quantity;
+      subtotal += itemTotal;
+      return {
+        ...item.cart,
+        product: item.product
+      };
+    });
+
+    return { items, subtotal };
+  }
+
+  async addToCart(sessionId: string, productId: number, quantity: number, userId?: number): Promise<void> {
+    // Check if item already exists in cart
+    const [existingItem] = await db.select()
+      .from(shoppingCart)
+      .where(and(
+        eq(shoppingCart.sessionId, sessionId),
+        eq(shoppingCart.productId, productId)
+      ));
+
+    if (existingItem) {
+      // Update quantity
+      await db.update(shoppingCart)
+        .set({ 
+          quantity: existingItem.quantity + quantity,
+          updatedAt: new Date()
+        })
+        .where(eq(shoppingCart.id, existingItem.id));
+    } else {
+      // Insert new item
+      await db.insert(shoppingCart).values({
+        sessionId,
+        productId,
+        quantity,
+        userId: userId || null
+      });
+    }
+  }
+
+  async updateCartQuantity(sessionId: string, productId: number, quantity: number, userId?: number): Promise<void> {
+    await db.update(shoppingCart)
+      .set({ 
+        quantity,
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(shoppingCart.sessionId, sessionId),
+        eq(shoppingCart.productId, productId)
+      ));
+  }
+
+  async removeFromCart(sessionId: string, productId: number, userId?: number): Promise<void> {
+    await db.delete(shoppingCart)
+      .where(and(
+        eq(shoppingCart.sessionId, sessionId),
+        eq(shoppingCart.productId, productId)
+      ));
+  }
+
+  async clearCart(sessionId: string, userId?: number): Promise<void> {
+    await db.delete(shoppingCart)
+      .where(eq(shoppingCart.sessionId, sessionId));
+  }
+
+  async getAllCategories(): Promise<ProductCategory[]> {
+    return await db.select().from(productCategories).where(eq(productCategories.isActive, true));
   }
 }
 

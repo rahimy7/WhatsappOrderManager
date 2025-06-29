@@ -5,13 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { ShoppingCart, Trash2, Plus, Minus, ArrowLeft, CreditCard, Truck, MapPin, ShoppingBag } from "lucide-react";
+import { ShoppingCart as ShoppingCartIcon, Trash2, Plus, Minus, ArrowLeft, CreditCard, Truck, MapPin, ShoppingBag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { CartItem, Product } from "@shared/schema";
+import { ShoppingCart, Product } from "@shared/schema";
 import { Link } from "wouter";
 
-type CartItemWithProduct = CartItem & { product: Product };
+type CartItemWithProduct = ShoppingCart & { product: Product };
 
 export default function Cart() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -176,7 +176,7 @@ export default function Cart() {
           </p>
           <Link href="/catalog">
             <Button>
-              <ShoppingCart className="w-4 h-4 mr-2" />
+              <ShoppingCartIcon className="w-4 h-4 mr-2" />
               Ir al catálogo
             </Button>
           </Link>
