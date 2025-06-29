@@ -177,16 +177,9 @@ export default function Employees() {
 
   // Update employee mutation
   const updateEmployeeMutation = useMutation({
-    mutationFn: async (data: { employeeId: number; updates: Partial<InsertEmployeeProfile> & { user?: Partial<InsertUser> } }) => {
-      // Update employee profile
-      const profileResponse = await apiRequest("PUT", `/api/employees/${data.employeeId}`, data.updates);
-      
-      // Update user info if provided
-      if (data.updates.user && editingEmployee?.user?.id) {
-        await apiRequest("PUT", `/api/users/${editingEmployee.user.id}`, data.updates.user);
-      }
-      
-      return profileResponse.json();
+    mutationFn: async (data: { employeeId: number; updates: any }) => {
+      const response = await apiRequest("PUT", `/api/employees/${data.employeeId}`, data.updates);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });

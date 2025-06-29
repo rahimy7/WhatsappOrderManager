@@ -3346,12 +3346,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/employees/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const updates = req.body;
-      const employee = await storage.updateEmployeeProfile(id, updates);
-      if (!employee) {
+      const { user, ...profileUpdates } = req.body;
+      
+      // Get employee first to get the user ID
+      const currentEmployee = await storage.getEmployeeProfile(id);
+      if (!currentEmployee) {
         return res.status(404).json({ error: "Employee not found" });
       }
-      res.json(employee);
+      
+      // Update user credentials if provided
+      if (user) {
+        const userUpdates: any = {
+          name: user.name,
+          username: user.username,
+          phone: user.phone,
+          email: user.email,
+          address: user.address,
+          role: user.role,
+        };
+        
+        // If password is provided, add it to updates
+        if (user.password && user.password.trim() !== '') {
+          userUpdates.password = user.password;
+          userUpdates.mustChangePassword = true; // User must change password on next login
+        }
+        
+        await storage.updateUser(currentEmployee.userId, userUpdates);
+      }
+      
+      // Update employee profile
+      const employee = await storage.updateEmployeeProfile(id, profileUpdates);
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found after update" });
+      }
+      
+      // Return updated employee with user data
+      const updatedEmployee = await storage.getEmployeeProfile(id);
+      res.json(updatedEmployee);
     } catch (error) {
       console.error("Error updating employee:", error);
       res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update employee" });

@@ -60,6 +60,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   updateUserStatus(id: number, status: string): Promise<User | undefined>;
+  updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined>;
 
   // Customers
   getCustomer(id: number): Promise<Customer | undefined>;
@@ -576,6 +577,16 @@ export class MemStorage implements IStorage {
     const user = this.users.get(id);
     if (user) {
       const updatedUser = { ...user, status };
+      this.users.set(id, updatedUser);
+      return updatedUser;
+    }
+    return undefined;
+  }
+
+  async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (user) {
+      const updatedUser = { ...user, ...updates };
       this.users.set(id, updatedUser);
       return updatedUser;
     }
@@ -1315,6 +1326,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserStatus(id: number, status: string): Promise<User | undefined> {
     const [user] = await db.update(users).set({ status }).where(eq(users.id, id)).returning();
+    return user || undefined;
+  }
+
+  async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
     return user || undefined;
   }
 
