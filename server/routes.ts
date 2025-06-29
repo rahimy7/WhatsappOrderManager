@@ -1924,36 +1924,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           } else {
             // Existing customer - check for active registration flow first
-            await storage.addWhatsAppLog({
-              type: 'debug',
-              phoneNumber: from,
-              messageContent: `Verificando flujo de registro para número: ${from}`,
-              status: 'processing'
-            });
-            
             const registrationFlow = await storage.getRegistrationFlow(from);
-            
-            await storage.addWhatsAppLog({
-              type: 'debug',
-              phoneNumber: from,
-              messageContent: `Flujo encontrado: ${registrationFlow ? 'SÍ' : 'NO'}`,
-              status: registrationFlow ? 'found' : 'not_found',
-              rawData: JSON.stringify({ 
-                searchPhoneNumber: from,
-                flowFound: !!registrationFlow,
-                flowStep: registrationFlow?.currentStep || null
-              })
-            });
             
             if (registrationFlow) {
               // Handle registration flow for existing customer
-              await storage.addWhatsAppLog({
-                type: 'debug',
-                phoneNumber: from,
-                messageContent: 'Procesando flujo de registro para cliente existente',
-                status: 'processing',
-                rawData: JSON.stringify({ step: registrationFlow.currentStep })
-              });
               await handleRegistrationFlow(from, messageText, registrationFlow);
               return;
             }
@@ -2006,38 +1980,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // PRIORITY CHECK: Handle active registration flows BEFORE processing as regular conversation
-          await storage.addWhatsAppLog({
-            type: 'debug',
-            phoneNumber: from,
-            messageContent: `VERIFICACIÓN FINAL: Buscando flujo activo para ${from}`,
-            status: 'processing'
-          });
-
           const activeRegistrationFlow = await storage.getRegistrationFlow(from);
           
           if (activeRegistrationFlow) {
-            await storage.addWhatsAppLog({
-              type: 'debug',
-              phoneNumber: from,
-              messageContent: `FLUJO ACTIVO ENCONTRADO: ${activeRegistrationFlow.currentStep}`,
-              status: 'processing',
-              rawData: JSON.stringify({ 
-                flowStep: activeRegistrationFlow.currentStep,
-                phoneNumber: from,
-                messageText: messageText
-              })
-            });
-            
             await handleRegistrationFlow(from, messageText, activeRegistrationFlow);
             return; // Don't process as regular conversation
           }
-
-          await storage.addWhatsAppLog({
-            type: 'debug',
-            phoneNumber: from,
-            messageContent: 'NO HAY FLUJO ACTIVO - Procesando como conversación regular',
-            status: 'processing'
-          });
 
           // Process customer message and respond (for text messages)
           await processCustomerMessage(customer, conversation, message, from, isNewCustomer);

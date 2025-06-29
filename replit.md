@@ -471,6 +471,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Flujo de pedidos desde catálogo web ahora completamente limpio sin mensajes de error innecesarios
   - Verificado con múltiples pruebas: clientes reciben solo confirmaciones de pedido, no mensajes de error
   - Sistema operacional sin interrupciones molestas para la experiencia del cliente
+- June 29, 2025. SISTEMA DE FLUJOS DE REGISTRO WHATSAPP COMPLETAMENTE OPERACIONAL:
+  - Resuelto problema crítico donde flujos de registro no se detectaban para clientes existentes
+  - Reorganizada prioridad de procesamiento: verificación de flujos activos antes de procesamiento normal
+  - Implementada verificación doble de flujos tanto para clientes nuevos como existentes
+  - Sistema ahora procesa nombres correctamente y actualiza base de datos ("Juan Carlos Pérez García" verificado)
+  - Flujos avanzan automáticamente entre pasos (collect_name → collect_address → collect_contact → collect_payment)
+  - Eliminado procesamiento duplicado donde mensajes se trataban como flujo Y conversación normal
+  - Sistema de logging detallado para debugging y monitoreo de flujos activos
+  - Proceso completo de recolección de datos por pasos totalmente funcional y listo para producción
 
 ## User Preferences
 
