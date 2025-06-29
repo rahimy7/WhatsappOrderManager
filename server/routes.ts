@@ -3882,6 +3882,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== CATALOG AND CART API ROUTES =====
+
+  // Get all categories
+  app.get('/api/categories', async (req, res) => {
+    try {
+      const categories = await storage.getAllCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      res.status(500).json({ message: 'Failed to fetch categories' });
+    }
+  });
+
+  // Get cart
+  app.get('/api/cart', async (req, res) => {
+    try {
+      const sessionId = req.session?.id || 'default';
+      const cart = await storage.getCart(sessionId);
+      res.json(cart);
+    } catch (error) {
+      console.error('Error fetching cart:', error);
+      res.status(500).json({ message: 'Failed to fetch cart' });
+    }
+  });
+
+  // Add to cart
+  app.post('/api/cart/add', async (req, res) => {
+    try {
+      const { productId, quantity } = req.body;
+      const sessionId = req.session?.id || 'default';
+      
+      if (!productId || !quantity || quantity < 1) {
+        return res.status(400).json({ message: 'Product ID and valid quantity required' });
+      }
+
+      await storage.addToCart(sessionId, productId, quantity);
+      const cart = await storage.getCart(sessionId);
+      res.json(cart);
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      res.status(500).json({ message: 'Failed to add product to cart' });
+    }
+  });
+
+  // Update cart item quantity
+  app.put('/api/cart/update', async (req, res) => {
+    try {
+      const { productId, quantity } = req.body;
+      const sessionId = req.session?.id || 'default';
+      
+      if (!productId || quantity < 0) {
+        return res.status(400).json({ message: 'Product ID and valid quantity required' });
+      }
+
+      if (quantity === 0) {
+        await storage.removeFromCart(sessionId, productId);
+      } else {
+        await storage.updateCartQuantity(sessionId, productId, quantity);
+      }
+      
+      const cart = await storage.getCart(sessionId);
+      res.json(cart);
+    } catch (error) {
+      console.error('Error updating cart:', error);
+      res.status(500).json({ message: 'Failed to update cart' });
+    }
+  });
+
+  // Remove from cart
+  app.delete('/api/cart/remove/:productId', async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId);
+      const sessionId = req.session?.id || 'default';
+      
+      if (!productId) {
+        return res.status(400).json({ message: 'Product ID required' });
+      }
+
+      await storage.removeFromCart(sessionId, productId);
+      const cart = await storage.getCart(sessionId);
+      res.json(cart);
+    } catch (error) {
+      console.error('Error removing from cart:', error);
+      res.status(500).json({ message: 'Failed to remove product from cart' });
+    }
+  });
+
+  // Clear cart
+  app.delete('/api/cart/clear', async (req, res) => {
+    try {
+      const sessionId = req.session?.id || 'default';
+      await storage.clearCart(sessionId);
+      const cart = await storage.getCart(sessionId);
+      res.json(cart);
+    } catch (error) {
+      console.error('Error clearing cart:', error);
+      res.status(500).json({ message: 'Failed to clear cart' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

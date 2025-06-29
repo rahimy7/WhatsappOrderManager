@@ -220,14 +220,14 @@ export interface IStorage {
   determineConversationType(customerId: number): Promise<'initial' | 'tracking' | 'support'>;
   
   // Shopping Cart Management
-  getCartItems(sessionId: string, userId?: number): Promise<(ShoppingCart & { product: Product })[]>;
-  addToCart(item: InsertShoppingCart): Promise<ShoppingCart>;
-  updateCartItem(id: number, quantity: number): Promise<ShoppingCart | undefined>;
-  removeFromCart(id: number): Promise<void>;
+  getCart(sessionId: string, userId?: number): Promise<{ items: (ShoppingCart & { product: Product })[], subtotal: number }>;
+  addToCart(sessionId: string, productId: number, quantity: number, userId?: number): Promise<void>;
+  updateCartQuantity(sessionId: string, productId: number, quantity: number, userId?: number): Promise<void>;
+  removeFromCart(sessionId: string, productId: number, userId?: number): Promise<void>;
   clearCart(sessionId: string, userId?: number): Promise<void>;
-  getCartTotal(sessionId: string, userId?: number): Promise<number>;
   
   // Product Categories
+  getAllCategories(): Promise<ProductCategory[]>;
   getAllCategories(): Promise<ProductCategory[]>;
   getActiveCategories(): Promise<ProductCategory[]>;
   getCategory(id: number): Promise<ProductCategory | undefined>;

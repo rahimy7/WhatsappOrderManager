@@ -439,6 +439,9 @@ export type InsertShoppingCart = z.infer<typeof insertShoppingCartSchema>;
 export type ProductCategory = typeof productCategories.$inferSelect;
 export type InsertProductCategory = z.infer<typeof insertProductCategorySchema>;
 
+export type CartItem = typeof shoppingCart.$inferSelect;
+export type InsertCartItem = z.infer<typeof insertShoppingCartSchema>;
+
 export const insertCustomerHistorySchema = createInsertSchema(customerHistory);
 export type CustomerHistory = typeof customerHistory.$inferSelect;
 export type InsertCustomerHistory = z.infer<typeof insertCustomerHistorySchema>;
