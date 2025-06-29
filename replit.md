@@ -422,6 +422,17 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Responsive design with professional UI and smooth animations
   - Demo products pre-loaded for testing: 3 items totaling $5,800
   - System fully operational and ready for customer use without backend dependencies
+- June 29, 2025. AUTOMATIZACIÓN DE ASIGNACIONES POR UBICACIÓN/ESPECIALIDAD IMPLEMENTADA Y COMPLETADA:
+  - Sistema completo de asignación automática de técnicos basado en ubicación geográfica y especialidades
+  - Interfaz administrativa completa para configurar reglas de asignación con criterios múltiples
+  - Algoritmo inteligente que considera: proximidad geográfica, especialización técnica, carga de trabajo, y disponibilidad horaria
+  - Cuatro métodos de asignación configurables: más cercano disponible, menos ocupado, mayor habilidad, rotación
+  - API endpoints robustos para probar asignación automática (/api/orders/:id/auto-assign)
+  - Página de configuración con formularios avanzados para crear, editar y gestionar reglas de asignación
+  - Sección de prueba integrada que permite probar el sistema con órdenes pendientes en tiempo real
+  - Sistema de prioridades para aplicar múltiples reglas en orden de importancia
+  - Integración automática en flujo de creación de órdenes tanto desde WhatsApp como desde panel administrativo
+  - Notificaciones automáticas a técnicos asignados con detalles completos de la orden
 
 ## User Preferences
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Edit, MapPin, Users, Clock, Settings } from "lucide-react";
+import { Plus, Trash2, Edit, MapPin, Users, Clock, Settings, Zap, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,10 @@ export default function AssignmentRules() {
     queryKey: ["/api/products"],
   });
 
+  const { data: orders = [] } = useQuery({
+    queryKey: ["/api/orders"],
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: AssignmentRuleForm) => apiRequest("POST", "/api/assignment-rules", data),
     onSuccess: () => {
@@ -97,6 +101,25 @@ export default function AssignmentRules() {
       apiRequest("PUT", `/api/assignment-rules/${id}`, { isActive }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assignment-rules"] });
+    },
+  });
+
+  const testAssignmentMutation = useMutation({
+    mutationFn: (orderId: number) => apiRequest("POST", `/api/orders/${orderId}/auto-assign`),
+    onSuccess: (data: any) => {
+      toast({ 
+        title: "Asignación Exitosa", 
+        description: data.message || "Orden asignada automáticamente" 
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+    },
+    onError: (error: any) => {
+      const message = error.message || "Error en la asignación automática";
+      toast({ 
+        title: "Error en Asignación", 
+        description: message,
+        variant: "destructive" 
+      });
     },
   });
 
@@ -516,6 +539,71 @@ export default function AssignmentRules() {
           ))
         )}
       </div>
+
+      {/* Test Assignment Section */}
+      {orders.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Probar Sistema de Asignación Automática
+            </CardTitle>
+            <CardDescription>
+              Selecciona una orden para probar el sistema de asignación automática
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Órdenes disponibles para prueba (sin asignar):
+              </p>
+              <div className="grid gap-3">
+                {Array.isArray(orders) && orders
+                  .filter((order: any) => !order.assignedUserId && order.status === 'pending')
+                  .map((order: any) => (
+                    <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">#{order.orderNumber}</p>
+                        <p className="text-sm text-gray-600">
+                          Cliente: {order.customer?.name || 'Cliente desconocido'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Estado: {order.status}
+                        </p>
+                      </div>
+                      <Button 
+                        size="sm"
+                        onClick={() => testAssignmentMutation.mutate(order.id)}
+                        disabled={testAssignmentMutation.isPending}
+                      >
+                        {testAssignmentMutation.isPending ? (
+                          <>
+                            <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full mr-2" />
+                            Asignando...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="h-4 w-4 mr-2" />
+                            Asignar Automáticamente
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+              {Array.isArray(orders) && orders.filter((order: any) => !order.assignedUserId && order.status === 'pending').length === 0 && (
+                <div className="text-center py-6">
+                  <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No hay órdenes sin asignar disponibles para prueba</p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Todas las órdenes pendientes ya están asignadas o el sistema está funcionando automáticamente
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
