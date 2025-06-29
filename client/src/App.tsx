@@ -24,6 +24,7 @@ import TechnicianDashboard from "@/pages/technician-dashboard";
 import UserSettings from "@/pages/user-settings";
 import Catalog from "@/pages/catalog";
 import PublicCatalog from "@/pages/public-catalog";
+import SimpleCatalog from "@/pages/simple-catalog";
 import Cart from "@/pages/cart";
 import AppLayout from "@/components/layout/app-layout";
 
@@ -114,6 +115,7 @@ function AppWithAuth() {
     <Switch>
       {/* Rutas públicas sin layout */}
       <Route path="/public-catalog" component={PublicCatalog} />
+      <Route path="/simple-catalog" component={SimpleCatalog} />
       <Route path="/login" component={Login} />
       
       {/* Rutas que requieren autenticación con layout */}
