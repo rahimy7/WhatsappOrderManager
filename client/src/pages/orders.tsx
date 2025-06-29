@@ -160,13 +160,11 @@ export default function OrdersPage() {
   };
 
   const handleEditOrder = (order: OrderWithDetails) => {
-    console.log("handleEditOrder called with order:", order);
     setSelectedOrder(order);
     setIsEditDialogOpen(true);
   };
 
   const handleViewOrder = (order: OrderWithDetails) => {
-    console.log("handleViewOrder called with order:", order);
     setSelectedOrder(order);
     setIsViewDialogOpen(true);
   };
@@ -215,16 +213,6 @@ export default function OrdersPage() {
             Administra todas las órdenes y pedidos del sistema
           </p>
         </div>
-      </div>
-
-      {/* Test button for debugging */}
-      <div className="mb-4">
-        <Button 
-          onClick={() => console.log("TEST BUTTON CLICKED!")}
-          variant="outline"
-        >
-          Botón de Prueba
-        </Button>
       </div>
 
       {/* Filters */}
@@ -349,7 +337,6 @@ export default function OrdersPage() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log("View button clicked");
                           handleViewOrder(order);
                         }}
                       >
@@ -360,7 +347,6 @@ export default function OrdersPage() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log("Edit button clicked");
                           handleEditOrder(order);
                         }}
                       >
@@ -371,7 +357,6 @@ export default function OrdersPage() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log("Delete button clicked");
                           deleteOrderMutation.mutate(order.id);
                         }}
                         disabled={deleteOrderMutation.isPending}

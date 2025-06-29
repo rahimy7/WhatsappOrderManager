@@ -5,12 +5,34 @@ import { Badge } from "@/components/ui/badge";
 import { Eye, MessageCircle, Edit, UserPlus, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OrderWithDetails } from "@shared/schema";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function RecentOrders() {
+  const [, setLocation] = useLocation();
+  
   const { data: orders, isLoading } = useQuery({
     queryKey: ["/api/orders"],
   });
+
+  const handleViewOrder = (order: OrderWithDetails) => {
+    console.log("Dashboard: View order clicked", order.orderNumber);
+    setLocation(`/orders?view=${order.id}`);
+  };
+
+  const handleEditOrder = (order: OrderWithDetails) => {
+    console.log("Dashboard: Edit order clicked", order.orderNumber);
+    setLocation(`/orders?edit=${order.id}`);
+  };
+
+  const handleAssignOrder = (order: OrderWithDetails) => {
+    console.log("Dashboard: Assign order clicked", order.orderNumber);
+    setLocation(`/orders?assign=${order.id}`);
+  };
+
+  const handleWhatsAppConversation = (order: OrderWithDetails) => {
+    console.log("Dashboard: WhatsApp conversation clicked", order.orderNumber);
+    setLocation(`/conversations?customer=${order.customer.id}`);
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { label: string; className: string }> = {
@@ -134,17 +156,37 @@ export default function RecentOrders() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         {!order.assignedUser && (
-                          <Button size="sm" variant="outline" className="text-primary">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="text-primary"
+                            onClick={() => handleAssignOrder(order)}
+                          >
                             <UserPlus className="h-4 w-4" />
                           </Button>
                         )}
-                        <Button size="sm" variant="outline" className="text-primary">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="text-primary"
+                          onClick={() => handleViewOrder(order)}
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" className="whatsapp-text">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="whatsapp-text"
+                          onClick={() => handleWhatsAppConversation(order)}
+                        >
                           <MessageCircle className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" className="text-gray-400">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="text-gray-400"
+                          onClick={() => handleEditOrder(order)}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
                       </div>
