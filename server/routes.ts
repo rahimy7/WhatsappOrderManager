@@ -1720,9 +1720,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
-      // Option 2: Edit Order
+      // Option 2: Contact Support for modifications
       if (lowerText.includes('editar') || lowerText.includes('modificar') || lowerText.includes('cambiar')) {
-        await sendOrderEditMenu(customer, phoneNumber, activeOrders);
+        await sendWhatsAppMessage(phoneNumber, 
+          `🔧 *Modificaciones de Pedido*\n\n` +
+          `Para modificaciones o cancelaciones, contacta directamente:\n\n` +
+          `📞 *Teléfono:* +52 55 1234 5678\n` +
+          `🕒 *Horario:* Lun-Vie 8AM-6PM, Sáb 9AM-2PM\n\n` +
+          `⚠️ *Importante:* Las modificaciones deben realizarse antes de que el técnico esté en camino.`
+        );
         return;
       }
       

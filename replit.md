@@ -521,6 +521,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Eliminación de productos funciona completamente con solo escribir el número del producto (1, 2, 3, etc.)
   - Opción de cancelación escribiendo 'menu' durante el proceso de eliminación
   - Sistema más confiable y compatible con limitaciones de WhatsApp Business API
+- June 29, 2025. SIMPLIFICACIÓN DEL SISTEMA: Función de editar pedidos eliminada completamente:
+  - Removido botón "✏️ Editar Pedido" del menú principal para clientes con pedidos activos
+  - Eliminadas funciones: sendOrderEditMenu, sendProductRemovalMenu, sendAddNoteMessage, handleRemoveOrderItem
+  - Removido manejo de botones: edit_order, remove_products, add_note, cancel_order, remove_item_*
+  - Sistema simplificado ahora solo ofrece: "📋 Seguimiento" y "🛍️ Nuevo Pedido"
+  - Enfoque mejorado en experiencia de usuario sin funcionalidades complejas que causan errores API
+  - Clientes pueden consultar estado de pedidos y crear nuevos pedidos sin opciones de edición confusas
 - June 29, 2025. MENÚ INTERACTIVO PARA CLIENTES CON PEDIDOS ACTIVOS COMPLETAMENTE IMPLEMENTADO:
   - Sistema inteligente de detección: clientes con pedidos activos reciben menú especializado con 3 opciones
   - Opción 1 "📋 Seguimiento": muestra estado detallado de todos los pedidos activos con emojis de estado
