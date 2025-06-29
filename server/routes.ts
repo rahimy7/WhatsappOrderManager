@@ -938,6 +938,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Store Settings API
+  app.get("/api/settings/store", async (req, res) => {
+    try {
+      const storeConfig = await storage.getStoreConfig();
+      res.json(storeConfig || {
+        storeWhatsAppNumber: "",
+        storeName: "",
+        storeAddress: "",
+        storeEmail: ""
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch store configuration" });
+    }
+  });
+
+  app.put("/api/settings/store", async (req, res) => {
+    try {
+      const configData = z.object({
+        storeWhatsAppNumber: z.string().min(10, "Número de WhatsApp debe tener al menos 10 dígitos"),
+        storeName: z.string().min(1, "Nombre de la tienda es requerido"),
+        storeAddress: z.string().optional(),
+        storeEmail: z.string().email("Email inválido").optional().or(z.literal("")),
+      }).parse(req.body);
+
+      const config = await storage.updateStoreConfig(configData);
+      res.json({ success: true, config });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid configuration data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update store configuration" });
+    }
+  });
+
   // Helper function to send WhatsApp messages
   async function sendWhatsAppMessage(phoneNumber: string, message: string) {
     try {

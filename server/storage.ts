@@ -17,6 +17,7 @@ import {
   notifications,
   shoppingCart,
   productCategories,
+  storeSettings,
   type User,
   type Customer,
   type Product,
@@ -34,6 +35,7 @@ import {
   type Notification,
   type ShoppingCart,
   type ProductCategory,
+  type StoreSettings,
   type InsertUser,
   type InsertCustomer,
   type InsertProduct,
@@ -228,12 +230,15 @@ export interface IStorage {
   
   // Product Categories
   getAllCategories(): Promise<ProductCategory[]>;
-  getAllCategories(): Promise<ProductCategory[]>;
   getActiveCategories(): Promise<ProductCategory[]>;
   getCategory(id: number): Promise<ProductCategory | undefined>;
   createCategory(category: InsertProductCategory): Promise<ProductCategory>;
   updateCategory(id: number, updates: Partial<InsertProductCategory>): Promise<ProductCategory | undefined>;
   deleteCategory(id: number): Promise<void>;
+
+  // Store Configuration
+  getStoreConfig(): Promise<StoreSettings | undefined>;
+  updateStoreConfig(config: { storeWhatsAppNumber: string; storeName: string; storeAddress?: string; storeEmail?: string }): Promise<StoreSettings>;
 }
 
 export class MemStorage implements IStorage {
@@ -2903,6 +2908,46 @@ export class DatabaseStorage implements IStorage {
 
   async getAllCategories(): Promise<ProductCategory[]> {
     return await db.select().from(productCategories).where(eq(productCategories.isActive, true));
+  }
+
+  // Store Configuration
+  async getStoreConfig(): Promise<StoreSettings | undefined> {
+    const [config] = await db.select().from(storeSettings).limit(1);
+    return config;
+  }
+
+  async updateStoreConfig(config: { 
+    storeWhatsAppNumber: string; 
+    storeName: string; 
+    storeAddress?: string; 
+    storeEmail?: string; 
+  }): Promise<StoreSettings> {
+    const existingConfig = await this.getStoreConfig();
+    
+    if (existingConfig) {
+      // Update existing configuration
+      const [updatedConfig] = await db
+        .update(storeSettings)
+        .set({
+          ...config,
+          updatedAt: new Date()
+        })
+        .where(eq(storeSettings.id, existingConfig.id))
+        .returning();
+      return updatedConfig;
+    } else {
+      // Create new configuration
+      const [newConfig] = await db
+        .insert(storeSettings)
+        .values({
+          storeWhatsAppNumber: config.storeWhatsAppNumber,
+          storeName: config.storeName,
+          storeAddress: config.storeAddress || null,
+          storeEmail: config.storeEmail || null,
+        })
+        .returning();
+      return newConfig;
+    }
   }
 }
 

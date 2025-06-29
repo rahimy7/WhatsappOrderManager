@@ -471,3 +471,23 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+// Store configuration table
+export const storeSettings = pgTable("store_settings", {
+  id: serial("id").primaryKey(),
+  storeWhatsAppNumber: text("store_whatsapp_number").notNull(),
+  storeName: text("store_name").notNull(),
+  storeAddress: text("store_address"),
+  storeEmail: text("store_email"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertStoreSettingsSchema = createInsertSchema(storeSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type StoreSettings = typeof storeSettings.$inferSelect;
+export type InsertStoreSettings = z.infer<typeof insertStoreSettingsSchema>;
