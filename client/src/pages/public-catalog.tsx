@@ -61,10 +61,6 @@ export default function PublicCatalog() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart", sessionId] });
-      toast({
-        title: "Producto agregado",
-        description: "El producto se agregó al carrito exitosamente",
-      });
     },
     onError: (error) => {
       toast({
@@ -531,10 +527,10 @@ export default function PublicCatalog() {
                     
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-gray-900 truncate">
-                        {item.productName || 'Producto'}
+                        {item.product?.name || 'Producto'}
                       </h4>
                       <p className="text-sm text-gray-600">
-                        ${item.unitPrice} c/u
+                        ${item.product?.price || '0'} c/u
                       </p>
                     </div>
                     
@@ -588,11 +584,11 @@ export default function PublicCatalog() {
             </div>
 
             {/* Footer con total y botón de WhatsApp */}
-            {cart.items && Array.isArray(cart.items) && cart.items.length > 0 && (
+            {(cart as any)?.items && Array.isArray((cart as any).items) && (cart as any).items.length > 0 && (
               <div className="border-t p-6 space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-medium text-gray-900">Subtotal:</span>
-                  <span className="text-2xl font-bold text-green-600">${cart.subtotal || '0.00'}</span>
+                  <span className="text-2xl font-bold text-green-600">${(cart as any).subtotal || '0.00'}</span>
                 </div>
                 
                 <Button
