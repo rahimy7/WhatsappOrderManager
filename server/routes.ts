@@ -1522,6 +1522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerId: customer.id,
           status: 'pending',
           totalAmount: total.toString(),
+          orderNumber: orderNumber,
           notes: `Pedido automático desde catálogo web. Productos: ${orderItems.map(item => `${item.name} (${item.quantity})`).join(', ')}`
         }, orderItemsForCreation);
       } catch (createOrderError: any) {
