@@ -110,21 +110,23 @@ function AppWithAuth() {
     );
   }
 
-  // Si no hay usuario autenticado, mostrar login sin layout
-  if (!user) {
-    return (
-      <Switch>
-        <Route path="/login" component={Login} />
-        <Route component={Login} />
-      </Switch>
-    );
-  }
-
-  // Si hay usuario autenticado, mostrar app con layout
   return (
-    <AppLayout>
-      <Router />
-    </AppLayout>
+    <Switch>
+      {/* Rutas públicas sin layout */}
+      <Route path="/public-catalog" component={PublicCatalog} />
+      <Route path="/login" component={Login} />
+      
+      {/* Rutas que requieren autenticación con layout */}
+      <Route>
+        {!user ? (
+          <Login />
+        ) : (
+          <AppLayout>
+            <Router />
+          </AppLayout>
+        )}
+      </Route>
+    </Switch>
   );
 }
 
