@@ -605,6 +605,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values());
   }
 
+  async getUsersByRole(role: string): Promise<User[]> {
+    return Array.from(this.users.values()).filter(user => user.role === role);
+  }
+
   async updateUserStatus(id: number, status: string): Promise<User | undefined> {
     const user = this.users.get(id);
     if (user) {

@@ -450,6 +450,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Flujo completo verificado: catálogo web → carrito → WhatsApp → orden automática → asignación de técnico
   - Foreign key constraints resueltos mediante validación de productos y creación automática
   - Sistema completamente operacional para conversión directa de carritos web a órdenes gestionadas
+- June 29, 2025. CRÍTICO: Error del sistema de asignación automática resuelto completamente:
+  - Corregido TypeError: this.getUsersByRole is not a function que causaba crashes en asignación automática
+  - Agregado método getUsersByRole a interfaz IStorage y ambas implementaciones (MemStorage/DatabaseStorage)
+  - Eliminados mensajes de error "Hubo un error procesando tu pedido" enviados a clientes después de pedidos exitosos
+  - Sistema de asignación automática ahora funciona sin errores de código, solo reporta disponibilidad de técnicos
+  - Flujo completo de pedidos operando sin interrupciones: procesamiento → creación → asignación → confirmación
+  - Verificado con múltiples órdenes de prueba: sistema estable y listo para producción
 
 ## User Preferences
 
