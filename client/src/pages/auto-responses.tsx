@@ -41,7 +41,7 @@ export default function AutoResponsesPage() {
   // Create response mutation
   const createResponseMutation = useMutation({
     mutationFn: async (data: Partial<InsertAutoResponse>) => {
-      return apiRequest("/api/auto-responses", "POST", data);
+      return apiRequest("POST", "/api/auto-responses", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
@@ -57,7 +57,7 @@ export default function AutoResponsesPage() {
   // Update response mutation
   const updateResponseMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertAutoResponse>) => {
-      return apiRequest(`/api/auto-responses/${id}`, "PUT", data);
+      return apiRequest("PUT", `/api/auto-responses/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
@@ -73,7 +73,7 @@ export default function AutoResponsesPage() {
   // Delete response mutation
   const deleteResponseMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/auto-responses/${id}`, "DELETE");
+      return apiRequest("DELETE", `/api/auto-responses/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
@@ -88,7 +88,7 @@ export default function AutoResponsesPage() {
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
       console.log(`Toggling response ${id} to ${isActive}`);
-      return apiRequest(`/api/auto-responses/${id}`, "PUT", { isActive });
+      return apiRequest("PUT", `/api/auto-responses/${id}`, { isActive });
     },
     onSuccess: (data) => {
       console.log('Toggle success:', data);
@@ -111,7 +111,7 @@ export default function AutoResponsesPage() {
   // Reset to defaults mutation
   const resetToDefaultsMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("/api/auto-responses/reset-defaults", "POST");
+      return apiRequest("POST", "/api/auto-responses/reset-defaults");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
