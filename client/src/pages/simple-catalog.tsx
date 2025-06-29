@@ -210,9 +210,17 @@ export default function SimpleCatalog() {
     
     window.open(whatsappUrl, '_blank');
     
+    // Vaciar el carrito después del envío
+    const emptyCart = { items: [], subtotal: 0 };
+    setCart(emptyCart);
+    localStorage.setItem(`cart_${sessionId}`, JSON.stringify(emptyCart));
+    
+    // Cerrar el panel del carrito
+    setIsCartOpen(false);
+    
     toast({
-      title: "Redirigiendo a WhatsApp",
-      description: `Enviando pedido a ${storeConfig.storeName || 'la tienda'}`,
+      title: "Pedido enviado",
+      description: "Tu carrito se ha vaciado y el pedido se envió por WhatsApp",
     });
   };
 
