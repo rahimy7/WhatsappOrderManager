@@ -35,12 +35,27 @@ export default function PublicCatalog() {
   // Obtener carrito
   const { data: cart = { items: [], subtotal: 0 } } = useQuery({
     queryKey: ["/api/cart"],
+    queryFn: async () => {
+      const sessionId = getSessionId();
+      return apiRequest("GET", `/api/cart?sessionId=${sessionId}`);
+    },
   });
+
+  // Función para obtener/crear sessionId único
+  const getSessionId = () => {
+    let sessionId = localStorage.getItem('cart-session-id');
+    if (!sessionId) {
+      sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('cart-session-id', sessionId);
+    }
+    return sessionId;
+  };
 
   // Agregar al carrito
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
-      return apiRequest("POST", "/api/cart/add", { productId, quantity });
+      const sessionId = getSessionId();
+      return apiRequest("POST", "/api/cart/add", { productId, quantity, sessionId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
@@ -61,7 +76,8 @@ export default function PublicCatalog() {
   // Remover del carrito
   const removeFromCartMutation = useMutation({
     mutationFn: async (productId: number) => {
-      return apiRequest("DELETE", `/api/cart/remove/${productId}`);
+      const sessionId = getSessionId();
+      return apiRequest("DELETE", `/api/cart/remove/${productId}?sessionId=${sessionId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
@@ -82,7 +98,8 @@ export default function PublicCatalog() {
   // Actualizar cantidad en carrito
   const updateCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
-      return apiRequest("PUT", "/api/cart/update", { productId, quantity });
+      const sessionId = getSessionId();
+      return apiRequest("PUT", "/api/cart/update", { productId, quantity, sessionId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });

@@ -3898,8 +3898,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get cart
   app.get('/api/cart', async (req, res) => {
     try {
-      const sessionId = req.session?.id || 'default';
+      const sessionId = req.query.sessionId as string || req.session?.id || 'default';
+      console.log('Getting cart for sessionId:', sessionId);
       const cart = await storage.getCart(sessionId);
+      console.log('Cart contents:', cart);
       res.json(cart);
     } catch (error) {
       console.error('Error fetching cart:', error);
@@ -3913,12 +3915,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { productId, quantity } = req.body;
       const sessionId = req.session?.id || 'default';
       
+      console.log('Adding to cart - sessionId:', sessionId, 'productId:', productId, 'quantity:', quantity);
+      
       if (!productId || !quantity || quantity < 1) {
         return res.status(400).json({ message: 'Product ID and valid quantity required' });
       }
 
       await storage.addToCart(sessionId, productId, quantity);
       const cart = await storage.getCart(sessionId);
+      console.log('Cart after adding:', cart);
       res.json(cart);
     } catch (error) {
       console.error('Error adding to cart:', error);
