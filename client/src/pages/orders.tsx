@@ -337,21 +337,33 @@ export default function OrdersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleViewOrder(order)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log("View button clicked");
+                          handleViewOrder(order);
+                        }}
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleEditOrder(order)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log("Edit button clicked");
+                          handleEditOrder(order);
+                        }}
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => deleteOrderMutation.mutate(order.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log("Delete button clicked");
+                          deleteOrderMutation.mutate(order.id);
+                        }}
                         disabled={deleteOrderMutation.isPending}
                       >
                         <Trash2 className="w-4 h-4" />
