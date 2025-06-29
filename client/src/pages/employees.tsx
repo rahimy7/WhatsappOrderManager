@@ -48,6 +48,13 @@ const createEmployeeSchema = z.object({
 
 type CreateEmployeeForm = z.infer<typeof createEmployeeSchema>;
 
+// Edit schema with optional password
+const editEmployeeSchema = createEmployeeSchema.extend({
+  password: z.string().optional(), // Make password optional for editing
+});
+
+type EditEmployeeForm = z.infer<typeof editEmployeeSchema>;
+
 interface EmployeeWithUser extends EmployeeProfile {
   user: UserType;
 }
@@ -212,11 +219,11 @@ export default function Employees() {
   };
 
   // Edit form
-  const editForm = useForm<CreateEmployeeForm>({
-    resolver: zodResolver(createEmployeeSchema),
+  const editForm = useForm<EditEmployeeForm>({
+    resolver: zodResolver(editEmployeeSchema),
   });
 
-  const onEditSubmit = (data: CreateEmployeeForm) => {
+  const onEditSubmit = (data: EditEmployeeForm) => {
     if (!editingEmployee) return;
     
     const updates = {
@@ -230,10 +237,12 @@ export default function Employees() {
       notes: data.notes || null,
       user: {
         name: data.name,
+        username: data.username,
         phone: data.phone || null,
         email: data.email || null,
         address: data.address || null,
         role: data.role,
+        ...(data.password && { password: data.password }),
       }
     };
 
@@ -724,6 +733,64 @@ export default function Employees() {
                   )}
                 />
 
+                <FormField
+                  control={editForm.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre de Usuario</FormLabel>
+                      <FormControl>
+                        <Input placeholder="usuario123" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Credentials Section */}
+              <div className="border rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium">Credenciales de Acceso</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      editForm.setValue("password", "temp123");
+                      toast({
+                        title: "Contraseña temporal asignada",
+                        description: "Se ha asignado la contraseña temporal 'temp123'. El usuario deberá cambiarla en su primer inicio de sesión.",
+                      });
+                    }}
+                  >
+                    Asignar Contraseña Temporal
+                  </Button>
+                </div>
+                
+                <FormField
+                  control={editForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nueva Contraseña (opcional)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="password" 
+                          placeholder="Dejar vacío para mantener contraseña actual" 
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                      <p className="text-sm text-muted-foreground">
+                        Si asignas una nueva contraseña, el usuario deberá cambiarla en su próximo inicio de sesión.
+                      </p>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={editForm.control}
                   name="role"
