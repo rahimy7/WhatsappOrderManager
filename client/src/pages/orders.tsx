@@ -53,7 +53,7 @@ export default function OrdersPage() {
   // Update order mutation
   const updateOrderMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: number } & Partial<OrderWithDetails>) => {
-      return apiRequest("PUT", `/api/orders/${id}`, data);
+      return apiRequest("PATCH", `/api/orders/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
