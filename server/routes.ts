@@ -1066,14 +1066,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If no specific trigger matched but customer is new or message is simple greeting
       if (!responseFound && (isNewCustomer || ['hola', 'hi', 'hello'].some(greeting => text.toLowerCase().includes(greeting)))) {
-        // Welcome message for new or greeting customers
-        await sendWelcomeMessage(from);
+        await storage.addWhatsAppLog({
+          type: 'debug',
+          phoneNumber: from,
+          messageContent: 'Enviando mensaje de bienvenida usando respuesta automática configurada',
+          status: 'processing'
+        });
+        
+        // Use configured welcome auto-response directly
+        const welcomeResponses = await storage.getAutoResponsesByTrigger('welcome');
+        if (welcomeResponses.length > 0) {
+          const welcomeResponse = welcomeResponses[0];
+          await sendWhatsAppMessage(from, welcomeResponse.messageText);
+          
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Mensaje enviado desde auto-response: ${welcomeResponse.name}`,
+            status: 'sent'
+          });
+        } else {
+          await storage.addWhatsAppLog({
+            type: 'warning',
+            phoneNumber: from,
+            messageContent: 'No hay respuesta automática de bienvenida configurada, usando función fallback',
+            status: 'fallback'
+          });
+          await sendWelcomeMessage(from);
+        }
         responseFound = true;
       }
       
-      // If still no response found, send general help
+      // If still no response found, use configured help auto-response
       if (!responseFound) {
-        await sendHelpMenu(from);
+        await storage.addWhatsAppLog({
+          type: 'debug',
+          phoneNumber: from,
+          messageContent: 'Enviando mensaje de ayuda usando respuesta automática configurada',
+          status: 'processing'
+        });
+        
+        const helpResponses = await storage.getAutoResponsesByTrigger('help');
+        if (helpResponses.length > 0) {
+          const helpResponse = helpResponses[0];
+          await sendWhatsAppMessage(from, helpResponse.messageText);
+          
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Mensaje enviado desde auto-response: ${helpResponse.name}`,
+            status: 'sent'
+          });
+        } else {
+          await storage.addWhatsAppLog({
+            type: 'warning',
+            phoneNumber: from,
+            messageContent: 'No hay respuesta automática de ayuda configurada, usando función fallback',
+            status: 'fallback'
+          });
+          await sendHelpMenu(from);
+        }
       }
 
     } catch (error) {
