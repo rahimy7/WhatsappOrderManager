@@ -8,13 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, User, Users, Briefcase, Truck, Headphones, Shield, Search, Filter, Edit2 } from "lucide-react";
+import { Plus, User, Users, Briefcase, Truck, Headphones, Shield, Search, Filter, Edit2, Trash2 } from "lucide-react";
 import type { User as UserType, EmployeeProfile, InsertEmployeeProfile, InsertUser } from "@shared/schema";
 
 // Validation schemas
@@ -101,6 +102,8 @@ export default function Employees() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeWithUser | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<EmployeeWithUser | null>(null);
 
   // Fetch employees
   const { data: employees = [], isLoading } = useQuery<EmployeeWithUser[]>({
@@ -199,6 +202,29 @@ export default function Employees() {
     },
   });
 
+  // Delete employee mutation
+  const deleteEmployeeMutation = useMutation({
+    mutationFn: async (employeeId: number) => {
+      const response = await apiRequest("DELETE", `/api/employees/${employeeId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Empleado eliminado",
+        description: "El empleado ha sido eliminado exitosamente.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const form = useForm<CreateEmployeeForm>({
     resolver: zodResolver(createEmployeeSchema),
     defaultValues: {
@@ -270,6 +296,19 @@ export default function Employees() {
       notes: employee.notes || "",
     });
     setIsEditDialogOpen(true);
+  };
+
+  const openDeleteModal = (employee: EmployeeWithUser) => {
+    setEmployeeToDelete(employee);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (employeeToDelete) {
+      deleteEmployeeMutation.mutate(employeeToDelete.id);
+      setIsDeleteDialogOpen(false);
+      setEmployeeToDelete(null);
+    }
   };
 
   // Filter employees
@@ -644,7 +683,7 @@ export default function Employees() {
                     </div>
                   )}
                   
-                  <div className="pt-4 border-t mt-4">
+                  <div className="pt-4 border-t mt-4 space-y-2">
                     <Button 
                       variant="outline" 
                       size="sm" 
@@ -653,6 +692,15 @@ export default function Employees() {
                     >
                       <Edit2 className="w-4 h-4 mr-2" />
                       Editar Empleado
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      className="w-full"
+                      onClick={() => openDeleteModal(employee)}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Eliminar Empleado
                     </Button>
                   </div>
                 </div>
