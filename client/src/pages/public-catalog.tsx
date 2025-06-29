@@ -594,7 +594,7 @@ export default function PublicCatalog() {
                 <Button
                   onClick={sendToWhatsApp}
                   className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-lg font-medium"
-                  disabled={!cart.items || cart.items.length === 0}
+                  disabled={!(cart as any)?.items || (cart as any).items.length === 0}
                 >
                   <MessageCircle className="w-5 h-5 mr-2" />
                   Hacer Pedido por WhatsApp
