@@ -46,7 +46,20 @@ export default function PublicCatalog() {
   });
 
   // Obtener carrito
-  const { data: cart = { items: [], subtotal: 0 } } = useQuery({
+  const { data: cart = { items: [], subtotal: 0 } } = useQuery<{
+    items: Array<{
+      id: number;
+      sessionId: string;
+      userId: number | null;
+      productId: number;
+      quantity: number;
+      notes: string | null;
+      createdAt: string;
+      updatedAt: string;
+      product: ProductWithCategory;
+    }>;
+    subtotal: number;
+  }>({
     queryKey: ["/api/cart", sessionId],
     queryFn: async () => {
       return apiRequest("GET", `/api/cart?sessionId=${sessionId}`);

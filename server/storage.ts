@@ -2827,7 +2827,6 @@ export class DatabaseStorage implements IStorage {
 
   // Shopping Cart Management
   async getCart(sessionId: string, userId?: number): Promise<{ items: (ShoppingCart & { product: Product })[], subtotal: number }> {
-    console.log('DatabaseStorage.getCart called for sessionId:', sessionId);
     const cartItems = await db.select({
       cart: shoppingCart,
       product: products
@@ -2835,8 +2834,6 @@ export class DatabaseStorage implements IStorage {
     .from(shoppingCart)
     .innerJoin(products, eq(shoppingCart.productId, products.id))
     .where(eq(shoppingCart.sessionId, sessionId));
-
-    console.log('Raw cart items from DB:', cartItems.length);
 
     let subtotal = 0;
     const items = cartItems.map(item => {
@@ -2848,9 +2845,7 @@ export class DatabaseStorage implements IStorage {
       };
     });
 
-    const result = { items, subtotal };
-    console.log('DatabaseStorage.getCart returning:', JSON.stringify(result, null, 2));
-    return result;
+    return { items, subtotal };
   }
 
   async addToCart(sessionId: string, productId: number, quantity: number, userId?: number): Promise<void> {
