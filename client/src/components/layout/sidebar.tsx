@@ -236,11 +236,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-medium">AM</span>
+            <span className="text-white text-sm font-medium">AD</span>
           </div>
           <div className="flex-1">
-            <p className="font-medium text-gray-900 text-sm">Ana Martínez</p>
-            <p className="text-xs text-gray-500">Administradora</p>
+            <p className="font-medium text-gray-900 text-sm">Administrador</p>
+            <p className="text-xs text-gray-500">Sistema</p>
           </div>
           <button className="text-gray-400 hover:text-gray-600">
             <ChartLine className="h-4 w-4" />
@@ -249,7 +249,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       </div>
 
       {/* Navigation Menu */}
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 overflow-y-auto p-4 space-y-2">
         {navItems.map((item) => {
           const isActive = location === item.href || (item.href === "/dashboard" && location === "/");
           const Icon = item.icon;
