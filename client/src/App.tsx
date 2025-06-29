@@ -75,7 +75,7 @@ function Router() {
       <Route path="/" component={RoleDashboard} />
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} permission="view_dashboard" />} />
       <Route path="/technician-dashboard" component={() => <ProtectedRoute component={TechnicianDashboard} permission="technician_work" />} />
-      <Route path="/orders" component={() => <ProtectedRoute component={Orders} permission="view_orders" />} />
+      <Route path="/orders" component={() => <ProtectedRoute component={Orders} permission="manage_orders" />} />
       <Route path="/conversations" component={() => <ProtectedRoute component={Conversations} permission="view_conversations" />} />
       <Route path="/team" component={() => <ProtectedRoute component={Team} permission="manage_users" />} />
       <Route path="/products" component={() => <ProtectedRoute component={Products} permission="view_products" />} />

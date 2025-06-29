@@ -116,6 +116,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       permission: "view_customers",
     },
     {
+      href: "/orders",
+      icon: ClipboardList,
+      label: "Órdenes/Pedidos",
+      badge: null,
+      permission: "manage_orders",
+    },
+    {
       href: "/employees",
       icon: UserPlus,
       label: "Empleados",
