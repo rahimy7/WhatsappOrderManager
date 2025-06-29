@@ -3,12 +3,12 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Users, UserCheck, UserX, Clock } from "lucide-react";
-import { User } from "@shared/schema";
+import { Users, UserCheck, UserX, Clock, Phone, Mail, MapPin, Calendar } from "lucide-react";
+import { EmployeeProfile } from "@shared/schema";
 
 export default function Team() {
-  const { data: users, isLoading } = useQuery({
-    queryKey: ["/api/users"],
+  const { data: employees, isLoading } = useQuery({
+    queryKey: ["/api/employees"],
   });
 
   const updateStatusMutation = useMutation({
@@ -16,7 +16,7 @@ export default function Team() {
       return apiRequest("PATCH", `/api/users/${userId}/status`, { status });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
     },
   });
 
@@ -81,15 +81,18 @@ export default function Team() {
     );
   }
 
-  const technicians = Array.isArray(users) ? users.filter((user: User) => user.role === "technician") : [];
-  const sellers = Array.isArray(users) ? users.filter((user: User) => user.role === "seller") : [];
-  const admins = Array.isArray(users) ? users.filter((user: User) => user.role === "admin") : [];
+  const employeeData = Array.isArray(employees) ? employees : [];
+  const technicians = employeeData.filter((emp: EmployeeProfile) => emp.user.role === "technical");
+  const sellers = employeeData.filter((emp: EmployeeProfile) => emp.user.role === "sales");
+  const admins = employeeData.filter((emp: EmployeeProfile) => emp.user.role === "admin");
+  const support = employeeData.filter((emp: EmployeeProfile) => emp.user.role === "support");
+  const delivery = employeeData.filter((emp: EmployeeProfile) => emp.user.role === "delivery");
 
   return (
     <div className="space-y-6">
 
       {/* Team Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600">Técnicos</CardTitle>
@@ -97,7 +100,7 @@ export default function Team() {
           <CardContent>
             <div className="text-2xl font-bold">{technicians.length}</div>
             <p className="text-sm text-gray-500 mt-1">
-              {technicians.filter(t => t.status === "active").length} activos
+              {technicians.filter(t => t.user.status === "active").length} activos
             </p>
           </CardContent>
         </Card>
@@ -109,7 +112,31 @@ export default function Team() {
           <CardContent>
             <div className="text-2xl font-bold">{sellers.length}</div>
             <p className="text-sm text-gray-500 mt-1">
-              {sellers.filter(s => s.status === "active").length} activos
+              {sellers.filter(s => s.user.status === "active").length} activos
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-gray-600">Soporte</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{support.length}</div>
+            <p className="text-sm text-gray-500 mt-1">
+              {support.filter(s => s.user.status === "active").length} activos
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-gray-600">Delivery</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{delivery.length}</div>
+            <p className="text-sm text-gray-500 mt-1">
+              {delivery.filter(d => d.user.status === "active").length} activos
             </p>
           </CardContent>
         </Card>
@@ -121,7 +148,7 @@ export default function Team() {
           <CardContent>
             <div className="text-2xl font-bold">{admins.length}</div>
             <p className="text-sm text-gray-500 mt-1">
-              {admins.filter(a => a.status === "active").length} activos
+              {admins.filter(a => a.user.status === "active").length} activos
             </p>
           </CardContent>
         </Card>
@@ -134,52 +161,89 @@ export default function Team() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {Array.isArray(users) ? users.map((user: User) => (
-              <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+            {employeeData.map((employee: EmployeeProfile) => (
+              <div key={employee.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-600">
-                      {user.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white">
+                    <span className="text-sm font-medium">
+                      {employee.user.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
                     </span>
                   </div>
-                  <div>
-                    <h3 className="font-medium text-gray-900">{user.name}</h3>
-                    <p className="text-sm text-gray-500 capitalize">{user.role}</p>
-                    {user.phone && (
-                      <p className="text-xs text-gray-400">{user.phone}</p>
-                    )}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-gray-900">{employee.user.name}</h3>
+                      <Badge variant="outline" className="text-xs">
+                        {employee.employeeId}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 mt-1">
+                      <p className="text-sm text-gray-500 capitalize flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {employee.user.role === "technical" ? "Técnico" : 
+                         employee.user.role === "sales" ? "Vendedor" :
+                         employee.user.role === "admin" ? "Administrador" :
+                         employee.user.role === "support" ? "Soporte" :
+                         employee.user.role === "delivery" ? "Delivery" : employee.user.role}
+                      </p>
+                      {employee.department && (
+                        <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {employee.department}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 mt-1">
+                      {employee.user.phone && (
+                        <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {employee.user.phone}
+                        </p>
+                      )}
+                      {employee.user.email && (
+                        <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          {employee.user.email}
+                        </p>
+                      )}
+                      {employee.hireDate && (
+                        <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(employee.hireDate).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-3">
-                  <Badge className={getStatusColor(user.status)}>
+                  <Badge className={getStatusColor(employee.user.status)}>
                     <div className="flex items-center space-x-1">
-                      {getStatusIcon(user.status)}
-                      <span>{getStatusText(user.status)}</span>
+                      {getStatusIcon(employee.user.status)}
+                      <span>{getStatusText(employee.user.status)}</span>
                     </div>
                   </Badge>
 
                   <div className="flex space-x-1">
                     <Button
                       size="sm"
-                      variant={user.status === "active" ? "default" : "outline"}
-                      onClick={() => updateStatusMutation.mutate({ userId: user.id, status: "active" })}
+                      variant={employee.user.status === "active" ? "default" : "outline"}
+                      onClick={() => updateStatusMutation.mutate({ userId: employee.user.id, status: "active" })}
                       disabled={updateStatusMutation.isPending}
                     >
                       Activo
                     </Button>
                     <Button
                       size="sm"
-                      variant={user.status === "busy" ? "default" : "outline"}
-                      onClick={() => updateStatusMutation.mutate({ userId: user.id, status: "busy" })}
+                      variant={employee.user.status === "busy" ? "default" : "outline"}
+                      onClick={() => updateStatusMutation.mutate({ userId: employee.user.id, status: "busy" })}
                       disabled={updateStatusMutation.isPending}
                     >
                       Ocupado
                     </Button>
                     <Button
                       size="sm"
-                      variant={user.status === "break" ? "default" : "outline"}
-                      onClick={() => updateStatusMutation.mutate({ userId: user.id, status: "break" })}
+                      variant={employee.user.status === "break" ? "default" : "outline"}
+                      onClick={() => updateStatusMutation.mutate({ userId: employee.user.id, status: "break" })}
                       disabled={updateStatusMutation.isPending}
                     >
                       Descanso
@@ -187,7 +251,7 @@ export default function Team() {
                   </div>
                 </div>
               </div>
-            )) : null}
+            ))}
           </div>
         </CardContent>
       </Card>
