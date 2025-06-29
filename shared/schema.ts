@@ -27,6 +27,7 @@ export const customers = pgTable("customers", {
   address: text("address"),
   latitude: decimal("latitude", { precision: 10, scale: 8 }),
   longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  mapLink: text("map_link"), // URL clickeable para abrir en Google Maps/GPS
   lastContact: timestamp("last_contact"),
   registrationDate: timestamp("registration_date").defaultNow(),
   totalOrders: integer("total_orders").default(0),

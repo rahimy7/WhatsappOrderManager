@@ -18,6 +18,19 @@ import {
 } from "@shared/schema";
 import { loginSchema, AuthUser } from "@shared/auth";
 
+// Function to generate Google Maps link from GPS coordinates
+function generateGoogleMapsLink(latitude: string | number, longitude: string | number, address?: string): string {
+  const lat = typeof latitude === 'string' ? parseFloat(latitude) : latitude;
+  const lng = typeof longitude === 'string' ? parseFloat(longitude) : longitude;
+  
+  // Generate Google Maps URL that works on both mobile and desktop
+  const baseUrl = 'https://www.google.com/maps';
+  const query = address ? encodeURIComponent(address) : `${lat},${lng}`;
+  
+  // URL format for better mobile app integration
+  return `${baseUrl}/@${lat},${lng},15z?q=${query}`;
+}
+
 // Function to process auto-response by trigger
 async function processAutoResponse(trigger: string, phoneNumber: string) {
   try {
@@ -2145,17 +2158,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   async function handleLocationMessage(customer: any, location: any, phoneNumber: string) {
     try {
+      // Generate Google Maps link from GPS coordinates
+      const gpsAddress = location.name || location.address || 
+        `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+      const mapLink = generateGoogleMapsLink(location.latitude, location.longitude, gpsAddress);
+
       // Log received location for debugging
       await storage.addWhatsAppLog({
         type: 'info',
         phoneNumber: phoneNumber,
-        messageContent: `Ubicación GPS recibida: ${location.latitude}, ${location.longitude}`,
+        messageContent: `Ubicación GPS recibida: ${location.latitude}, ${location.longitude} - Enlace: ${mapLink}`,
         status: 'received',
         rawData: JSON.stringify({ 
           latitude: location.latitude,
           longitude: location.longitude,
           name: location.name,
           address: location.address,
+          mapLink: mapLink,
           customerId: customer.id
         })
       });
