@@ -1455,6 +1455,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             messageText = `[Imagen recibida] ${message.image.caption || ''}`;
           } else if (messageType === 'document') {
             messageText = `[Documento recibido] ${message.document.filename || ''}`;
+          } else if (messageType === 'interactive') {
+            // Handle interactive messages (buttons, lists)
+            if (message.interactive.type === 'button_reply') {
+              messageText = `[Botón seleccionado] ${message.interactive.button_reply.title}`;
+            } else if (message.interactive.type === 'list_reply') {
+              messageText = `[Lista seleccionada] ${message.interactive.list_reply.title}`;
+            } else {
+              messageText = `[Mensaje interactivo] ${message.interactive.type}`;
+            }
           } else {
             messageText = `[${messageType}] Mensaje no soportado`;
           }
@@ -1588,7 +1597,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             messageType: messageType
           });
 
-          // Process customer message and respond
+          // Handle interactive messages (buttons) BEFORE text processing
+          if (messageType === 'interactive') {
+            await handleInteractiveMessage(customer, conversation, message.interactive, from);
+            return; // Don't process further as text message
+          }
+
+          // Process customer message and respond (for text messages)
           await processCustomerMessage(customer, conversation, message, from, isNewCustomer);
 
           await storage.addWhatsAppLog({
