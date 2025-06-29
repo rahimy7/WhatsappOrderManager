@@ -5182,7 +5182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await masterDb
         .update(schema.systemUsers)
         .set({ lastLogin: new Date() })
-        .where(schema.systemUsers.id.eq(user.id));
+        .where(eq(schema.systemUsers.id, user.id));
       
       // Generar token JWT
       const token = jwt.sign(

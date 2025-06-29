@@ -26,6 +26,8 @@ import Catalog from "@/pages/catalog";
 import PublicCatalogClean from "@/pages/public-catalog-clean";
 import SimpleCatalog from "@/pages/simple-catalog";
 import Cart from "@/pages/cart";
+import StoreManagement from "@/pages/store-management";
+import MultiTenantLogin from "@/pages/multi-tenant-login";
 import AppLayout from "@/components/layout/app-layout";
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -91,6 +93,7 @@ function Router() {
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} permission="manage_users" />} />
       <Route path="/assignment-rules" component={() => <ProtectedRoute component={AssignmentRules} permission="manage_assignments" />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} permission="view_notifications" />} />
+      <Route path="/store-management" component={() => <ProtectedRoute component={StoreManagement} permission="manage_settings" />} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/public-catalog" component={PublicCatalogClean} />
       <Route path="/cart" component={Cart} />
