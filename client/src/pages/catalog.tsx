@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag } from "lucide-react";
+import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, MessageCircle, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Product, ProductCategory } from "@shared/schema";
@@ -57,6 +57,30 @@ export default function Catalog() {
       });
     },
   });
+
+  // Función para enviar carrito por WhatsApp
+  const sendToWhatsApp = () => {
+    if (!cart.items || cart.items.length === 0) {
+      toast({
+        title: "Carrito vacío",
+        description: "Agrega productos al carrito antes de enviar a WhatsApp",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const cartMessage = cart.items.map((item: any) => 
+      `• ${item.productName || 'Producto'} - Cantidad: ${item.quantity} - Precio: $${item.unitPrice}`
+    ).join('\n');
+
+    const whatsappMessage = `¡Hola! Me interesa cotizar estos productos:\n\n${cartMessage}\n\nSubtotal: $${cart.subtotal}\n\n¿Podrían ayudarme con más información y el costo de instalación?`;
+    
+    const encodedMessage = encodeURIComponent(whatsappMessage);
+    const whatsappNumber = "5215534166960"; // Número de WhatsApp de la empresa
+    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+    
+    window.open(whatsappUrl, '_blank');
+  };
 
   // Filtrar productos
   const filteredProducts = products.filter((product: Product) => {
@@ -276,15 +300,24 @@ export default function Catalog() {
         
         <div className="flex items-center space-x-4">
           {cart.items?.length > 0 && (
-            <Link href="/cart">
-              <Button variant="outline" className="relative">
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Carrito
-                <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs">
-                  {cart.items.length}
-                </Badge>
+            <>
+              <Button 
+                onClick={sendToWhatsApp}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Enviar a WhatsApp
               </Button>
-            </Link>
+              <Link href="/cart">
+                <Button variant="outline" className="relative">
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Carrito
+                  <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs">
+                    {cart.items.length}
+                  </Badge>
+                </Button>
+              </Link>
+            </>
           )}
         </div>
       </div>
@@ -382,6 +415,37 @@ export default function Catalog() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Footer informativo */}
+      <div className="mt-16 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-8">
+        <div className="text-center">
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">¿Necesitas ayuda personalizada?</h3>
+          <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
+            Nuestro equipo de expertos está listo para ayudarte a encontrar la solución perfecta para tu hogar o negocio. 
+            Contactanos para una cotización personalizada.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Button 
+              onClick={() => window.open('https://wa.me/5215534166960', '_blank')}
+              className="bg-green-600 hover:bg-green-700 text-white px-6 py-3"
+            >
+              <MessageCircle className="w-5 h-5 mr-2" />
+              WhatsApp: +52 55 3416 6960
+            </Button>
+            <Button 
+              onClick={() => window.open('tel:+5215534166960', '_blank')}
+              variant="outline" 
+              className="px-6 py-3"
+            >
+              <Phone className="w-5 h-5 mr-2" />
+              Llamar ahora
+            </Button>
+          </div>
+          <p className="text-sm text-gray-500 mt-4">
+            Horario de atención: Lunes a Viernes 9:00 AM - 6:00 PM | Sábados 9:00 AM - 2:00 PM
+          </p>
+        </div>
       </div>
     </div>
   );
