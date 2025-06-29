@@ -1558,26 +1558,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `📝 *Productos:*\n` +
         orderItems.map((item, index) => 
           `${index + 1}. ${item.name}\n   Cantidad: ${item.quantity} - $${item.price * item.quantity}`
-        ).join('\n\n') + '\n\n' +
-        `Para completar tu pedido necesito algunos datos:\n\n` +
-        `🏠 Tu dirección de entrega\n` +
-        `📞 Número de contacto\n` +
-        `💳 Método de pago preferido\n\n` +
-        `¿Podrías proporcionarme tu dirección de entrega?`;
+        ).join('\n\n');
 
       await sendWhatsAppMessage(phoneNumber, confirmationMessage);
+
+      // Determine next step based on customer registration status
+      const isNewCustomer = customer.name.startsWith('Cliente ');
+      const nextStep = isNewCustomer ? 'collect_name' : 'collect_address';
+      const nextTrigger = isNewCustomer ? 'collect_name' : 'collect_address';
 
       // Start registration flow for order completion
       await storage.createRegistrationFlow({
         phoneNumber: phoneNumber,
-        currentStep: 'collect_address',
+        currentStep: nextStep,
         collectedData: JSON.stringify({ 
           orderId: order.id,
           orderNumber: orderNumber,
-          hasName: !customer.name.startsWith('Cliente ')
+          hasName: !isNewCustomer
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
       });
+
+      // Send next data collection message using auto-responses
+      await processAutoResponse(nextTrigger, phoneNumber);
 
       await storage.addWhatsAppLog({
         type: 'success',
@@ -3548,6 +3551,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'info',
         rawData: JSON.stringify({ step: registrationFlow.currentStep, message: messageText, data: data })
       });
+      
+      // Handle order completion flow for web catalog orders
+      if (registrationFlow.currentStep === 'collect_name') {
+        // Validate customer name
+        const customerName = messageText.trim();
+        if (customerName.length < 3) {
+          await processAutoResponse('collect_name', phoneNumber);
+          return;
+        }
+        
+        // Update customer with the complete name
+        const customer = await storage.getCustomerByPhone(phoneNumber);
+        if (customer) {
+          await storage.updateCustomerName(customer.id, customerName);
+        }
+        
+        // Move to next step - collect address
+        const updatedData = { ...data, customerName: customerName };
+        await storage.updateRegistrationFlow(phoneNumber, {
+          currentStep: 'collect_address',
+          collectedData: JSON.stringify(updatedData)
+        });
+        
+        await processAutoResponse('collect_address', phoneNumber);
+        return;
+      }
+      
+      if (registrationFlow.currentStep === 'collect_address') {
+        // Validate delivery address
+        const address = messageText.trim();
+        if (address.length < 10) {
+          await processAutoResponse('collect_address', phoneNumber);
+          return;
+        }
+        
+        // Update customer with delivery address
+        const customer = await storage.getCustomerByPhone(phoneNumber);
+        if (customer) {
+          await storage.updateCustomer(customer.id, { address: address });
+        }
+        
+        // Move to next step - collect contact
+        const updatedData = { ...data, address: address };
+        await storage.updateRegistrationFlow(phoneNumber, {
+          currentStep: 'collect_contact',
+          collectedData: JSON.stringify(updatedData)
+        });
+        
+        await processAutoResponse('collect_contact', phoneNumber);
+        return;
+      }
+      
+      if (registrationFlow.currentStep === 'collect_contact') {
+        // Handle contact number selection - either WhatsApp number or custom number
+        let contactNumber = phoneNumber; // Default to WhatsApp number
+        
+        if (messageText.toLowerCase().includes('otro') || /^\d{10}/.test(messageText)) {
+          // Customer wants to provide another number
+          const customNumber = messageText.replace(/\D/g, '');
+          if (customNumber.length >= 10) {
+            contactNumber = customNumber;
+          }
+        }
+        
+        // Move to next step - collect payment method
+        const updatedData = { ...data, contactNumber: contactNumber };
+        await storage.updateRegistrationFlow(phoneNumber, {
+          currentStep: 'collect_payment',
+          collectedData: JSON.stringify(updatedData)
+        });
+        
+        await processAutoResponse('collect_payment', phoneNumber);
+        return;
+      }
+      
+      if (registrationFlow.currentStep === 'collect_payment') {
+        // Handle payment method selection
+        let paymentMethod = 'cash';
+        if (messageText.toLowerCase().includes('tarjeta') || messageText.toLowerCase().includes('card')) {
+          paymentMethod = 'card';
+        } else if (messageText.toLowerCase().includes('transferencia') || messageText.toLowerCase().includes('transfer')) {
+          paymentMethod = 'transfer';
+        }
+        
+        // Complete the order with all collected data
+        const orderCompleteData = { ...data, paymentMethod: paymentMethod };
+        
+        // Update order with complete information
+        if (data.orderId) {
+          await storage.updateOrder(data.orderId, {
+            status: 'confirmed',
+            notes: `Completado desde catálogo web. Método de pago: ${paymentMethod}. Contacto: ${orderCompleteData.contactNumber || phoneNumber}`
+          });
+          
+          // Send final confirmation
+          const finalMessage = 
+            `✅ *PEDIDO CONFIRMADO*\n\n` +
+            `📋 Número: ${data.orderNumber}\n` +
+            `💳 Método de pago: ${paymentMethod === 'card' ? 'Tarjeta' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo'}\n` +
+            `📞 Contacto: ${orderCompleteData.contactNumber || phoneNumber}\n\n` +
+            `🎯 *¡Perfecto!* Tu pedido ha sido confirmado.\n` +
+            `Un técnico te contactará pronto para coordinar la entrega.\n\n` +
+            `📱 Puedes revisar el estado de tu pedido escribiendo *pedido*`;
+          
+          await sendWhatsAppMessage(phoneNumber, finalMessage);
+        }
+        
+        // Complete registration flow
+        await storage.deleteRegistrationFlow(phoneNumber);
+        return;
+      }
       
       if (registrationFlow.currentStep === 'awaiting_name') {
         // Validate name (should not be empty and should contain at least 2 words)
