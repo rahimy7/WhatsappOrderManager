@@ -457,6 +457,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Sistema de asignación automática ahora funciona sin errores de código, solo reporta disponibilidad de técnicos
   - Flujo completo de pedidos operando sin interrupciones: procesamiento → creación → asignación → confirmación
   - Verificado con múltiples órdenes de prueba: sistema estable y listo para producción
+- June 29, 2025. FUNCIONALIDAD DE ELIMINACIÓN DE PEDIDOS CORREGIDA Y OPERACIONAL:
+  - Corregido error de restricción de clave foránea en eliminación de órdenes (conversations_order_id_orders_id_fk)
+  - Actualizado método deleteOrder en ambas implementaciones (MemStorage/DatabaseStorage) con secuencia correcta
+  - Implementado manejo apropiado de dependencias: conversaciones → historial → items → órdenes
+  - Conversaciones mantienen historial pero se desvinculan de órdenes eliminadas (order_id = null)
+  - Sistema de eliminación seguro que preserva integridad referencial de la base de datos
+  - Verificado funcionamiento correcto con múltiples órdenes de prueba eliminadas exitosamente
 
 ## User Preferences
 
