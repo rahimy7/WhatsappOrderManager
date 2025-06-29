@@ -1407,13 +1407,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: item.name
       }));
       
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: phoneNumber,
+        messageContent: `Creando pedido con ${orderItemsForCreation.length} productos`,
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          total: total,
+          itemsCount: orderItemsForCreation.length,
+          items: orderItemsForCreation
+        })
+      });
+
       const order = await storage.createOrder({
-        orderNumber: orderNumber,
         customerId: customer.id,
         status: 'pending',
         totalAmount: total.toString(),
         notes: `Pedido automático desde catálogo web. Productos: ${orderItems.map(item => `${item.name} (${item.quantity})`).join(', ')}`
       }, orderItemsForCreation);
+
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: `Pedido creado exitosamente: ${order.orderNumber}`,
+        status: 'success',
+        rawData: JSON.stringify({ 
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          totalAmount: order.totalAmount,
+          itemsCount: order.items?.length || 0
+        })
+      });
 
       // Update conversation with order
       const conversations = await storage.getActiveConversations();
