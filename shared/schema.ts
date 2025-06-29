@@ -2,6 +2,66 @@ import { pgTable, text, serial, integer, boolean, timestamp, decimal } from "dri
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ================================
+// SISTEMA MULTI-TENANT - TIENDAS VIRTUALES
+// ================================
+
+// Tabla principal de tiendas virtuales (en base de datos maestra)
+export const virtualStores = pgTable("virtual_stores", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(), // URL amigable para la tienda
+  description: text("description"),
+  logo: text("logo"), // URL del logo de la tienda
+  domain: text("domain"), // Dominio personalizado opcional
+  whatsappNumber: text("whatsapp_number"),
+  address: text("address"),
+  timezone: text("timezone").default("America/Mexico_City"),
+  currency: text("currency").default("MXN"),
+  isActive: boolean("is_active").default(true),
+  subscription: text("subscription").default("free"), // 'free', 'basic', 'premium', 'enterprise'
+  subscriptionExpiry: timestamp("subscription_expiry"),
+  databaseUrl: text("database_url").notNull(), // URL de la base de datos específica de la tienda
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  ownerId: integer("owner_id"), // ID del usuario propietario principal
+  settings: text("settings"), // JSON con configuraciones específicas de la tienda
+});
+
+// Usuarios del sistema multi-tenant (en base de datos maestra)
+export const systemUsers = pgTable("system_users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  phone: text("phone"),
+  role: text("role").notNull().default("store_admin"), // 'super_admin', 'store_admin', 'store_user'
+  storeId: integer("store_id").references(() => virtualStores.id), // NULL para super_admin
+  isActive: boolean("is_active").default(true),
+  lastLogin: timestamp("last_login"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Tabla de auditoría para el sistema multi-tenant
+export const systemAuditLog = pgTable("system_audit_log", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => systemUsers.id),
+  storeId: integer("store_id").references(() => virtualStores.id),
+  action: text("action").notNull(),
+  resource: text("resource").notNull(),
+  resourceId: text("resource_id"),
+  details: text("details"), // JSON con detalles de la acción
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ================================
+// ESQUEMAS PARA BASES DE DATOS POR TIENDA
+// ================================
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -497,3 +557,49 @@ export const insertStoreSettingsSchema = createInsertSchema(storeSettings).omit(
 
 export type StoreSettings = typeof storeSettings.$inferSelect;
 export type InsertStoreSettings = z.infer<typeof insertStoreSettingsSchema>;
+
+// ================================
+// TIPOS Y SCHEMAS MULTI-TENANT
+// ================================
+
+// Virtual Stores
+export const insertVirtualStoreSchema = createInsertSchema(virtualStores).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type VirtualStore = typeof virtualStores.$inferSelect;
+export type InsertVirtualStore = z.infer<typeof insertVirtualStoreSchema>;
+
+// System Users 
+export const insertSystemUserSchema = createInsertSchema(systemUsers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLogin: true,
+});
+
+export type SystemUser = typeof systemUsers.$inferSelect;
+export type InsertSystemUser = z.infer<typeof insertSystemUserSchema>;
+
+// System Audit Log
+export const insertSystemAuditLogSchema = createInsertSchema(systemAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type SystemAuditLog = typeof systemAuditLog.$inferSelect;
+export type InsertSystemAuditLog = z.infer<typeof insertSystemAuditLogSchema>;
+
+// Extended types for multi-tenant API responses
+export type VirtualStoreWithOwner = VirtualStore & {
+  owner?: SystemUser;
+  userCount?: number;
+  orderCount?: number;
+  lastActivity?: Date;
+};
+
+export type SystemUserWithStore = SystemUser & {
+  store?: VirtualStore;
+};

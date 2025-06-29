@@ -15,8 +15,12 @@ import {
   insertCustomerRegistrationFlowSchema,
   insertEmployeeProfileSchema,
   insertNotificationSchema,
+  insertVirtualStoreSchema,
+  insertSystemUserSchema,
+  insertSystemAuditLogSchema,
 } from "@shared/schema";
 import { loginSchema, AuthUser } from "@shared/auth";
+import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore } from "./multi-tenant-db";
 
 // Function to generate Google Maps link from GPS coordinates
 function generateGoogleMapsLink(latitude: string | number, longitude: string | number, address?: string): string {
