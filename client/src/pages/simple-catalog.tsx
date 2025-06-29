@@ -12,6 +12,11 @@ import { apiRequest } from "@/lib/queryClient";
 export default function SimpleCatalog() {
   const { toast } = useToast();
   
+  // Obtener configuración de la tienda
+  const { data: storeConfig } = useQuery({
+    queryKey: ["/api/settings/store"],
+  });
+  
   // Session ID único para el carrito
   const [sessionId] = useState(() => {
     let id = localStorage.getItem('cart_session_id');
@@ -176,7 +181,17 @@ export default function SimpleCatalog() {
       return;
     }
 
-    let message = "🛍️ *NUEVO PEDIDO*\n\n";
+    // Verificar que tenemos configuración de WhatsApp de la tienda
+    if (!storeConfig?.storeWhatsAppNumber) {
+      toast({
+        title: "Error de configuración",
+        description: "No se ha configurado el número de WhatsApp de la tienda",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let message = `🛍️ *NUEVO PEDIDO - ${storeConfig.storeName || 'Tienda'}*\n\n`;
     
     cart.items.forEach((item, index) => {
       message += `${index + 1}. ${item.product.name}\n`;
@@ -189,9 +204,16 @@ export default function SimpleCatalog() {
     message += "Por favor confirma tu pedido y proporciona tu dirección de entrega.";
 
     const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/5215512345678?text=${encodedMessage}`;
+    // Limpiar el número de WhatsApp (remover caracteres especiales)
+    const cleanWhatsAppNumber = storeConfig.storeWhatsAppNumber.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/${cleanWhatsAppNumber}?text=${encodedMessage}`;
     
     window.open(whatsappUrl, '_blank');
+    
+    toast({
+      title: "Redirigiendo a WhatsApp",
+      description: `Enviando pedido a ${storeConfig.storeName || 'la tienda'}`,
+    });
   };
 
   // Filtrar productos

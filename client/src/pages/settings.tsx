@@ -59,16 +59,16 @@ function StoreSettings() {
   const form = useForm<StoreConfig>({
     resolver: zodResolver(storeConfigSchema),
     defaultValues: {
-      storeWhatsAppNumber: storeConfig.storeWhatsAppNumber || "",
-      storeName: storeConfig.storeName || "",
-      storeAddress: storeConfig.storeAddress || "",
-      storeEmail: storeConfig.storeEmail || "",
+      storeWhatsAppNumber: "",
+      storeName: "",
+      storeAddress: "",
+      storeEmail: "",
     },
   });
 
   // Actualizar formulario cuando cambian los datos
   useEffect(() => {
-    if (storeConfig) {
+    if (storeConfig && !isLoading) {
       form.reset({
         storeWhatsAppNumber: storeConfig.storeWhatsAppNumber || "",
         storeName: storeConfig.storeName || "",
@@ -76,7 +76,7 @@ function StoreSettings() {
         storeEmail: storeConfig.storeEmail || "",
       });
     }
-  }, [storeConfig, form]);
+  }, [storeConfig, isLoading]);
 
   const saveStoreConfigMutation = useMutation({
     mutationFn: async (data: StoreConfig) => {
