@@ -550,6 +550,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Agregado botón manual "Vaciar Carrito" para limpieza instantánea del carrito
   - Limpieza completa del sessionId del localStorage para generar uno nuevo en próximo uso
   - Mejorada experiencia de usuario con notificaciones de confirmación de vaciado
+- June 29, 2025. SISTEMA DE CONFIGURACIONES PREDETERMINADAS PARA NUEVAS TIENDAS IMPLEMENTADO:
+  - Sistema automático que copia respuestas automáticas existentes como plantilla para nuevas tiendas virtuales
+  - 15 respuestas automáticas configuradas se establecen como base predeterminada para cada nueva empresa
+  - Función copyDefaultConfigurationsToTenant() copia automáticamente productos base y configuraciones
+  - URLs de catálogo se actualizan automáticamente con el dominio correcto para cada tienda
+  - Configuraciones generales predeterminadas incluyen horarios, radio de entrega, WhatsApp, y notificaciones
+  - Integración automática en endpoint de creación de tiendas (/api/admin/stores)
+  - Sistema multi-tenant completamente operacional con ajustes comunes establecidos automáticamente
 - June 29, 2025. MENÚ INTERACTIVO PARA CLIENTES CON PEDIDOS ACTIVOS COMPLETAMENTE IMPLEMENTADO:
   - Sistema inteligente de detección: clientes con pedidos activos reciben menú especializado con 3 opciones
   - Opción 1 "📋 Seguimiento": muestra estado detallado de todos los pedidos activos con emojis de estado
