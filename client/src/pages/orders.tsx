@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Search, Edit, Trash2, Eye, UserCheck, Clock, CheckCircle, XCircle, Package, MapPin } from "lucide-react";
 import type { User } from "@shared/schema";
+import AssignmentModal from "@/components/orders/assignment-modal";
 
 type OrderWithDetails = {
   id: number;
@@ -57,11 +59,14 @@ type OrderWithDetails = {
 
 export default function OrdersPage() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
 
   // Fetch orders
   const { data: orders = [], isLoading } = useQuery<OrderWithDetails[]>({
@@ -72,6 +77,42 @@ export default function OrdersPage() {
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
+
+  // Effect to handle URL parameters from dashboard
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const viewId = params.get('view');
+    const editId = params.get('edit');
+    const assignId = params.get('assign');
+
+    if (orders.length > 0) {
+      if (viewId) {
+        const order = orders.find(o => o.id === parseInt(viewId));
+        if (order) {
+          setSelectedOrder(order);
+          setIsViewDialogOpen(true);
+          // Clear URL parameter
+          setLocation('/orders');
+        }
+      } else if (editId) {
+        const order = orders.find(o => o.id === parseInt(editId));
+        if (order) {
+          setSelectedOrder(order);
+          setIsEditDialogOpen(true);
+          // Clear URL parameter
+          setLocation('/orders');
+        }
+      } else if (assignId) {
+        const order = orders.find(o => o.id === parseInt(assignId));
+        if (order) {
+          setSelectedOrder(order);
+          setIsAssignDialogOpen(true);
+          // Clear URL parameter
+          setLocation('/orders');
+        }
+      }
+    }
+  }, [orders, search, setLocation]);
 
   // Update order mutation
   const updateOrderMutation = useMutation({
@@ -167,6 +208,11 @@ export default function OrdersPage() {
   const handleViewOrder = (order: OrderWithDetails) => {
     setSelectedOrder(order);
     setIsViewDialogOpen(true);
+  };
+
+  const handleAssignOrder = (order: OrderWithDetails) => {
+    setSelectedOrder(order);
+    setIsAssignDialogOpen(true);
   };
 
   const handleUpdateOrder = (e: React.FormEvent<HTMLFormElement>) => {
