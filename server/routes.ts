@@ -21,6 +21,8 @@ import {
 } from "@shared/schema";
 import { loginSchema, AuthUser } from "@shared/auth";
 import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore } from "./multi-tenant-db";
+import * as schema from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 // Function to generate Google Maps link from GPS coordinates
 function generateGoogleMapsLink(latitude: string | number, longitude: string | number, address?: string): string {
@@ -4986,6 +4988,225 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error al preparar la adición de notas.");
     }
   }
+
+  // ================================
+  // SISTEMA MULTI-TENANT - ENDPOINTS DE GESTIÓN DE TIENDAS VIRTUALES
+  // ================================
+
+  // Middleware para operaciones multi-tenant
+  app.use('/api/admin', tenantMiddleware());
+
+  // Listar todas las tiendas virtuales (super admin)
+  app.get('/api/admin/stores', async (req, res) => {
+    try {
+      const stores = await masterDb.select().from(schema.virtualStores);
+      res.json(stores);
+    } catch (error) {
+      console.error('Error fetching stores:', error);
+      res.status(500).json({ error: 'Failed to fetch stores' });
+    }
+  });
+
+  // Crear nueva tienda virtual (super admin)
+  app.post('/api/admin/stores', async (req, res) => {
+    try {
+      const validatedData = insertVirtualStoreSchema.parse(req.body);
+      
+      // Crear URL de base de datos (en producción sería una nueva base de datos)
+      const databaseUrl = process.env.DATABASE_URL + `?schema=store_${Date.now()}`;
+      
+      const [store] = await masterDb
+        .insert(schema.virtualStores)
+        .values({
+          ...validatedData,
+          databaseUrl,
+          slug: validatedData.slug || validatedData.name.toLowerCase().replace(/\s+/g, '-')
+        })
+        .returning();
+
+      res.status(201).json(store);
+    } catch (error) {
+      console.error('Error creating store:', error);
+      res.status(500).json({ error: 'Failed to create store' });
+    }
+  });
+
+  // Obtener información de una tienda específica
+  app.get('/api/admin/stores/:id', async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.id);
+      const store = await getStoreInfo(storeId);
+      
+      if (!store) {
+        return res.status(404).json({ error: 'Store not found' });
+      }
+      
+      res.json(store);
+    } catch (error) {
+      console.error('Error fetching store:', error);
+      res.status(500).json({ error: 'Failed to fetch store' });
+    }
+  });
+
+  // Actualizar tienda virtual
+  app.put('/api/admin/stores/:id', async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.id);
+      const validatedData = insertVirtualStoreSchema.partial().parse(req.body);
+      
+      const [store] = await masterDb
+        .update(schema.virtualStores)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(eq(schema.virtualStores.id, storeId))
+        .returning();
+        
+      if (!store) {
+        return res.status(404).json({ error: 'Store not found' });
+      }
+      
+      res.json(store);
+    } catch (error) {
+      console.error('Error updating store:', error);
+      res.status(500).json({ error: 'Failed to update store' });
+    }
+  });
+
+  // Eliminar tienda virtual (soft delete)
+  app.delete('/api/admin/stores/:id', async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.id);
+      
+      const [store] = await masterDb
+        .update(schema.virtualStores)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(schema.virtualStores.id, storeId))
+        .returning();
+        
+      if (!store) {
+        return res.status(404).json({ error: 'Store not found' });
+      }
+      
+      res.json({ message: 'Store deactivated successfully' });
+    } catch (error) {
+      console.error('Error deactivating store:', error);
+      res.status(500).json({ error: 'Failed to deactivate store' });
+    }
+  });
+
+  // Gestión de usuarios del sistema multi-tenant
+  
+  // Listar usuarios del sistema
+  app.get('/api/admin/system-users', async (req, res) => {
+    try {
+      const users = await masterDb.select().from(schema.systemUsers);
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching system users:', error);
+      res.status(500).json({ error: 'Failed to fetch system users' });
+    }
+  });
+
+  // Crear usuario del sistema
+  app.post('/api/admin/system-users', async (req, res) => {
+    try {
+      const validatedData = insertSystemUserSchema.parse(req.body);
+      
+      // Hash de la contraseña
+      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+      
+      const [user] = await masterDb
+        .insert(schema.systemUsers)
+        .values({
+          ...validatedData,
+          password: hashedPassword
+        })
+        .returning();
+
+      // Remover la contraseña de la respuesta
+      const { password, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      console.error('Error creating system user:', error);
+      res.status(500).json({ error: 'Failed to create system user' });
+    }
+  });
+
+  // Validar acceso a tienda específica
+  app.get('/api/admin/validate-store/:id', async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.id);
+      const isValid = await validateStore(storeId);
+      
+      res.json({ valid: isValid });
+    } catch (error) {
+      console.error('Error validating store:', error);
+      res.status(500).json({ error: 'Failed to validate store' });
+    }
+  });
+
+  // Login específico para sistema multi-tenant
+  app.post('/api/admin/login', async (req, res) => {
+    try {
+      const { username, password, storeId } = req.body;
+      
+      // Buscar usuario en la base de datos maestra
+      const [user] = await masterDb
+        .select()
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.username, username))
+        .limit(1);
+        
+      if (!user || !user.isActive) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      // Verificar contraseña
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      // Verificar acceso a la tienda si se especifica
+      if (storeId) {
+        if (user.role !== 'super_admin' && user.storeId !== storeId) {
+          return res.status(403).json({ error: 'Access denied to this store' });
+        }
+        
+        const isValidStore = await validateStore(storeId);
+        if (!isValidStore) {
+          return res.status(400).json({ error: 'Invalid store' });
+        }
+      }
+      
+      // Actualizar último login
+      await masterDb
+        .update(schema.systemUsers)
+        .set({ lastLogin: new Date() })
+        .where(schema.systemUsers.id.eq(user.id));
+      
+      // Generar token JWT
+      const token = jwt.sign(
+        { 
+          userId: user.id, 
+          username: user.username, 
+          role: user.role,
+          storeId: storeId || user.storeId 
+        },
+        process.env.JWT_SECRET || 'fallback-secret',
+        { expiresIn: '24h' }
+      );
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ 
+        user: userWithoutPassword, 
+        token,
+        storeId: storeId || user.storeId
+      });
+    } catch (error) {
+      console.error('Error in admin login:', error);
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;
