@@ -1733,7 +1733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Default: Show interactive menu with three options for customers with active orders
+      // Default: Show interactive menu with two options for customers with active orders
       const interactiveMessage = {
         messaging_product: "whatsapp",
         to: phoneNumber,
@@ -1750,13 +1750,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 reply: {
                   id: "track_order",
                   title: "📋 Seguimiento"
-                }
-              },
-              {
-                type: "reply",
-                reply: {
-                  id: "edit_order", 
-                  title: "✏️ Editar Pedido"
                 }
               },
               {
@@ -1779,98 +1772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  // Function to send order edit menu
-  async function sendOrderEditMenu(customer: any, phoneNumber: string, activeOrders: any[]) {
-    try {
-      if (activeOrders.length === 0) {
-        await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos para editar.");
-        return;
-      }
 
-      // Get order details with products
-      const order = activeOrders[0]; // Take first active order
-      const orderItems = await storage.getOrderItems(order.id);
-      
-      let editMessage = `✏️ *Editar Pedido ${order.orderNumber}*\n\n`;
-      editMessage += `📦 *Productos en tu pedido:*\n`;
-      
-      for (const item of orderItems) {
-        editMessage += `• ${item.product?.name || 'Producto'} (x${item.quantity}) - $${item.unitPrice}\n`;
-      }
-      
-      editMessage += `\n💰 *Total: $${order.totalAmount}*\n\n`;
-      editMessage += `¿Qué te gustaría hacer?`;
-
-      const interactiveMessage = {
-        messaging_product: "whatsapp",
-        to: phoneNumber,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: {
-            text: editMessage
-          },
-          action: {
-            buttons: [
-              {
-                type: "reply",
-                reply: {
-                  id: "remove_products",
-                  title: "🗑️ Quitar Productos"
-                }
-              },
-              {
-                type: "reply",
-                reply: {
-                  id: "add_note",
-                  title: "📝 Agregar Nota"
-                }
-              },
-              {
-                type: "reply",
-                reply: {
-                  id: "cancel_order",
-                  title: "❌ Cancelar Pedido"
-                }
-              }
-            ]
-          }
-        }
-      };
-
-      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
-
-      // Send second set of buttons (back to menu)
-      const backButtonMessage = {
-        messaging_product: "whatsapp",
-        to: phoneNumber,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: {
-            text: "Otras opciones:"
-          },
-          action: {
-            buttons: [
-              {
-                type: "reply",
-                reply: {
-                  id: "back_to_menu",
-                  title: "⬅️ Volver al Menú"
-                }
-              }
-            ]
-          }
-        }
-      };
-
-      await sendWhatsAppInteractiveMessage(phoneNumber, backButtonMessage);
-
-    } catch (error) {
-      console.error('Error in sendOrderEditMenu:', error);
-      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error mostrando las opciones de edición.");
-    }
-  }
 
   // Helper function for support conversations
   async function handleSupportConversation(customer: any, phoneNumber: string, messageText: string) {
@@ -2609,47 +2511,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos en este momento.");
         }
-      } else if (buttonId === 'edit_order') {
-        // Handle edit order button
-        const orders = await storage.getAllOrders();
-        const activeOrders = orders.filter(order => 
-          order.customer.id === customer.id && 
-          ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
-        );
-        await sendOrderEditMenu(customer, phoneNumber, activeOrders);
+
       } else if (buttonId === 'new_order') {
         // Handle new order button - start fresh order flow
         await sendWelcomeMessage(phoneNumber);
-      } else if (buttonId === 'remove_products') {
-        // Handle remove products from order
-        await sendProductRemovalMenu(customer, phoneNumber);
-      } else if (buttonId === 'add_note') {
-        // Handle add note to order
-        await sendAddNoteMessage(customer, phoneNumber);
-      } else if (buttonId.startsWith('remove_item_')) {
-        // Handle removing specific order item
-        const itemId = parseInt(buttonId.split('_')[2]);
-        await handleRemoveOrderItem(customer, phoneNumber, itemId);
-      } else if (buttonId === 'cancel_order') {
-        // Handle cancel order button
-        const orders = await storage.getAllOrders();
-        const activeOrders = orders.filter(order => 
-          order.customer.id === customer.id && 
-          ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
-        );
-        
-        if (activeOrders.length > 0) {
-          const order = activeOrders[0];
-          
-          // Update order status to cancelled
-          await storage.updateOrder(order.id, { status: 'cancelled' });
-          
-          await sendWhatsAppMessage(phoneNumber, 
-            `❌ *Pedido ${order.orderNumber} cancelado*\n\n` +
-            `Tu pedido ha sido cancelado exitosamente. Si tienes alguna pregunta, no dudes en contactarnos.\n\n` +
-            `¿Te gustaría hacer un nuevo pedido? Escribe *menu* para ver nuestras opciones.`
-          );
-        }
+
       } else if (buttonId === 'back_to_menu') {
         // Handle back to menu button
         await handleTrackingConversation(customer, phoneNumber, '');
