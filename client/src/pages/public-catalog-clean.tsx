@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, MessageCircle, Star, ShoppingBag, Plus, Minus, Trash2, ShoppingCart } from "lucide-react";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Search, MessageCircle, Star, ShoppingBag, Plus, Minus, Trash2, ShoppingCart, Filter, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Product, ProductCategory } from "@shared/schema";
 
@@ -23,6 +24,9 @@ export default function PublicCatalogClean() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Obtener productos
   const { data: products = [], isLoading: loadingProducts } = useQuery({
@@ -130,6 +134,38 @@ export default function PublicCatalogClean() {
     });
   };
 
+  // Obtener imágenes de producto (simular múltiples imágenes)
+  const getProductImages = (product: any) => {
+    // Simular múltiples imágenes por producto
+    const baseImages = [
+      'https://via.placeholder.com/400x300/3B82F6/FFFFFF?text=Imagen+1',
+      'https://via.placeholder.com/400x300/10B981/FFFFFF?text=Imagen+2',
+      'https://via.placeholder.com/400x300/F59E0B/FFFFFF?text=Imagen+3',
+    ];
+    return baseImages;
+  };
+
+  // Abrir galería de imágenes
+  const openImageGallery = (product: any, imageIndex: number = 0) => {
+    setSelectedProduct(product);
+    setCurrentImageIndex(imageIndex);
+  };
+
+  // Navegar imágenes en galería
+  const nextImage = () => {
+    if (selectedProduct) {
+      const images = getProductImages(selectedProduct);
+      setCurrentImageIndex((prev) => (prev + 1) % images.length);
+    }
+  };
+
+  const prevImage = () => {
+    if (selectedProduct) {
+      const images = getProductImages(selectedProduct);
+      setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+    }
+  };
+
   // Filtrar productos
   const filteredProducts = products.filter((product: any) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -149,32 +185,47 @@ export default function PublicCatalogClean() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">ServicePro - Catálogo</h1>
-            <p className="text-gray-600">Descubre nuestra selección de productos y servicios de climatización</p>
+      {/* Header fijo móvil */}
+      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
+        <div className="px-4 py-3">
+          {/* Header principal */}
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-lg md:text-2xl font-bold text-gray-900">Catálogo</h1>
+            <div className="flex items-center gap-2">
+              {/* Botón filtros móvil */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="md:hidden"
+              >
+                <Filter className="w-4 h-4" />
+              </Button>
+              <span className="text-sm text-gray-600 hidden md:block">
+                {filteredProducts.length} productos
+              </span>
+            </div>
           </div>
-
-          {/* Filtros */}
-          <div className="flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto">
-            <div className="flex-1 relative">
+          
+          {/* Barra de búsqueda */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
                 placeholder="Buscar productos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 h-10"
               />
             </div>
             
+            {/* Selector categoría desktop */}
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Todas las categorías" />
+              <SelectTrigger className="hidden md:flex w-48">
+                <SelectValue placeholder="Categoría" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas las categorías</SelectItem>
+                <SelectItem value="all">Todas</SelectItem>
                 {categories.map((category: any) => (
                   <SelectItem key={category.id} value={category.name}>
                     {category.name}
@@ -183,60 +234,219 @@ export default function PublicCatalogClean() {
               </SelectContent>
             </Select>
           </div>
-
-          <div className="text-center mt-4 text-sm text-gray-600">
+          
+          {/* Panel filtros móvil */}
+          {showFilters && (
+            <div className="mt-3 md:hidden">
+              <Select value={selectedCategory} onValueChange={(value) => {
+                setSelectedCategory(value);
+                setShowFilters(false);
+              }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Seleccionar categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las categorías</SelectItem>
+                  {categories.map((category: any) => (
+                    <SelectItem key={category.id} value={category.name}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          {/* Contador móvil */}
+          <div className="mt-2 text-center text-sm text-gray-600 md:hidden">
             {filteredProducts.length} productos encontrados
           </div>
         </div>
       </div>
 
       {/* Productos */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map((product: any) => (
-            <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-4">
-                <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center">
-                  <ShoppingBag className="w-16 h-16 text-blue-600" />
-                </div>
-                <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
-                <CardDescription className="text-sm text-gray-600 line-clamp-3">
-                  {product.description || "Producto de alta calidad"}
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-2xl font-bold text-green-600">
-                    ${product.price}
-                  </div>
-                  <Badge variant="secondary">
-                    {product.category}
-                  </Badge>
-                </div>
-                
-                <div className="flex items-center gap-1 mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-4 h-4 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+      <div className="px-4 py-4 md:py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+          {filteredProducts.map((product: any) => {
+            const images = getProductImages(product);
+            return (
+              <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-4">
+                  {/* Imagen clickeable */}
+                  <div 
+                    className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center cursor-pointer relative overflow-hidden group"
+                    onClick={() => openImageGallery(product, 0)}
+                  >
+                    <img 
+                      src={images[0]} 
+                      alt={product.name}
+                      className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform"
                     />
-                  ))}
-                  <span className="text-sm text-gray-600 ml-1">4.5</span>
-                </div>
+                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white bg-opacity-90 rounded-full p-2">
+                        <Search className="w-5 h-5 text-gray-700" />
+                      </div>
+                    </div>
+                    {/* Indicador de múltiples imágenes */}
+                    {images.length > 1 && (
+                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                        +{images.length - 1} más
+                      </div>
+                    )}
+                  </div>
+                  <CardTitle className="text-lg line-clamp-2 mt-3">{product.name}</CardTitle>
+                  <CardDescription className="text-sm text-gray-600 line-clamp-2">
+                    {product.description || "Producto de alta calidad"}
+                  </CardDescription>
+                </CardHeader>
                 
-                <Button
-                  onClick={() => addToCart(product)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Agregar al carrito
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                <CardContent className="pt-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xl md:text-2xl font-bold text-green-600">
+                      ${product.price}
+                    </div>
+                    <Badge variant="secondary" className="text-xs">
+                      {product.category}
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center mb-4">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-3 h-3 md:w-4 md:h-4 fill-yellow-400 text-yellow-400" />
+                    ))}
+                    <span className="text-xs md:text-sm text-gray-600 ml-1">4.5</span>
+                  </div>
+                  
+                  <Button
+                    onClick={() => addToCart(product)}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white h-9 md:h-10"
+                    size="sm"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    <span className="text-sm">Agregar</span>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
+
+      {/* Modal de galería de imágenes */}
+      <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden p-0">
+          {selectedProduct && (
+            <div className="relative">
+              {/* Imagen principal */}
+              <div className="relative h-[60vh] md:h-[70vh] bg-black">
+                <img 
+                  src={getProductImages(selectedProduct)[currentImageIndex]} 
+                  alt={selectedProduct.name}
+                  className="w-full h-full object-contain"
+                />
+                
+                {/* Botones de navegación */}
+                {getProductImages(selectedProduct).length > 1 && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white"
+                      onClick={prevImage}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/90 hover:bg-white"
+                      onClick={nextImage}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
+                
+                {/* Botón cerrar */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="absolute top-4 right-4 rounded-full bg-white/90 hover:bg-white"
+                  onClick={() => setSelectedProduct(null)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+                
+                {/* Indicador de imagen actual */}
+                {getProductImages(selectedProduct).length > 1 && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm">
+                    {currentImageIndex + 1} / {getProductImages(selectedProduct).length}
+                  </div>
+                )}
+              </div>
+              
+              {/* Información del producto */}
+              <div className="p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
+                      {selectedProduct.name}
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      {selectedProduct.description || "Producto de alta calidad"}
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <div className="text-2xl md:text-3xl font-bold text-green-600">
+                        ${selectedProduct.price}
+                      </div>
+                      <Badge variant="secondary">
+                        {selectedProduct.category}
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-shrink-0">
+                    <Button
+                      onClick={() => {
+                        addToCart(selectedProduct);
+                        setSelectedProduct(null);
+                      }}
+                      className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Agregar al carrito
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Miniaturas de imágenes */}
+                {getProductImages(selectedProduct).length > 1 && (
+                  <div className="flex gap-2 mt-6 overflow-x-auto pb-2">
+                    {getProductImages(selectedProduct).map((image, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                          index === currentImageIndex 
+                            ? 'border-blue-500 ring-2 ring-blue-200' 
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <img 
+                          src={image} 
+                          alt={`Vista ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Footer */}
       <div className="bg-white border-t py-8">
