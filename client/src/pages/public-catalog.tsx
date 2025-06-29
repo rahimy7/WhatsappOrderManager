@@ -45,32 +45,78 @@ export default function PublicCatalog() {
     queryKey: ["/api/categories"],
   });
 
-  // Obtener carrito
-  const { data: cart = { items: [], subtotal: 0 } } = useQuery({
-    queryKey: ["/api/cart", sessionId],
-    queryFn: async () => {
-      const result = await apiRequest("GET", `/api/cart?sessionId=${sessionId}`);
-      return result;
-    },
+  // State local del carrito
+  const [localCart, setLocalCart] = useState<{items: any[], subtotal: number}>(() => {
+    try {
+      const saved = localStorage.getItem(`cart_${sessionId}`);
+      return saved ? JSON.parse(saved) : { items: [], subtotal: 0 };
+    } catch {
+      return { items: [], subtotal: 0 };
+    }
   });
 
-  // Agregar al carrito
-  const addToCartMutation = useMutation({
-    mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
-      const sessionId = getSessionId();
-      return apiRequest("POST", "/api/cart/add", { productId, quantity, sessionId });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart", sessionId] });
-    },
-    onError: (error) => {
+  // Sincronizar con localStorage
+  useEffect(() => {
+    localStorage.setItem(`cart_${sessionId}`, JSON.stringify(localCart));
+  }, [localCart, sessionId]);
+
+  console.log('Local cart:', localCart);
+
+  // Agregar al carrito local
+  const addToCart = async (productId: number, quantity: number = 1) => {
+    try {
+      // Obtener información del producto
+      const product = (products as any[])?.find(p => p.id === productId);
+      if (!product) {
+        toast({
+          title: "Error",
+          description: "Producto no encontrado",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setLocalCart(prev => {
+        const existingItem = prev.items.find(item => item.productId === productId);
+        let newItems;
+        
+        if (existingItem) {
+          // Actualizar cantidad existente
+          newItems = prev.items.map(item =>
+            item.productId === productId
+              ? { ...item, quantity: item.quantity + quantity }
+              : item
+          );
+        } else {
+          // Agregar nuevo producto
+          newItems = [...prev.items, {
+            id: Date.now(),
+            productId,
+            quantity,
+            product: {
+              id: product.id,
+              name: product.name,
+              price: product.price
+            }
+          }];
+        }
+
+        const subtotal = newItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+        return { items: newItems, subtotal };
+      });
+
+      toast({
+        title: "¡Producto agregado!",
+        description: "El producto se agregó al carrito exitosamente",
+      });
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message,
+        description: "No se pudo agregar el producto",
         variant: "destructive",
       });
-    },
-  });
+    }
+  };
 
   // Remover del carrito
   const removeFromCartMutation = useMutation({
@@ -79,6 +125,7 @@ export default function PublicCatalog() {
       return apiRequest("DELETE", `/api/cart/remove/${productId}?sessionId=${sessionId}`);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", sessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
       toast({
         title: "Producto removido",
@@ -97,11 +144,13 @@ export default function PublicCatalog() {
   // Actualizar cantidad en carrito
   const updateCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
-      const sessionId = getSessionId();
-      return apiRequest("PUT", "/api/cart/update", { productId, quantity, sessionId });
+      const currentSessionId = getSessionId();
+      return apiRequest("PUT", "/api/cart/update", { productId, quantity, sessionId: currentSessionId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cart", sessionId] });
+      const currentSessionId = getSessionId();
+      queryClient.invalidateQueries({ queryKey: ["/api/cart", currentSessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
     },
     onError: (error) => {
       toast({
@@ -489,11 +538,9 @@ export default function PublicCatalog() {
           className="h-14 w-14 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 relative"
         >
           <ShoppingCart className="w-6 h-6" />
-          {getTotalCartItems() > 0 && (
-            <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs bg-red-500 text-white">
-              {getTotalCartItems()}
-            </Badge>
-          )}
+          <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs bg-red-500 text-white min-w-[24px] h-6 flex items-center justify-center rounded-full">
+            {getTotalCartItems()}
+          </Badge>
         </Button>
       </div>
 
