@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AutoResponse, InsertAutoResponse } from "@shared/schema";
-import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw } from "lucide-react";
+import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw, Clock, ArrowLeft, Lock } from "lucide-react";
 
 interface MenuOption {
   label: string;
@@ -352,7 +352,99 @@ export default function AutoResponsesPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                {/* Configuraciones avanzadas */}
+                <div className="border-t pt-4 space-y-4">
+                  <h4 className="font-medium text-gray-900">Configuraciones Avanzadas</h4>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="menuType">Tipo de Menú</Label>
+                      <Select
+                        value={formData.menuType || "buttons"}
+                        onValueChange={(value) => setFormData({ ...formData, menuType: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccione tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {menuTypeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="responseTimeout">Tiempo de Espera (seg)</Label>
+                      <Input
+                        id="responseTimeout"
+                        type="number"
+                        value={formData.responseTimeout || 300}
+                        onChange={(e) => setFormData({ ...formData, responseTimeout: parseInt(e.target.value) || 300 })}
+                        min="30"
+                        max="3600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="maxRetries">Máximo Reintentos</Label>
+                      <Input
+                        id="maxRetries"
+                        type="number"
+                        value={formData.maxRetries || 3}
+                        onChange={(e) => setFormData({ ...formData, maxRetries: parseInt(e.target.value) || 3 })}
+                        min="1"
+                        max="10"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="fallbackMessage">Mensaje de Respaldo</Label>
+                      <Input
+                        id="fallbackMessage"
+                        value={formData.fallbackMessage || ""}
+                        onChange={(e) => setFormData({ ...formData, fallbackMessage: e.target.value })}
+                        placeholder="Mensaje si no hay respuesta"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="conditionalDisplay">Condiciones de Visualización</Label>
+                    <Input
+                      id="conditionalDisplay"
+                      value={formData.conditionalDisplay || ""}
+                      onChange={(e) => setFormData({ ...formData, conditionalDisplay: e.target.value })}
+                      placeholder="ej: customer.isVip = true"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="showBackButton"
+                        checked={Boolean(formData.showBackButton)}
+                        onCheckedChange={(checked) => setFormData({ ...formData, showBackButton: checked })}
+                      />
+                      <Label htmlFor="showBackButton">Mostrar botón "Atrás"</Label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="allowFreeText"
+                        checked={Boolean(formData.allowFreeText)}
+                        onCheckedChange={(checked) => setFormData({ ...formData, allowFreeText: checked })}
+                      />
+                      <Label htmlFor="allowFreeText">Permitir texto libre</Label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 border-t pt-4">
                   <Switch
                     id="isActive"
                     checked={Boolean(formData.isActive)}
@@ -444,6 +536,11 @@ export default function AutoResponsesPage() {
                 <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-medium">
                   {response.trigger}
                 </span>
+                {response.menuType && (
+                  <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-medium">
+                    {menuTypeOptions.find(opt => opt.value === response.menuType)?.label || response.menuType}
+                  </span>
+                )}
                 {response.priority && (
                   <span className="text-xs">
                     Prioridad: {response.priority}
@@ -455,6 +552,34 @@ export default function AutoResponsesPage() {
               <p className="text-sm text-gray-600 mb-3 line-clamp-3">
                 {response.messageText}
               </p>
+              
+              {/* Configuraciones avanzadas */}
+              <div className="space-y-1 mb-3">
+                {response.responseTimeout !== 300 && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <Clock className="h-3 w-3 text-orange-500" />
+                    <span className="text-orange-700">Tiempo: {response.responseTimeout}s</span>
+                  </div>
+                )}
+                {response.maxRetries !== 3 && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <RotateCcw className="h-3 w-3 text-purple-500" />
+                    <span className="text-purple-700">Reintentos: {response.maxRetries}</span>
+                  </div>
+                )}
+                {response.showBackButton && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <ArrowLeft className="h-3 w-3 text-blue-500" />
+                    <span className="text-blue-700">Con botón atrás</span>
+                  </div>
+                )}
+                {!response.allowFreeText && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <Lock className="h-3 w-3 text-red-500" />
+                    <span className="text-red-700">Solo opciones predefinidas</span>
+                  </div>
+                )}
+              </div>
               
               {response.menuOptions && (
                 <div className="mb-3">
@@ -474,7 +599,17 @@ export default function AutoResponsesPage() {
               {response.nextAction && (
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <Settings className="h-3 w-3" />
-                  <span>Siguiente: {response.nextAction}</span>
+                  <span>Siguiente: {nextActionOptions.find(opt => opt.value === response.nextAction)?.label || response.nextAction}</span>
+                </div>
+              )}
+              
+              {/* Condiciones de visualización */}
+              {response.conditionalDisplay && (
+                <div className="mt-2 pt-2 border-t">
+                  <div className="text-xs font-medium text-gray-500 mb-1">Condiciones:</div>
+                  <code className="text-xs bg-yellow-50 text-yellow-800 px-2 py-1 rounded block">
+                    {response.conditionalDisplay}
+                  </code>
                 </div>
               )}
             </CardContent>
