@@ -102,6 +102,7 @@ export interface IStorage {
   updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order | undefined>;
   assignOrder(orderId: number, userId: number): Promise<Order | undefined>;
   updateOrderStatus(orderId: number, status: string, userId?: number, notes?: string): Promise<Order | undefined>;
+  deleteOrder(id: number): Promise<void>;
   
   // Order History
   getOrderHistory(orderId: number): Promise<OrderHistory[]>;
@@ -950,6 +951,23 @@ export class MemStorage implements IStorage {
     return history;
   }
 
+  async deleteOrder(id: number): Promise<void> {
+    this.orders.delete(id);
+    // Also delete related order items and history
+    Array.from(this.orderItems.keys()).forEach(itemId => {
+      const item = this.orderItems.get(itemId);
+      if (item && item.orderId === id) {
+        this.orderItems.delete(itemId);
+      }
+    });
+    Array.from(this.orderHistory.keys()).forEach(historyId => {
+      const history = this.orderHistory.get(historyId);
+      if (history && history.orderId === id) {
+        this.orderHistory.delete(historyId);
+      }
+    });
+  }
+
   async calculateDeliveryCost(
     customerLatitude: string,
     customerLongitude: string,
@@ -1700,6 +1718,13 @@ export class DatabaseStorage implements IStorage {
   async addOrderHistory(insertHistory: InsertOrderHistory): Promise<OrderHistory> {
     const [history] = await db.insert(orderHistory).values(insertHistory).returning();
     return history;
+  }
+
+  async deleteOrder(id: number): Promise<void> {
+    // Delete in order: order_history -> order_items -> orders (foreign key constraints)
+    await db.delete(orderHistory).where(eq(orderHistory.orderId, id));
+    await db.delete(orderItems).where(eq(orderItems.orderId, id));
+    await db.delete(orders).where(eq(orders.id, id));
   }
 
   async calculateServicePrice(

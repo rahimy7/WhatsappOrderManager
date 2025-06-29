@@ -303,6 +303,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/orders/:id", async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id);
+      await storage.deleteOrder(orderId);
+      res.json({ message: "Order deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      res.status(500).json({ error: "Failed to delete order" });
+    }
+  });
+
   app.post("/api/services/:id/calculate-price", async (req, res) => {
     try {
       const serviceId = parseInt(req.params.id);
