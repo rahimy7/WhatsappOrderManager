@@ -1129,7 +1129,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const text = message.text?.body || '';
 
       // PRIORITY 1: Check if message is a structured order from web catalog
-      if (await isOrderMessage(text)) {
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: from,
+        messageContent: `Verificando si el mensaje es un pedido. Longitud: ${text.length}`,
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          messagePreview: text.substring(0, 100),
+          customerId: customer.id,
+          textLength: text.length
+        })
+      });
+
+      const isOrder = await isOrderMessage(text);
+      
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: from,
+        messageContent: `Resultado detección de pedido: ${isOrder}`,
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          isOrder: isOrder,
+          customerId: customer.id
+        })
+      });
+
+      if (isOrder) {
         await storage.addWhatsAppLog({
           type: 'info',
           phoneNumber: from,
