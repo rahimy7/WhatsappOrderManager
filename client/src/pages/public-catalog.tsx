@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, MessageCircle, Phone } from "lucide-react";
+import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, MessageCircle, Phone, X, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Product, ProductCategory } from "@shared/schema";
@@ -18,6 +18,7 @@ export default function PublicCatalog() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const [cartItems, setCartItems] = useState<Map<number, number>>(new Map());
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -57,6 +58,44 @@ export default function PublicCatalog() {
     },
   });
 
+  // Remover del carrito
+  const removeFromCartMutation = useMutation({
+    mutationFn: async (productId: number) => {
+      return apiRequest("DELETE", `/api/cart/remove/${productId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      toast({
+        title: "Producto removido",
+        description: "El producto se removió del carrito",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Actualizar cantidad en carrito
+  const updateCartMutation = useMutation({
+    mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
+      return apiRequest("PUT", "/api/cart/update", { productId, quantity });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Función para enviar carrito por WhatsApp
   const sendToWhatsApp = () => {
     if (!cart.items || cart.items.length === 0) {
@@ -79,6 +118,18 @@ export default function PublicCatalog() {
     const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
     
     window.open(whatsappUrl, '_blank');
+    setIsCartOpen(false);
+    
+    toast({
+      title: "Redirigiendo a WhatsApp",
+      description: "Se abrirá WhatsApp con tu lista de productos",
+    });
+  };
+
+  // Obtener total de items en carrito
+  const getTotalCartItems = () => {
+    if (!cart.items || !Array.isArray(cart.items)) return 0;
+    return cart.items.reduce((total: number, item: any) => total + item.quantity, 0);
   };
 
   // Filtrar productos
@@ -280,24 +331,13 @@ export default function PublicCatalog() {
             </div>
             
             <div className="flex items-center space-x-4">
-              {cart.items?.length > 0 && (
-                <>
-                  <Button 
-                    onClick={sendToWhatsApp}
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Enviar a WhatsApp
-                  </Button>
-                  <Button variant="outline" className="relative">
-                    <ShoppingCart className="w-4 h-4 mr-2" />
-                    Carrito
-                    <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs">
-                      {cart.items.length}
-                    </Badge>
-                  </Button>
-                </>
-              )}
+              <div className="text-sm text-gray-600">
+                {getTotalCartItems() > 0 ? (
+                  `${getTotalCartItems()} producto${getTotalCartItems() > 1 ? 's' : ''} en carrito`
+                ) : (
+                  'Selecciona productos para agregar al carrito'
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -423,6 +463,134 @@ export default function PublicCatalog() {
           </div>
         </div>
       </div>
+
+      {/* Botón flotante del carrito */}
+      {getTotalCartItems() > 0 && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <Button
+            onClick={() => setIsCartOpen(!isCartOpen)}
+            className="h-14 w-14 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 relative"
+          >
+            <ShoppingCart className="w-6 h-6" />
+            <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs bg-red-500 text-white">
+              {getTotalCartItems()}
+            </Badge>
+          </Button>
+        </div>
+      )}
+
+      {/* Panel desplegable del carrito */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-40 bg-black bg-opacity-50" onClick={() => setIsCartOpen(false)}>
+          <div 
+            className="fixed bottom-0 right-0 w-full max-w-md h-auto max-h-[80vh] bg-white rounded-t-3xl shadow-2xl transform transition-transform duration-300 ease-out"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del carrito */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-xl font-bold text-gray-900">Mi Carrito</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsCartOpen(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Items del carrito */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 max-h-96">
+              {cart.items && Array.isArray(cart.items) && cart.items.length > 0 ? (
+                cart.items.map((item: any) => (
+                  <div key={item.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <ShoppingBag className="w-6 h-6 text-blue-600" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-gray-900 truncate">
+                        {item.productName || 'Producto'}
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        ${item.unitPrice} c/u
+                      </p>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateCartMutation.mutate({ 
+                          productId: item.productId, 
+                          quantity: Math.max(1, item.quantity - 1) 
+                        })}
+                        className="h-8 w-8 p-0"
+                        disabled={item.quantity <= 1}
+                      >
+                        <Minus className="w-4 h-4" />
+                      </Button>
+                      
+                      <span className="w-8 text-center text-sm font-medium">
+                        {item.quantity}
+                      </span>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateCartMutation.mutate({ 
+                          productId: item.productId, 
+                          quantity: item.quantity + 1 
+                        })}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFromCartMutation.mutate(item.productId)}
+                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">Tu carrito está vacío</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer con total y botón de WhatsApp */}
+            {cart.items && Array.isArray(cart.items) && cart.items.length > 0 && (
+              <div className="border-t p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-medium text-gray-900">Subtotal:</span>
+                  <span className="text-2xl font-bold text-green-600">${cart.subtotal || '0.00'}</span>
+                </div>
+                
+                <Button
+                  onClick={sendToWhatsApp}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 text-lg font-medium"
+                  disabled={!cart.items || cart.items.length === 0}
+                >
+                  <MessageCircle className="w-5 h-5 mr-2" />
+                  Hacer Pedido por WhatsApp
+                </Button>
+                
+                <p className="text-xs text-gray-500 text-center">
+                  Se abrirá WhatsApp con tu lista de productos para continuar con el pedido
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
