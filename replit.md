@@ -491,6 +491,16 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Manejo completo de botones interactivos en función handleInteractiveMessage
   - Sistema robusto de manejo de errores en parsing de opciones de menú
   - Flujo de pedidos mejorado con experiencia de usuario más intuitiva y amigable
+- June 29, 2025. DOCUMENTACIÓN COMPLETA DE RESPUESTAS AUTOMÁTICAS Y CORRECCIÓN DE EDICIÓN DE PEDIDOS:
+  - Implementado botón de ayuda completo en página de respuestas automáticas con documentación exhaustiva
+  - Modal de ayuda con 7 secciones: introducción, creación/edición, campos del formulario, opciones avanzadas, ejemplos, triggers disponibles, gestión
+  - Guía paso a paso para crear y editar respuestas automáticas con ejemplos de configuración JSON
+  - Explicación detallada de todos los campos: nombre, mensaje, trigger, opciones de menú, configuraciones avanzadas
+  - Lista completa de triggers disponibles (welcome, menu, show_products, show_services, etc.) con descripciones
+  - Instrucciones para gestión de respuestas: activar/desactivar, eliminar, restaurar valores por defecto
+  - CRÍTICO: Corregido error "getOrderItems is not a function" en DatabaseStorage que impedía edición de pedidos en WhatsApp
+  - Agregado método getOrderItems faltante en clase DatabaseStorage con join correcto a tabla de productos
+  - Sistema de edición de pedidos WhatsApp ahora completamente operacional sin errores de función
 - June 29, 2025. MENÚ INTERACTIVO PARA CLIENTES CON PEDIDOS ACTIVOS COMPLETAMENTE IMPLEMENTADO:
   - Sistema inteligente de detección: clientes con pedidos activos reciben menú especializado con 3 opciones
   - Opción 1 "📋 Seguimiento": muestra estado detallado de todos los pedidos activos con emojis de estado
