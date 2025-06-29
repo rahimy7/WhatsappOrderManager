@@ -49,9 +49,13 @@ export default function PublicCatalog() {
   const { data: cart = { items: [], subtotal: 0 } } = useQuery({
     queryKey: ["/api/cart", sessionId],
     queryFn: async () => {
-      return apiRequest("GET", `/api/cart?sessionId=${sessionId}`);
+      const result = await apiRequest("GET", `/api/cart?sessionId=${sessionId}`);
+      console.log('Cart API result:', result);
+      return result;
     },
   });
+
+  console.log('Current cart state:', cart);
 
   // Agregar al carrito
   const addToCartMutation = useMutation({
@@ -145,8 +149,11 @@ export default function PublicCatalog() {
   // Obtener total de items en carrito
   const getTotalCartItems = () => {
     const cartData = cart as any;
+    console.log('Cart data in getTotalCartItems:', cartData);
     if (!cartData?.items || !Array.isArray(cartData.items)) return 0;
-    return cartData.items.reduce((total: number, item: any) => total + item.quantity, 0);
+    const total = cartData.items.reduce((total: number, item: any) => total + item.quantity, 0);
+    console.log('Total cart items:', total);
+    return total;
   };
 
   // Filtrar productos
