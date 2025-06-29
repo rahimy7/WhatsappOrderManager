@@ -3912,9 +3912,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add to cart
   app.post('/api/cart/add', async (req, res) => {
     try {
-      const { productId, quantity } = req.body;
-      const sessionId = req.session?.id || 'default';
+      const { productId, quantity, sessionId: clientSessionId } = req.body;
+      const sessionId = clientSessionId || req.session?.id || 'default';
       
+      console.log('Request body:', req.body);
+      console.log('Client sessionId:', clientSessionId);
+      console.log('Final sessionId:', sessionId);
       console.log('Adding to cart - sessionId:', sessionId, 'productId:', productId, 'quantity:', quantity);
       
       if (!productId || !quantity || quantity < 1) {
@@ -3934,8 +3937,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update cart item quantity
   app.put('/api/cart/update', async (req, res) => {
     try {
-      const { productId, quantity } = req.body;
-      const sessionId = req.session?.id || 'default';
+      const { productId, quantity, sessionId: clientSessionId } = req.body;
+      const sessionId = clientSessionId || req.session?.id || 'default';
       
       if (!productId || quantity < 0) {
         return res.status(400).json({ message: 'Product ID and valid quantity required' });
@@ -3959,7 +3962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/cart/remove/:productId', async (req, res) => {
     try {
       const productId = parseInt(req.params.productId);
-      const sessionId = req.session?.id || 'default';
+      const sessionId = req.query.sessionId as string || req.session?.id || 'default';
       
       if (!productId) {
         return res.status(400).json({ message: 'Product ID required' });
