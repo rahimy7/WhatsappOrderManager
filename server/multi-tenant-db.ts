@@ -1,5 +1,6 @@
 import { Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
+import { eq } from 'drizzle-orm';
 import ws from "ws";
 import * as schema from "@shared/schema";
 import { VirtualStore } from "@shared/schema";
@@ -56,19 +57,115 @@ export async function getTenantDb(storeId: number): Promise<any> {
 
 /**
  * Crea una nueva base de datos para una tienda virtual
- * Esto incluye crear el esquema completo
+ * Esto incluye crear el esquema completo y configuraciones predeterminadas
  */
 export async function createTenantDatabase(store: VirtualStore): Promise<string> {
-  // En un entorno real, aquí crearías una nueva base de datos
-  // Por simplicidad, usaremos la misma base de datos con un prefijo de tabla
-  
-  // Generar URL de base de datos (en producción, esto sería una nueva base de datos)
-  const databaseUrl = process.env.DATABASE_URL + `?schema=store_${store.id}`;
-  
-  // En un entorno real, ejecutarías las migraciones aquí
-  // await runMigrationsForTenant(databaseUrl);
-  
-  return databaseUrl;
+  try {
+    // Generar URL de base de datos (en producción, esto sería una nueva base de datos)
+    const databaseUrl = process.env.DATABASE_URL + `?schema=store_${store.id}`;
+    
+    // Copiar configuraciones predeterminadas desde la base de datos maestra
+    await copyDefaultConfigurationsToTenant(store.id);
+    
+    console.log(`Database created for store: ${store.name} with default configurations`);
+    return databaseUrl;
+  } catch (error) {
+    console.error(`Failed to create database for store ${store.id}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Copia configuraciones predeterminadas (respuestas automáticas, productos base, etc.)
+ * desde la base de datos maestra a una nueva tienda
+ */
+async function copyDefaultConfigurationsToTenant(storeId: number): Promise<void> {
+  try {
+    // Obtener respuestas automáticas predeterminadas de la base de datos maestra
+    const defaultAutoResponses = await masterDb.select().from(schema.autoResponses);
+    
+    // Obtener la conexión de la tienda específica
+    const tenantDb = await getTenantDb(storeId);
+    
+    // Copiar respuestas automáticas a la nueva tienda
+    if (defaultAutoResponses.length > 0) {
+      const responsesToInsert = defaultAutoResponses.map(response => ({
+        name: response.name,
+        trigger: response.trigger,
+        isActive: response.isActive,
+        priority: response.priority,
+        messageText: response.messageText.replace(
+          /https:\/\/[^\/]*\.replit\.dev/g, 
+          `https://${process.env.REPL_SLUG || 'localhost:5000'}.replit.dev`
+        ), // Actualizar URLs con el dominio correcto
+        requiresRegistration: response.requiresRegistration,
+        menuOptions: response.menuOptions,
+        nextAction: response.nextAction,
+        menuType: response.menuType,
+        showBackButton: response.showBackButton,
+        allowFreeText: response.allowFreeText,
+        responseTimeout: response.responseTimeout,
+        maxRetries: response.maxRetries,
+        fallbackMessage: response.fallbackMessage,
+        conditionalDisplay: response.conditionalDisplay,
+      }));
+      
+      await tenantDb.insert(schema.autoResponses).values(responsesToInsert);
+      console.log(`Copied ${responsesToInsert.length} auto responses to store ${storeId}`);
+    }
+    
+    // Copiar productos base/plantilla (opcional)
+    const defaultProducts = await masterDb.select().from(schema.products).limit(3); // Solo productos base
+    if (defaultProducts.length > 0) {
+      const productsToInsert = defaultProducts.map(product => ({
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        category: product.category,
+        type: product.type,
+        isActive: product.isActive,
+        sku: `${storeId}-${product.sku}`, // Hacer SKU único por tienda
+        stock: product.stock,
+        imageUrl: product.imageUrl,
+        specifications: product.specifications,
+        installationCost: product.installationCost,
+        warrantyMonths: product.warrantyMonths,
+      }));
+      
+      await tenantDb.insert(schema.products).values(productsToInsert);
+      console.log(`Copied ${productsToInsert.length} base products to store ${storeId}`);
+    }
+    
+    // Crear configuración inicial de la tienda
+    const defaultSettings = {
+      storeWhatsAppNumber: store.whatsappNumber || '+52 55 0000 0000',
+      businessHours: '09:00-18:00',
+      deliveryRadius: '50', // km
+      baseSiteUrl: `https://${process.env.REPL_SLUG || 'localhost:5000'}.replit.dev`,
+      enableNotifications: true,
+      autoAssignOrders: true,
+    };
+    
+    // Obtener información de la tienda desde la base de datos maestra
+    const [storeInfo] = await masterDb
+      .select()
+      .from(schema.virtualStores)
+      .where(eq(schema.virtualStores.id, storeId))
+      .limit(1);
+    
+    if (storeInfo) {
+      await tenantDb.insert(schema.storeSettings).values({
+        key: 'general_settings',
+        value: JSON.stringify(defaultSettings),
+      });
+      
+      console.log(`Created default settings for store ${storeId}`);
+    }
+    
+  } catch (error) {
+    console.error(`Failed to copy default configurations to store ${storeId}:`, error);
+    throw error;
+  }
 }
 
 /**

@@ -20,7 +20,7 @@ import {
   insertSystemAuditLogSchema,
 } from "@shared/schema";
 import { loginSchema, AuthUser } from "@shared/auth";
-import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore } from "./multi-tenant-db";
+import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore, createTenantDatabase } from "./multi-tenant-db";
 import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
 
@@ -5024,6 +5024,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
+      // Configurar la nueva tienda con ajustes predeterminados
+      await createTenantDatabase(store);
+      
+      console.log(`New store created: ${store.name} with default configurations`);
       res.status(201).json(store);
     } catch (error) {
       console.error('Error creating store:', error);
