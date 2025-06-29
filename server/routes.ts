@@ -231,14 +231,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const updates = insertOrderSchema.partial().parse(req.body);
-      const order = await storage.updateOrder(id, updates);
-      if (!order) {
+      
+      // Update the order
+      const updatedOrder = await storage.updateOrder(id, updates);
+      if (!updatedOrder) {
         return res.status(404).json({ error: "Order not found" });
       }
-      // Return full order details after update
+      
+      // Get full order details with customer info
       const fullOrder = await storage.getOrder(id);
+      if (!fullOrder) {
+        return res.status(404).json({ error: "Order not found after update" });
+      }
+      
       res.json(fullOrder);
     } catch (error) {
+      console.error("Error updating order:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid update data", details: error.errors });
       }
