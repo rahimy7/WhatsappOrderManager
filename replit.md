@@ -537,6 +537,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Sistema simplificado ahora solo ofrece: "📋 Seguimiento" y "🛍️ Nuevo Pedido"
   - Enfoque mejorado en experiencia de usuario sin funcionalidades complejas que causan errores API
   - Clientes pueden consultar estado de pedidos y crear nuevos pedidos sin opciones de edición confusas
+- June 29, 2025. CRITICAL BUG FIX: WhatsApp ubicación GPS procesamiento completamente restaurado:
+  - Corregido error donde mensajes de ubicación mostraban "[location] Mensaje no soportado"
+  - Agregado manejo específico para mensajes tipo 'location' en función processWhatsAppMessage
+  - Mensajes de ubicación ahora procesan correctamente coordenadas GPS y generan direcciones
+  - Sistema de Google Maps links funcionando para navegación de técnicos a ubicaciones de clientes
+  - Integración completa con flujo de pedidos y sistema de cálculo de costos de entrega
+  - GPS location sharing completamente operacional tanto para pedidos como para uso general
 - June 29, 2025. CORRECCIÓN DEL CARRITO: Funcionamiento del vaciado de carrito mejorado:
   - Corregido problema donde el carrito no se limpiaba después de enviar mensaje por WhatsApp
   - Implementado timeout de 500ms para asegurar limpieza del carrito después de abrir WhatsApp

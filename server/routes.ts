@@ -1874,6 +1874,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             messageText = `[Imagen recibida] ${message.image.caption || ''}`;
           } else if (messageType === 'document') {
             messageText = `[Documento recibido] ${message.document.filename || ''}`;
+          } else if (messageType === 'location') {
+            // Handle location messages
+            const location = message.location;
+            messageText = location.name || location.address || 
+              `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
           } else if (messageType === 'interactive') {
             // Handle interactive messages (buttons, lists)
             if (message.interactive.type === 'button_reply') {
@@ -2028,6 +2033,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Handle interactive messages (buttons) BEFORE text processing
           if (messageType === 'interactive') {
             await handleInteractiveMessage(customer, conversation, message.interactive, from);
+            return; // Don't process further as text message
+          }
+
+          // Handle location messages
+          if (messageType === 'location') {
+            await handleLocationMessage(customer, message.location, from);
             return; // Don't process further as text message
           }
 
