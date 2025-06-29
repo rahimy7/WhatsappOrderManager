@@ -80,7 +80,7 @@ function Router() {
       <Route path="/orders" component={() => <ProtectedRoute component={Orders} permission="manage_orders" />} />
       <Route path="/conversations" component={() => <ProtectedRoute component={Conversations} permission="view_conversations" />} />
       <Route path="/team" component={() => <ProtectedRoute component={Team} permission="manage_users" />} />
-      <Route path="/products" component={() => <ProtectedRoute component={Products} permission="view_products" />} />
+      <Route path="/products" component={() => <ProtectedRoute component={Products} permission="manage_orders" />} />
       <Route path="/reports" component={() => <ProtectedRoute component={Reports} permission="view_reports" />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} permission="manage_settings" />} />
       <Route path="/whatsapp-settings" component={() => <ProtectedRoute component={WhatsAppSettings} permission="manage_settings" />} />

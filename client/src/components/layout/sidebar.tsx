@@ -124,9 +124,9 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     {
       href: "/products",
       icon: Package,
-      label: "Productos",
+      label: "Administrar Productos",
       badge: null,
-      permission: "view_products",
+      permission: "manage_orders",
     },
     {
       href: "/catalog",
