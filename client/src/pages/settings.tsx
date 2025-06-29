@@ -38,6 +38,180 @@ const whatsappConfigSchema = z.object({
 
 type WhatsAppConfig = z.infer<typeof whatsappConfigSchema>;
 
+// Schema para configuración de tienda
+const storeConfigSchema = z.object({
+  storeWhatsAppNumber: z.string().min(10, "Número de WhatsApp debe tener al menos 10 dígitos"),
+  storeName: z.string().min(1, "Nombre de la tienda es requerido"),
+  storeAddress: z.string().optional(),
+  storeEmail: z.string().email("Email inválido").optional().or(z.literal("")),
+});
+
+type StoreConfig = z.infer<typeof storeConfigSchema>;
+
+// Componente para configuración de tienda
+function StoreSettings() {
+  const { toast } = useToast();
+  
+  const { data: storeConfig = {}, isLoading } = useQuery<any>({
+    queryKey: ["/api/settings/store"],
+  });
+
+  const form = useForm<StoreConfig>({
+    resolver: zodResolver(storeConfigSchema),
+    defaultValues: {
+      storeWhatsAppNumber: storeConfig.storeWhatsAppNumber || "",
+      storeName: storeConfig.storeName || "",
+      storeAddress: storeConfig.storeAddress || "",
+      storeEmail: storeConfig.storeEmail || "",
+    },
+  });
+
+  // Actualizar formulario cuando cambian los datos
+  useEffect(() => {
+    if (storeConfig) {
+      form.reset({
+        storeWhatsAppNumber: storeConfig.storeWhatsAppNumber || "",
+        storeName: storeConfig.storeName || "",
+        storeAddress: storeConfig.storeAddress || "",
+        storeEmail: storeConfig.storeEmail || "",
+      });
+    }
+  }, [storeConfig, form]);
+
+  const saveStoreConfigMutation = useMutation({
+    mutationFn: async (data: StoreConfig) => {
+      return apiRequest("PUT", "/api/settings/store", data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Configuración guardada",
+        description: "La configuración de la tienda se ha guardado correctamente",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/store"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al guardar la configuración",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmitStore = (data: StoreConfig) => {
+    saveStoreConfigMutation.mutate(data);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <SettingsIcon className="h-5 w-5 text-blue-600" />
+          <span>Configuración de la Tienda</span>
+        </CardTitle>
+        <p className="text-sm text-gray-600">
+          Configura la información básica de tu tienda y el número de WhatsApp para pedidos del catálogo público
+        </p>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={form.handleSubmit(onSubmitStore)} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Nombre de la tienda */}
+            <div className="space-y-2">
+              <Label htmlFor="storeName" className="flex items-center space-x-2">
+                <SettingsIcon className="h-4 w-4" />
+                <span>Nombre de la Tienda</span>
+              </Label>
+              <Input
+                id="storeName"
+                {...form.register("storeName")}
+                placeholder="Ej: ServicePro Climatización"
+              />
+              {form.formState.errors.storeName && (
+                <p className="text-sm text-red-600">{form.formState.errors.storeName.message}</p>
+              )}
+            </div>
+
+            {/* Número de WhatsApp para pedidos */}
+            <div className="space-y-2">
+              <Label htmlFor="storeWhatsAppNumber" className="flex items-center space-x-2">
+                <Phone className="h-4 w-4 text-green-600" />
+                <span>WhatsApp para Pedidos</span>
+              </Label>
+              <Input
+                id="storeWhatsAppNumber"
+                {...form.register("storeWhatsAppNumber")}
+                placeholder="Ej: 5215512345678"
+                className="font-mono"
+              />
+              <p className="text-xs text-gray-500">
+                Número de WhatsApp donde se enviarán los pedidos del catálogo público (incluir código país: 52)
+              </p>
+              {form.formState.errors.storeWhatsAppNumber && (
+                <p className="text-sm text-red-600">{form.formState.errors.storeWhatsAppNumber.message}</p>
+              )}
+            </div>
+
+            {/* Dirección de la tienda */}
+            <div className="space-y-2">
+              <Label htmlFor="storeAddress" className="flex items-center space-x-2">
+                <Globe className="h-4 w-4" />
+                <span>Dirección</span>
+              </Label>
+              <Input
+                id="storeAddress"
+                {...form.register("storeAddress")}
+                placeholder="Ej: Av. Principal 123, Ciudad"
+              />
+              {form.formState.errors.storeAddress && (
+                <p className="text-sm text-red-600">{form.formState.errors.storeAddress.message}</p>
+              )}
+            </div>
+
+            {/* Email de la tienda */}
+            <div className="space-y-2">
+              <Label htmlFor="storeEmail" className="flex items-center space-x-2">
+                <Globe className="h-4 w-4" />
+                <span>Email de Contacto</span>
+              </Label>
+              <Input
+                id="storeEmail"
+                {...form.register("storeEmail")}
+                placeholder="Ej: contacto@servicepro.com"
+                type="email"
+              />
+              {form.formState.errors.storeEmail && (
+                <p className="text-sm text-red-600">{form.formState.errors.storeEmail.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-4">
+            <Button
+              type="submit"
+              disabled={saveStoreConfigMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {saveStoreConfigMutation.isPending && (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              Guardar Configuración
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -168,8 +342,12 @@ export default function Settings() {
           {getConnectionStatusBadge()}
         </div>
 
-        <Tabs defaultValue="whatsapp" className="space-y-6">
+        <Tabs defaultValue="store" className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="store" className="flex items-center space-x-2">
+              <SettingsIcon className="h-4 w-4" />
+              <span>Tienda</span>
+            </TabsTrigger>
             <TabsTrigger value="whatsapp" className="flex items-center space-x-2">
               <Phone className="h-4 w-4" />
               <span>WhatsApp Business</span>
@@ -187,6 +365,11 @@ export default function Settings() {
               <span>General</span>
             </TabsTrigger>
           </TabsList>
+
+          {/* Configuración de la Tienda */}
+          <TabsContent value="store" className="space-y-6">
+            <StoreSettings />
+          </TabsContent>
 
           <TabsContent value="whatsapp" className="space-y-6">
             <Card>
