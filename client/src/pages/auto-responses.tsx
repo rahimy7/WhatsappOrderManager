@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,132 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AutoResponse, InsertAutoResponse } from "@shared/schema";
-import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw, Clock, ArrowLeft, Shield } from "lucide-react";
+import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw, Clock, ArrowLeft, Shield, Minus } from "lucide-react";
 
 interface MenuOption {
   label: string;
   value: string;
   action: string;
+}
+
+// Component for editing menu options visually
+function MenuOptionsEditor({ value, onChange }: { value?: string; onChange: (value: string) => void }) {
+  const [options, setOptions] = useState<MenuOption[]>(() => {
+    try {
+      return value ? JSON.parse(value) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const newOptions = value ? JSON.parse(value) : [];
+      setOptions(newOptions);
+    } catch {
+      setOptions([]);
+    }
+  }, [value]);
+
+  const updateOptions = (newOptions: MenuOption[]) => {
+    setOptions(newOptions);
+    onChange(JSON.stringify(newOptions));
+  };
+
+  const addOption = () => {
+    updateOptions([...options, { label: "", value: "", action: "" }]);
+  };
+
+  const removeOption = (index: number) => {
+    updateOptions(options.filter((_, i) => i !== index));
+  };
+
+  const updateOption = (index: number, field: keyof MenuOption, value: string) => {
+    const newOptions = [...options];
+    newOptions[index] = { ...newOptions[index], [field]: value };
+    updateOptions(newOptions);
+  };
+
+  const actionOptions = [
+    { value: "show_products", label: "Mostrar Productos" },
+    { value: "show_services", label: "Mostrar Servicios" },
+    { value: "show_menu", label: "Mostrar Menú" },
+    { value: "show_help", label: "Mostrar Ayuda" },
+    { value: "contact_technician", label: "Contactar Técnico" },
+    { value: "start_order", label: "Iniciar Pedido" },
+    { value: "track_order", label: "Rastrear Pedido" },
+    { value: "select_product", label: "Seleccionar Producto" },
+    { value: "select_service", label: "Seleccionar Servicio" },
+    { value: "wait_selection", label: "Esperar Selección" },
+    { value: "end_conversation", label: "Finalizar Conversación" }
+  ];
+
+  return (
+    <div className="space-y-3">
+      {options.map((option, index) => (
+        <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <div>
+              <Label className="text-xs">Texto del Botón</Label>
+              <Input
+                value={option.label}
+                onChange={(e) => updateOption(index, 'label', e.target.value)}
+                placeholder="Ej: Ver Productos"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Valor</Label>
+              <Input
+                value={option.value}
+                onChange={(e) => updateOption(index, 'value', e.target.value)}
+                placeholder="Ej: products"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Acción</Label>
+              <Select
+                value={option.action}
+                onValueChange={(value) => updateOption(index, 'action', value)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Seleccionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {actionOptions.map((action) => (
+                    <SelectItem key={action.value} value={action.value}>
+                      {action.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => removeOption(index)}
+            className="h-6 px-2 text-xs text-red-600 hover:bg-red-50"
+          >
+            <Minus className="h-3 w-3 mr-1" />
+            Eliminar
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={addOption}
+        className="w-full h-8 text-sm border-dashed"
+      >
+        <Plus className="h-3 w-3 mr-1" />
+        Agregar Opción
+      </Button>
+    </div>
+  );
 }
 
 export default function AutoResponsesPage() {
@@ -323,13 +443,10 @@ export default function AutoResponsesPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="menuOptions">Opciones de Menú (JSON)</Label>
-                    <Textarea
-                      id="menuOptions"
-                      value={formData.menuOptions || ""}
-                      onChange={(e) => setFormData({ ...formData, menuOptions: e.target.value })}
-                      placeholder='[{"label": "Opción 1", "value": "1", "action": "next"}]'
-                      rows={3}
+                    <Label>Opciones de Menú Interactivo</Label>
+                    <MenuOptionsEditor
+                      value={formData.menuOptions}
+                      onChange={(menuOptions) => setFormData({ ...formData, menuOptions })}
                     />
                   </div>
                   <div className="space-y-2">
