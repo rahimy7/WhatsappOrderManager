@@ -2857,7 +2857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let finalMessage = 
         `🎉 *¡Pedido Confirmado!*\n\n` +
         `📦 *Resumen del Pedido:*\n` +
-        `👤 Cliente: ${orderData.customerName || customer.name || 'No registrado'}\n` +
+        `👤 Cliente: ${orderData.customerName || 'No registrado'}\n` +
         `🆔 Orden: ${orderData.orderNumber}\n` +
         `📱 Producto: ${orderData.productName}\n` +
         `📊 Cantidad: ${orderData.quantity} unidad${orderData.quantity > 1 ? 'es' : ''}\n` +
