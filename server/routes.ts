@@ -1937,28 +1937,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } else if (interactive.type === 'button_reply') {
       const buttonId = interactive.button_reply.id;
       
-      // Handle menu buttons from welcome message
-      if (buttonId === 'products') {
-        // Use configured auto-response for product_inquiry
+      // Log button interaction for debugging
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: `Button pressed: ${buttonId}`,
+        status: 'received',
+        rawData: JSON.stringify({ buttonId, interactiveType: interactive.type })
+      });
+
+      console.log('Processing button interaction:', buttonId);
+
+      // Handle menu buttons from welcome message and auto-responses
+      if (buttonId === 'products' || buttonId === 'show_products') {
         await processAutoResponse('product_inquiry', phoneNumber);
-      } else if (buttonId === 'services') {
-        // Use configured auto-response for service_inquiry
+      } else if (buttonId === 'services' || buttonId === 'show_services') {
         await processAutoResponse('service_inquiry', phoneNumber);
-      } else if (buttonId === 'help') {
-        // Use configured auto-response for help
+      } else if (buttonId === 'help' || buttonId === 'show_help') {
         await processAutoResponse('help', phoneNumber);
-      } else if (buttonId === 'main_menu') {
-        // Use configured auto-response for menu
+      } else if (buttonId === 'menu' || buttonId === 'main_menu') {
         await processAutoResponse('menu', phoneNumber);
-      } else if (buttonId === 'show_products') {
-        // Use configured auto-response for product_inquiry
-        await processAutoResponse('product_inquiry', phoneNumber);
-      } else if (buttonId === 'show_services') {
-        // Use configured auto-response for service_inquiry
-        await processAutoResponse('service_inquiry', phoneNumber);
-      } else if (buttonId === 'show_help') {
-        // Use configured auto-response for help
-        await processAutoResponse('help', phoneNumber);
       } else if (buttonId === 'product_12k' || buttonId === 'product_18k' || buttonId === 'product_24k') {
         // Handle specific product selections - redirect to order flow
         await sendWhatsAppMessage(phoneNumber, 
