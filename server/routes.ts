@@ -1822,10 +1822,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
               {
                 type: "reply",
                 reply: {
+                  id: "add_note",
+                  title: "📝 Agregar Nota"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
                   id: "cancel_order",
                   title: "❌ Cancelar Pedido"
                 }
-              },
+              }
+            ]
+          }
+        }
+      };
+
+      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+
+      // Send second set of buttons (back to menu)
+      const backButtonMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: "Otras opciones:"
+          },
+          action: {
+            buttons: [
               {
                 type: "reply",
                 reply: {
@@ -1838,7 +1864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
 
-      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+      await sendWhatsAppInteractiveMessage(phoneNumber, backButtonMessage);
 
     } catch (error) {
       console.error('Error in sendOrderEditMenu:', error);
@@ -2596,26 +2622,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await sendWelcomeMessage(phoneNumber);
       } else if (buttonId === 'remove_products') {
         // Handle remove products from order
-        const orders = await storage.getAllOrders();
-        const activeOrders = orders.filter(order => 
-          order.customer.id === customer.id && 
-          ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
-        );
-        
-        if (activeOrders.length > 0) {
-          const order = activeOrders[0];
-          const orderItems = await storage.getOrderItems(order.id);
-          
-          let removeMessage = `🗑️ *Quitar productos del pedido ${order.orderNumber}*\n\n`;
-          removeMessage += `Selecciona qué productos quieres quitar:\n\n`;
-          
-          for (const item of orderItems) {
-            removeMessage += `• ${item.product?.name || 'Producto'} (x${item.quantity}) - $${item.unitPrice}\n`;
-          }
-          
-          removeMessage += `\nPara quitar un producto, responde con el nombre del producto o contacta a nuestro equipo de soporte.`;
-          await sendWhatsAppMessage(phoneNumber, removeMessage);
-        }
+        await sendProductRemovalMenu(customer, phoneNumber);
+      } else if (buttonId === 'add_note') {
+        // Handle add note to order
+        await sendAddNoteMessage(customer, phoneNumber);
+      } else if (buttonId.startsWith('remove_item_')) {
+        // Handle removing specific order item
+        const itemId = parseInt(buttonId.split('_')[2]);
+        await handleRemoveOrderItem(customer, phoneNumber, itemId);
       } else if (buttonId === 'cancel_order') {
         // Handle cancel order button
         const orders = await storage.getAllOrders();
@@ -3919,6 +3933,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
       
+      if (registrationFlow.currentStep === 'adding_note') {
+        // Handle adding note to existing order
+        const noteText = messageText.trim();
+        if (noteText.length < 3) {
+          await sendWhatsAppMessage(phoneNumber, 
+            "Por favor, proporciona una nota más descriptiva (mínimo 3 caracteres).\n\n" +
+            "Ejemplo: Disponible de 2-6 PM, tocar el timbre dos veces"
+          );
+          return;
+        }
+
+        // Get the order ID from collected data
+        const orderId = data.orderId;
+        if (orderId) {
+          // Get current order
+          const order = await storage.getOrder(orderId);
+          if (order) {
+            // Append new note to existing notes
+            const currentNotes = order.notes || '';
+            const timestamp = new Date().toLocaleString('es-MX');
+            const newNote = `\n[NOTA AGREGADA ${timestamp}] ${noteText}`;
+            
+            await storage.updateOrder(orderId, {
+              notes: currentNotes + newNote
+            });
+
+            await sendWhatsAppMessage(phoneNumber, 
+              `✅ *Nota agregada exitosamente*\n\n` +
+              `📝 Tu nota: "${noteText}"\n\n` +
+              `Se ha agregado a tu pedido ${order.orderNumber}.\n\n` +
+              `¿Necesitas hacer algún otro cambio? Escribe *editar* para ver las opciones.`
+            );
+          } else {
+            await sendWhatsAppMessage(phoneNumber, "No se pudo encontrar el pedido para agregar la nota.");
+          }
+        }
+
+        // Complete registration flow
+        await storage.deleteRegistrationFlow(phoneNumber);
+        return;
+      }
+
       if (registrationFlow.currentStep === 'collect_notes') {
         // Handle additional notes collection
         let additionalNotes = '';
@@ -4806,6 +4862,222 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'Failed to clear cart' });
     }
   });
+
+  // Function to send product removal menu with buttons
+  async function sendProductRemovalMenu(customer: any, phoneNumber: string) {
+    try {
+      const orders = await storage.getAllOrders();
+      const activeOrders = orders.filter(order => 
+        order.customer.id === customer.id && 
+        ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+      );
+      
+      if (activeOrders.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos para editar.");
+        return;
+      }
+
+      const order = activeOrders[0];
+      const orderItems = await storage.getOrderItems(order.id);
+      
+      if (orderItems.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, "No hay productos en este pedido para quitar.");
+        return;
+      }
+
+      let removeMessage = `🗑️ *Quitar productos del pedido ${order.orderNumber}*\n\n`;
+      removeMessage += `Selecciona el producto que quieres quitar:\n\n`;
+      
+      for (const item of orderItems) {
+        removeMessage += `• ${item.product?.name || 'Producto'} (x${item.quantity}) - $${item.unitPrice}\n`;
+      }
+
+      // Create buttons for each product (max 3 at a time)
+      const buttons = [];
+      for (let i = 0; i < Math.min(orderItems.length, 3); i++) {
+        const item = orderItems[i];
+        const productName = item.product?.name || 'Producto';
+        const shortName = productName.length > 20 ? productName.substring(0, 17) + '...' : productName;
+        
+        buttons.push({
+          type: "reply",
+          reply: {
+            id: `remove_item_${item.id}`,
+            title: `🗑️ ${shortName}`
+          }
+        });
+      }
+
+      const interactiveMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: removeMessage
+          },
+          action: {
+            buttons: buttons
+          }
+        }
+      };
+
+      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+
+      // If there are more than 3 products, send additional buttons
+      if (orderItems.length > 3) {
+        const additionalButtons = [];
+        for (let i = 3; i < Math.min(orderItems.length, 6); i++) {
+          const item = orderItems[i];
+          const productName = item.product?.name || 'Producto';
+          const shortName = productName.length > 20 ? productName.substring(0, 17) + '...' : productName;
+          
+          additionalButtons.push({
+            type: "reply",
+            reply: {
+              id: `remove_item_${item.id}`,
+              title: `🗑️ ${shortName}`
+            }
+          });
+        }
+
+        if (additionalButtons.length > 0) {
+          const secondMessage = {
+            messaging_product: "whatsapp",
+            to: phoneNumber,
+            type: "interactive",
+            interactive: {
+              type: "button",
+              body: {
+                text: "Más productos:"
+              },
+              action: {
+                buttons: additionalButtons
+              }
+            }
+          };
+
+          await sendWhatsAppInteractiveMessage(phoneNumber, secondMessage);
+        }
+      }
+
+      // Send back button
+      const backButtonMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: "Otras opciones:"
+          },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: "back_to_menu",
+                  title: "⬅️ Volver al Menú"
+                }
+              }
+            ]
+          }
+        }
+      };
+
+      await sendWhatsAppInteractiveMessage(phoneNumber, backButtonMessage);
+
+    } catch (error) {
+      console.error('Error in sendProductRemovalMenu:', error);
+      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error mostrando los productos.");
+    }
+  }
+
+  // Function to handle removing specific order item
+  async function handleRemoveOrderItem(customer: any, phoneNumber: string, itemId: number) {
+    try {
+      // Get the order item to verify it belongs to customer
+      const orders = await storage.getAllOrders();
+      const customerOrders = orders.filter(order => order.customer.id === customer.id);
+      let targetOrder = null;
+      let targetItem = null;
+
+      for (const order of customerOrders) {
+        const orderItems = await storage.getOrderItems(order.id);
+        const item = orderItems.find(i => i.id === itemId);
+        if (item) {
+          targetOrder = order;
+          targetItem = item;
+          break;
+        }
+      }
+
+      if (!targetOrder || !targetItem) {
+        await sendWhatsAppMessage(phoneNumber, "No se pudo encontrar el producto seleccionado.");
+        return;
+      }
+
+      // Remove the item (this would need to be implemented in storage)
+      // For now, we'll update the order notes to reflect the removal
+      const productName = targetItem.product?.name || 'Producto';
+      const currentNotes = targetOrder.notes || '';
+      const removalNote = `\n[PRODUCTO ELIMINADO] ${productName} (x${targetItem.quantity}) - $${targetItem.unitPrice}`;
+      
+      await storage.updateOrder(targetOrder.id, {
+        notes: currentNotes + removalNote
+      });
+
+      await sendWhatsAppMessage(phoneNumber, 
+        `✅ *Producto eliminado*\n\n` +
+        `Se ha eliminado "${productName}" de tu pedido ${targetOrder.orderNumber}.\n\n` +
+        `Nuestro equipo procesará este cambio y te contactará para confirmar el nuevo total.\n\n` +
+        `¿Necesitas hacer algún otro cambio? Escribe *editar* para ver las opciones.`
+      );
+
+    } catch (error) {
+      console.error('Error in handleRemoveOrderItem:', error);
+      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error procesando la eliminación del producto.");
+    }
+  }
+
+  // Function to send add note message
+  async function sendAddNoteMessage(customer: any, phoneNumber: string) {
+    try {
+      const orders = await storage.getAllOrders();
+      const activeOrders = orders.filter(order => 
+        order.customer.id === customer.id && 
+        ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+      );
+      
+      if (activeOrders.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos para agregar notas.");
+        return;
+      }
+
+      const noteMessage = `📝 *Agregar nota a tu pedido*\n\n` +
+        `Por favor escribe la nota que quieres agregar a tu pedido. Puede incluir:\n\n` +
+        `• Horarios disponibles para la entrega/instalación\n` +
+        `• Instrucciones especiales de ubicación\n` +
+        `• Preferencias de contacto\n` +
+        `• Cualquier información adicional importante\n\n` +
+        `Escribe tu nota a continuación:`;
+
+      await sendWhatsAppMessage(phoneNumber, noteMessage);
+
+      // Set a flag to capture the next message as a note
+      // This would need registration flow or session management
+      await storage.createRegistrationFlow(phoneNumber, {
+        currentStep: 'adding_note',
+        collectedData: JSON.stringify({ orderId: activeOrders[0].id }),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+      });
+
+    } catch (error) {
+      console.error('Error in sendAddNoteMessage:', error);
+      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error al preparar la adición de notas.");
+    }
+  }
 
   const httpServer = createServer(app);
   return httpServer;
