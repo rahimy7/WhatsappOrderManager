@@ -3746,6 +3746,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Product Categories API
+  app.get("/api/categories", async (req, res) => {
+    try {
+      const categories = await storage.getActiveCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  app.get("/api/categories/all", async (req, res) => {
+    try {
+      const categories = await storage.getAllCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching all categories:", error);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  app.post("/api/categories", async (req, res) => {
+    try {
+      const category = await storage.createCategory(req.body);
+      res.status(201).json(category);
+    } catch (error) {
+      console.error("Error creating category:", error);
+      res.status(500).json({ error: "Failed to create category" });
+    }
+  });
+
+  app.put("/api/categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const category = await storage.updateCategory(id, req.body);
+      if (!category) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      console.error("Error updating category:", error);
+      res.status(500).json({ error: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/categories/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteCategory(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      res.status(500).json({ error: "Failed to delete category" });
+    }
+  });
+
+  // Shopping Cart API
+  app.get("/api/cart", async (req, res) => {
+    try {
+      const sessionId = req.query.sessionId as string || req.sessionID;
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      
+      const cartItems = await storage.getCartItems(sessionId, userId);
+      res.json(cartItems);
+    } catch (error) {
+      console.error("Error fetching cart:", error);
+      res.status(500).json({ error: "Failed to fetch cart items" });
+    }
+  });
+
+  app.post("/api/cart", async (req, res) => {
+    try {
+      const sessionId = req.body.sessionId || req.sessionID;
+      const item = { ...req.body, sessionId };
+      
+      const cartItem = await storage.addToCart(item);
+      res.status(201).json(cartItem);
+    } catch (error) {
+      console.error("Error adding to cart:", error);
+      res.status(500).json({ error: "Failed to add item to cart" });
+    }
+  });
+
+  app.put("/api/cart/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { quantity } = req.body;
+      
+      const cartItem = await storage.updateCartItem(id, quantity);
+      if (!cartItem) {
+        return res.status(404).json({ error: "Cart item not found" });
+      }
+      res.json(cartItem);
+    } catch (error) {
+      console.error("Error updating cart item:", error);
+      res.status(500).json({ error: "Failed to update cart item" });
+    }
+  });
+
+  app.delete("/api/cart/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.removeFromCart(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing from cart:", error);
+      res.status(500).json({ error: "Failed to remove item from cart" });
+    }
+  });
+
+  app.delete("/api/cart", async (req, res) => {
+    try {
+      const sessionId = req.query.sessionId as string || req.sessionID;
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      
+      await storage.clearCart(sessionId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error clearing cart:", error);
+      res.status(500).json({ error: "Failed to clear cart" });
+    }
+  });
+
+  app.get("/api/cart/total", async (req, res) => {
+    try {
+      const sessionId = req.query.sessionId as string || req.sessionID;
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      
+      const total = await storage.getCartTotal(sessionId, userId);
+      res.json({ total });
+    } catch (error) {
+      console.error("Error calculating cart total:", error);
+      res.status(500).json({ error: "Failed to calculate cart total" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

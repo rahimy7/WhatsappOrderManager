@@ -22,6 +22,8 @@ import AssignmentRules from "@/pages/assignment-rules";
 import Notifications from "@/pages/notifications";
 import TechnicianDashboard from "@/pages/technician-dashboard";
 import UserSettings from "@/pages/user-settings";
+import Catalog from "@/pages/catalog";
+import Cart from "@/pages/cart";
 import AppLayout from "@/components/layout/app-layout";
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -87,6 +89,8 @@ function Router() {
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} permission="manage_users" />} />
       <Route path="/assignment-rules" component={() => <ProtectedRoute component={AssignmentRules} permission="manage_assignments" />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} permission="view_notifications" />} />
+      <Route path="/catalog" component={() => <ProtectedRoute component={Catalog} permission="view_products" />} />
+      <Route path="/cart" component={() => <ProtectedRoute component={Cart} permission="view_products" />} />
       <Route path="/user-settings" component={UserSettings} />
       <Route component={NotFound} />
     </Switch>
