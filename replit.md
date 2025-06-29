@@ -335,6 +335,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Order flow now works correctly: product selection → quantity selection → order generation → text confirmation
   - Customers receive clear text message with order details and instructions to respond "CONFIRMAR" or "CAMBIAR"
   - Complete WhatsApp order creation and confirmation process now fully operational without API validation errors
+- June 29, 2025. Quick response settings functionality fixed and enhanced:
+  - Resolved issue where save button was not working when trying to activate/deactivate auto-responses
+  - Added direct toggle switches on each response card for immediate activation/deactivation
+  - Implemented proper mutation handling with success/error notifications
+  - Fixed TypeScript type issues with null/undefined values in form fields
+  - Enhanced error logging and debugging for better troubleshooting
+  - Auto-responses now support real-time toggle functionality with visual feedback
+  - Backend PUT endpoint verified and working correctly for status updates
 
 ## User Preferences
 

@@ -87,19 +87,22 @@ export default function AutoResponsesPage() {
   // Toggle active status mutation
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      console.log(`Toggling response ${id} to ${isActive}`);
       return apiRequest(`/api/auto-responses/${id}`, "PUT", { isActive });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('Toggle success:', data);
       queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
       toast({
         title: "Estado actualizado",
         description: "El estado de la respuesta se ha actualizado correctamente.",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Toggle error:', error);
       toast({
         title: "Error",
-        description: "No se pudo actualizar el estado de la respuesta.",
+        description: `No se pudo actualizar el estado: ${error.message}`,
         variant: "destructive",
       });
     },
