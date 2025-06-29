@@ -567,6 +567,7 @@ export const insertVirtualStoreSchema = createInsertSchema(virtualStores).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  databaseUrl: true, // Se genera automáticamente en el backend
 });
 
 export type VirtualStore = typeof virtualStores.$inferSelect;
