@@ -1699,46 +1699,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Process tracking commands
+      // Check for specific button actions
       const lowerText = messageText.toLowerCase();
       
-      if (lowerText.includes('estado') || lowerText.includes('status')) {
-        // Send order status
+      // Option 1: Track Order Status
+      if (lowerText.includes('seguimiento') || lowerText.includes('estado') || lowerText.includes('status')) {
         let statusMessage = `📋 *Estado de tus pedidos activos:*\n\n`;
         for (const order of activeOrders) {
-          const statusEmoji = order.status === 'pending' ? '⏳' : 
-                             order.status === 'confirmed' ? '✅' : 
-                             order.status === 'in_progress' ? '🔧' : '📋';
+          const statusEmoji = getStatusEmoji(order.status);
           statusMessage += `${statusEmoji} *Pedido ${order.orderNumber}*\n`;
           statusMessage += `   Estado: ${order.status}\n`;
-          statusMessage += `   Total: $${order.totalAmount}\n\n`;
+          statusMessage += `   Total: $${order.totalAmount}\n`;
+          if (order.assignedTo) {
+            statusMessage += `   Técnico: ${order.assignedTo}\n`;
+          }
+          statusMessage += `\n`;
         }
-        statusMessage += `Para más información, escribe "detalles" o contacta a nuestro equipo.`;
+        statusMessage += `Para más información o cambios, escribe de nuevo.`;
         await sendWhatsAppMessage(phoneNumber, statusMessage);
-      } else if (lowerText.includes('modificar') || lowerText.includes('cambiar')) {
-        await sendWhatsAppMessage(phoneNumber, `Para modificar tu pedido, por favor contacta a nuestro equipo de soporte. Menciona tu número de pedido: ${activeOrders[0]?.orderNumber || 'N/A'}`);
-      } else if (lowerText.includes('tiempo') || lowerText.includes('cuando')) {
-        await sendWhatsAppMessage(phoneNumber, `El tiempo estimado para completar tu pedido es de 24-48 horas. Te notificaremos cuando esté listo.`);
-      } else if (lowerText.includes('tecnico') || lowerText.includes('técnico') || lowerText.includes('quien')) {
-        await sendWhatsAppMessage(phoneNumber, `Tu pedido será asignado a uno de nuestros técnicos especializados. Te contactaremos con los detalles del técnico asignado.`);
-      } else {
-        // Show tracking menu
-        let menuMessage = `📱 *Menú de Seguimiento*\n\n`;
-        menuMessage += `Tienes ${activeOrders.length} pedido(s) activo(s):\n\n`;
-        for (const order of activeOrders) {
-          menuMessage += `• *${order.orderNumber}* - ${order.status}\n`;
-        }
-        menuMessage += `\n*Opciones disponibles:*\n`;
-        menuMessage += `• Escribe "estado" para ver el estado actual\n`;
-        menuMessage += `• Escribe "tiempo" para tiempo estimado\n`;
-        menuMessage += `• Escribe "técnico" para información del técnico\n`;
-        menuMessage += `• Escribe "modificar" para cambios en el pedido\n`;
-        await sendWhatsAppMessage(phoneNumber, menuMessage);
+        return;
       }
+      
+      // Option 2: Edit Order
+      if (lowerText.includes('editar') || lowerText.includes('modificar') || lowerText.includes('cambiar')) {
+        await sendOrderEditMenu(customer, phoneNumber, activeOrders);
+        return;
+      }
+      
+      // Option 3: New Order
+      if (lowerText.includes('nuevo') || lowerText.includes('otro pedido')) {
+        // Send welcome message to start new order flow
+        await sendWelcomeMessage(phoneNumber);
+        return;
+      }
+
+      // Default: Show interactive menu with three options for customers with active orders
+      const interactiveMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: `👋 Hola ${customer.name}! Tienes ${activeOrders.length} pedido(s) activo(s).\n\n¿Qué te gustaría hacer?`
+          },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: "track_order",
+                  title: "📋 Seguimiento"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "edit_order", 
+                  title: "✏️ Editar Pedido"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "new_order",
+                  title: "🛍️ Nuevo Pedido"
+                }
+              }
+            ]
+          }
+        }
+      };
+
+      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
 
     } catch (error) {
       console.error('Error in handleTrackingConversation:', error);
       await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error procesando tu consulta. ¿Puedes intentar de nuevo?");
+    }
+  }
+
+  // Function to send order edit menu
+  async function sendOrderEditMenu(customer: any, phoneNumber: string, activeOrders: any[]) {
+    try {
+      if (activeOrders.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos para editar.");
+        return;
+      }
+
+      // Get order details with products
+      const order = activeOrders[0]; // Take first active order
+      const orderItems = await storage.getOrderItems(order.id);
+      
+      let editMessage = `✏️ *Editar Pedido ${order.orderNumber}*\n\n`;
+      editMessage += `📦 *Productos en tu pedido:*\n`;
+      
+      for (const item of orderItems) {
+        editMessage += `• ${item.product?.name || 'Producto'} (x${item.quantity}) - $${item.unitPrice}\n`;
+      }
+      
+      editMessage += `\n💰 *Total: $${order.totalAmount}*\n\n`;
+      editMessage += `¿Qué te gustaría hacer?`;
+
+      const interactiveMessage = {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: editMessage
+          },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: "remove_products",
+                  title: "🗑️ Quitar Productos"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "cancel_order",
+                  title: "❌ Cancelar Pedido"
+                }
+              },
+              {
+                type: "reply",
+                reply: {
+                  id: "back_to_menu",
+                  title: "⬅️ Volver al Menú"
+                }
+              }
+            ]
+          }
+        }
+      };
+
+      await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+
+    } catch (error) {
+      console.error('Error in sendOrderEditMenu:', error);
+      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error mostrando las opciones de edición.");
     }
   }
 
@@ -2458,6 +2562,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (registrationFlow && registrationFlow.currentStep === 'collect_notes') {
           await handleRegistrationFlow(phoneNumber, 'sin notas', registrationFlow);
         }
+      } else if (buttonId === 'track_order') {
+        // Handle order tracking button
+        const orders = await storage.getAllOrders();
+        const activeOrders = orders.filter(order => 
+          order.customer.id === customer.id && 
+          ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+        );
+        
+        if (activeOrders.length > 0) {
+          let statusMessage = `📋 *Estado de tus pedidos activos:*\n\n`;
+          for (const order of activeOrders) {
+            const statusEmoji = getStatusEmoji(order.status);
+            statusMessage += `${statusEmoji} *Pedido ${order.orderNumber}*\n`;
+            statusMessage += `   Estado: ${order.status}\n`;
+            statusMessage += `   Total: $${order.totalAmount}\n\n`;
+          }
+          statusMessage += `Para más información o cambios, escribe de nuevo.`;
+          await sendWhatsAppMessage(phoneNumber, statusMessage);
+        } else {
+          await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos en este momento.");
+        }
+      } else if (buttonId === 'edit_order') {
+        // Handle edit order button
+        const orders = await storage.getAllOrders();
+        const activeOrders = orders.filter(order => 
+          order.customer.id === customer.id && 
+          ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+        );
+        await sendOrderEditMenu(customer, phoneNumber, activeOrders);
+      } else if (buttonId === 'new_order') {
+        // Handle new order button - start fresh order flow
+        await sendWelcomeMessage(phoneNumber);
+      } else if (buttonId === 'remove_products') {
+        // Handle remove products from order
+        const orders = await storage.getAllOrders();
+        const activeOrders = orders.filter(order => 
+          order.customer.id === customer.id && 
+          ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+        );
+        
+        if (activeOrders.length > 0) {
+          const order = activeOrders[0];
+          const orderItems = await storage.getOrderItems(order.id);
+          
+          let removeMessage = `🗑️ *Quitar productos del pedido ${order.orderNumber}*\n\n`;
+          removeMessage += `Selecciona qué productos quieres quitar:\n\n`;
+          
+          for (const item of orderItems) {
+            removeMessage += `• ${item.product?.name || 'Producto'} (x${item.quantity}) - $${item.unitPrice}\n`;
+          }
+          
+          removeMessage += `\nPara quitar un producto, responde con el nombre del producto o contacta a nuestro equipo de soporte.`;
+          await sendWhatsAppMessage(phoneNumber, removeMessage);
+        }
+      } else if (buttonId === 'cancel_order') {
+        // Handle cancel order button
+        const orders = await storage.getAllOrders();
+        const activeOrders = orders.filter(order => 
+          order.customer.id === customer.id && 
+          ['pending', 'confirmed', 'in_progress', 'assigned'].includes(order.status)
+        );
+        
+        if (activeOrders.length > 0) {
+          const order = activeOrders[0];
+          
+          // Update order status to cancelled
+          await storage.updateOrder(order.id, { status: 'cancelled' });
+          
+          await sendWhatsAppMessage(phoneNumber, 
+            `❌ *Pedido ${order.orderNumber} cancelado*\n\n` +
+            `Tu pedido ha sido cancelado exitosamente. Si tienes alguna pregunta, no dudes en contactarnos.\n\n` +
+            `¿Te gustaría hacer un nuevo pedido? Escribe *menu* para ver nuestras opciones.`
+          );
+        }
+      } else if (buttonId === 'back_to_menu') {
+        // Handle back to menu button
+        await handleTrackingConversation(customer, phoneNumber, '');
       } else if (buttonId === 'confirm_saved_address') {
         await handleSavedAddressConfirmation(customer, phoneNumber);
       } else if (buttonId === 'update_address') {
