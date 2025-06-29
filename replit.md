@@ -351,6 +351,18 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Implemented proper TypeScript types for OrderWithDetails structure
   - Added order viewing, editing, and deletion capabilities with proper error handling
   - Enhanced admin dashboard with full order management access and assignment controls
+- June 29, 2025. CRITICAL BUG FIX: Order deletion functionality completely operational:
+  - Fixed missing DELETE endpoint /api/orders/:id in backend routes
+  - Implemented deleteOrder method in both IStorage interface and MemStorage/DatabaseStorage classes
+  - Order deletion now properly removes orders from database with proper foreign key constraint handling
+  - Frontend order deletion working correctly with proper cache invalidation and UI updates
+  - Complete CRUD operations for order management now fully functional for administrators
+- June 29, 2025. Sidebar navigation optimized for administrator workflow:
+  - Removed "Dashboard Técnico" option from admin sidebar to streamline navigation
+  - Enabled "Clientes" (Customers) section for administrator access with manage_users permission
+  - Updated routing permissions to allow administrators full customer management capabilities
+  - Administrators can now create, edit, view, and manage customer registrations through dedicated interface
+  - Simplified navigation focused on core administrative functions: dashboard, orders, customers, team, settings
 
 ## User Preferences
 

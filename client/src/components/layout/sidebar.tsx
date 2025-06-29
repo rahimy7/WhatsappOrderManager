@@ -91,15 +91,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       permission: "technician_work",
       roles: ["technician"],
     },
-    // Vista especial del dashboard técnico para administradores
-    {
-      href: "/technician-dashboard",
-      icon: Wrench,
-      label: "🔧 Dashboard Técnico (Nuevo Diseño)",
-      badge: null,
-      permission: "manage_users",
-      roles: ["admin"],
-    },
+
     // Items para managers y admins
     {
       href: "/team",
@@ -113,7 +105,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       icon: UserPlus,
       label: "Clientes",
       badge: null,
-      permission: "view_customers",
+      permission: "manage_users",
     },
     {
       href: "/orders",
