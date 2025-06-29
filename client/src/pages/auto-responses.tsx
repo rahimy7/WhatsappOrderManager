@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AutoResponse, InsertAutoResponse } from "@shared/schema";
-import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw, Clock, ArrowLeft, Lock } from "lucide-react";
+import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw, Clock, ArrowLeft, Shield } from "lucide-react";
 
 interface MenuOption {
   label: string;
@@ -575,7 +575,7 @@ export default function AutoResponsesPage() {
                 )}
                 {!response.allowFreeText && (
                   <div className="flex items-center gap-2 text-xs">
-                    <Lock className="h-3 w-3 text-red-500" />
+                    <Shield className="h-3 w-3 text-red-500" />
                     <span className="text-red-700">Solo opciones predefinidas</span>
                   </div>
                 )}
