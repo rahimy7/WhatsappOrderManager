@@ -1,293 +1,253 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { 
-  ShoppingCart, 
-  Plus, 
-  Minus, 
-  Package, 
-  Filter,
-  Grid,
-  List,
-  Search,
-  Tag
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { Product, ProductCategory } from "@shared/schema";
+import { Product, ProductCategory } from "@shared/schema";
+import { Link } from "wouter";
 
 type ProductWithCategory = Product & { category: ProductCategory };
-
-const PRODUCTS_PER_PAGE = 12;
 
 export default function Catalog() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [cartItems, setCartItems] = useState<Record<number, number>>({});
+  const [favorites, setFavorites] = useState<Set<number>>(new Set());
+  const [cartItems, setCartItems] = useState<Map<number, number>>(new Map());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch products
-  const { data: products = [], isLoading: productsLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products"]
+  // Obtener productos
+  const { data: products = [], isLoading: loadingProducts } = useQuery({
+    queryKey: ["/api/products"],
   });
 
-  // Fetch categories
-  const { data: categories = [] } = useQuery<ProductCategory[]>({
-    queryKey: ["/api/categories"]
+  // Obtener categorías
+  const { data: categories = [], isLoading: loadingCategories } = useQuery({
+    queryKey: ["/api/categories"],
   });
 
-  // Cart mutation
+  // Obtener carrito
+  const { data: cart = { items: [], subtotal: 0 } } = useQuery({
+    queryKey: ["/api/cart"],
+  });
+
+  // Agregar al carrito
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: number; quantity: number }) => {
-      return apiRequest("POST", "/api/cart", {
-        productId,
-        quantity,
-        sessionId: sessionStorage.getItem("session-id") || `session-${Date.now()}`
-      });
+      return apiRequest("POST", "/api/cart/add", { productId, quantity });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
       toast({
         title: "Producto agregado",
         description: "El producto se agregó al carrito exitosamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
     },
-    onError: () => {
+    onError: (error) => {
       toast({
         title: "Error",
-        description: "No se pudo agregar el producto al carrito",
+        description: error.message,
         variant: "destructive",
       });
-    }
+    },
   });
 
-  // Generate session ID if not exists
-  useEffect(() => {
-    if (!sessionStorage.getItem("session-id")) {
-      sessionStorage.setItem("session-id", `session-${Date.now()}`);
-    }
-  }, []);
-
-  // Filter products
-  const filteredProducts = products.filter(product => {
+  // Filtrar productos
+  const filteredProducts = products.filter((product: Product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (product.description || "").toLowerCase().includes(searchTerm.toLowerCase());
-    
     const matchesCategory = selectedCategory === "all" || product.category === selectedCategory;
-    
-    return matchesSearch && matchesCategory && product.status === "active";
+    const isActive = product.status === "active";
+    return matchesSearch && matchesCategory && isActive;
   });
 
   const handleAddToCart = (productId: number) => {
-    const currentQuantity = cartItems[productId] || 0;
-    const newQuantity = currentQuantity + 1;
-    
-    setCartItems(prev => ({ ...prev, [productId]: newQuantity }));
-    addToCartMutation.mutate({ productId, quantity: 1 });
+    const currentQuantity = cartItems.get(productId) || 1;
+    addToCartMutation.mutate({ productId, quantity: currentQuantity });
   };
 
-  const handleQuantityChange = (productId: number, change: number) => {
-    const currentQuantity = cartItems[productId] || 0;
-    const newQuantity = Math.max(0, currentQuantity + change);
-    
-    if (newQuantity === 0) {
-      setCartItems(prev => {
-        const updated = { ...prev };
-        delete updated[productId];
-        return updated;
-      });
-    } else {
-      setCartItems(prev => ({ ...prev, [productId]: newQuantity }));
-    }
+  const updateQuantity = (productId: number, quantity: number) => {
+    if (quantity < 1) return;
+    setCartItems(prev => new Map(prev.set(productId, quantity)));
   };
 
-  const formatPrice = (price: string, salePrice?: string | null) => {
-    const originalPrice = parseFloat(price);
-    const discountPrice = salePrice ? parseFloat(salePrice) : null;
-    
-    return (
-      <div className="flex items-center gap-2">
-        {discountPrice && discountPrice < originalPrice ? (
-          <>
-            <span className="text-lg font-bold text-green-600">${discountPrice.toFixed(2)}</span>
-            <span className="text-sm text-gray-500 line-through">${originalPrice.toFixed(2)}</span>
-            <Badge variant="secondary" className="text-xs">
-              -{Math.round(((originalPrice - discountPrice) / originalPrice) * 100)}%
-            </Badge>
-          </>
-        ) : (
-          <span className="text-lg font-bold text-primary">${originalPrice.toFixed(2)}</span>
-        )}
-      </div>
-    );
+  const toggleFavorite = (productId: number) => {
+    setFavorites(prev => {
+      const newFavorites = new Set(prev);
+      if (newFavorites.has(productId)) {
+        newFavorites.delete(productId);
+      } else {
+        newFavorites.add(productId);
+      }
+      return newFavorites;
+    });
   };
 
   const ProductCard = ({ product }: { product: Product }) => (
-    <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md overflow-hidden">
+    <Card className="group hover:shadow-lg transition-all duration-300 overflow-hidden">
       <div className="relative">
-        {product.imageUrl ? (
-          <img 
-            src={product.imageUrl} 
-            alt={product.name}
-            className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
-            <Package className="w-16 h-16 text-blue-300" />
-          </div>
-        )}
-        
-        {product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price) && (
-          <Badge className="absolute top-2 right-2 bg-red-500 hover:bg-red-600">
-            OFERTA
-          </Badge>
-        )}
-        
-        {product.stock !== null && product.stock < 10 && (
-          <Badge variant="outline" className="absolute top-2 left-2 bg-white">
-            Últimas {product.stock} unidades
+        <div className="aspect-square bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+          {product.imageUrl ? (
+            <img 
+              src={product.imageUrl} 
+              alt={product.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="text-center p-6">
+              <ShoppingBag className="w-16 h-16 text-blue-400 mx-auto mb-2" />
+              <span className="text-sm text-gray-500">{product.name}</span>
+            </div>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => toggleFavorite(product.id)}
+        >
+          <Heart className={`w-4 h-4 ${favorites.has(product.id) ? 'fill-red-500 text-red-500' : ''}`} />
+        </Button>
+        {product.brand && (
+          <Badge className="absolute top-2 left-2 bg-white/90 text-gray-800">
+            {product.brand}
           </Badge>
         )}
       </div>
       
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
-        {product.brand && (
-          <Badge variant="outline" className="w-fit">
-            <Tag className="w-3 h-3 mr-1" />
-            {product.brand}
-          </Badge>
-        )}
+        <CardTitle className="text-lg leading-tight">{product.name}</CardTitle>
+        <CardDescription className="text-sm line-clamp-2">
+          {product.description}
+        </CardDescription>
       </CardHeader>
       
-      <CardContent className="space-y-3">
-        {product.description && (
-          <p className="text-sm text-gray-600 line-clamp-2">{product.description}</p>
-        )}
-        
-        {formatPrice(product.price, product.salePrice)}
-        
+      <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
-          {cartItems[product.id] ? (
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleQuantityChange(product.id, -1)}
-                className="h-8 w-8 p-0"
-              >
-                <Minus className="w-4 h-4" />
-              </Button>
-              <span className="text-sm font-medium w-8 text-center">
-                {cartItems[product.id]}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleQuantityChange(product.id, 1)}
-                className="h-8 w-8 p-0"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
+          <div className="space-y-1">
+            <div className="text-2xl font-bold text-green-600">
+              ${parseFloat(product.price).toLocaleString()}
             </div>
-          ) : (
+            {product.category && (
+              <Badge variant="secondary" className="text-xs">
+                {product.category}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center space-x-1">
+            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+            <span className="text-sm text-gray-600">4.5</span>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center border rounded-md">
             <Button
-              onClick={() => handleAddToCart(product.id)}
-              disabled={addToCartMutation.isPending}
-              className="flex-1"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => updateQuantity(product.id, Math.max(1, (cartItems.get(product.id) || 1) - 1))}
             >
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              Agregar
+              <Minus className="w-3 h-3" />
             </Button>
-          )}
+            <span className="px-3 py-1 min-w-[40px] text-center text-sm">
+              {cartItems.get(product.id) || 1}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => updateQuantity(product.id, (cartItems.get(product.id) || 1) + 1)}
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+          </div>
+          <Button
+            onClick={() => handleAddToCart(product.id)}
+            disabled={addToCartMutation.isPending}
+            className="flex-1"
+          >
+            <ShoppingCart className="w-4 h-4 mr-2" />
+            Agregar
+          </Button>
         </div>
       </CardContent>
     </Card>
   );
 
   const ProductListItem = ({ product }: { product: Product }) => (
-    <Card className="mb-4">
+    <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
-        <div className="flex gap-4">
-          {product.imageUrl ? (
-            <img 
-              src={product.imageUrl} 
-              alt={product.name}
-              className="w-24 h-24 object-cover rounded-lg"
-            />
-          ) : (
-            <div className="w-24 h-24 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center">
-              <Package className="w-8 h-8 text-blue-300" />
-            </div>
-          )}
-          
-          <div className="flex-1 space-y-2">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-semibold text-lg">{product.name}</h3>
-                {product.brand && (
-                  <Badge variant="outline" className="mt-1">
-                    <Tag className="w-3 h-3 mr-1" />
-                    {product.brand}
-                  </Badge>
-                )}
-              </div>
-              {formatPrice(product.price, product.salePrice)}
-            </div>
-            
-            {product.description && (
-              <p className="text-sm text-gray-600">{product.description}</p>
+        <div className="flex items-center space-x-4">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            {product.imageUrl ? (
+              <img 
+                src={product.imageUrl} 
+                alt={product.name}
+                className="w-full h-full object-cover rounded-lg"
+              />
+            ) : (
+              <ShoppingBag className="w-8 h-8 text-blue-400" />
             )}
-            
-            <div className="flex items-center justify-between">
-              <div className="flex gap-2">
-                {product.salePrice && parseFloat(product.salePrice) < parseFloat(product.price) && (
-                  <Badge className="bg-red-500 hover:bg-red-600">OFERTA</Badge>
-                )}
-                {product.stock !== null && product.stock < 10 && (
-                  <Badge variant="outline">Últimas {product.stock} unidades</Badge>
-                )}
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between">
+              <div className="space-y-1 flex-1">
+                <h3 className="font-semibold text-lg">{product.name}</h3>
+                <p className="text-sm text-gray-600 line-clamp-2">{product.description}</p>
+                <div className="flex items-center space-x-2">
+                  {product.brand && (
+                    <Badge variant="outline" className="text-xs">{product.brand}</Badge>
+                  )}
+                  {product.category && (
+                    <Badge variant="secondary" className="text-xs">{product.category}</Badge>
+                  )}
+                </div>
               </div>
               
-              {cartItems[product.id] ? (
-                <div className="flex items-center gap-2">
+              <div className="text-right space-y-2">
+                <div className="text-2xl font-bold text-green-600">
+                  ${parseFloat(product.price).toLocaleString()}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center border rounded-md">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => updateQuantity(product.id, Math.max(1, (cartItems.get(product.id) || 1) - 1))}
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <span className="px-3 py-1 min-w-[40px] text-center text-sm">
+                      {cartItems.get(product.id) || 1}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => updateQuantity(product.id, (cartItems.get(product.id) || 1) + 1)}
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
                   <Button
+                    onClick={() => handleAddToCart(product.id)}
+                    disabled={addToCartMutation.isPending}
                     size="sm"
-                    variant="outline"
-                    onClick={() => handleQuantityChange(product.id, -1)}
-                    className="h-8 w-8 p-0"
                   >
-                    <Minus className="w-4 h-4" />
-                  </Button>
-                  <span className="text-sm font-medium w-8 text-center">
-                    {cartItems[product.id]}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleQuantityChange(product.id, 1)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Plus className="w-4 h-4" />
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    Agregar
                   </Button>
                 </div>
-              ) : (
-                <Button
-                  onClick={() => handleAddToCart(product.id)}
-                  disabled={addToCartMutation.isPending}
-                >
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  Agregar al carrito
-                </Button>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -295,128 +255,131 @@ export default function Catalog() {
     </Card>
   );
 
-  if (productsLoading) {
+  if (loadingProducts || loadingCategories) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <div className="h-48 bg-gray-200"></div>
-              <CardHeader>
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                  <div className="h-8 bg-gray-200 rounded"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Catálogo de Productos</h1>
-          <p className="text-gray-600 mt-1">Encuentra todo lo que necesitas para aires acondicionados</p>
+          <p className="text-gray-600 mt-1">
+            Descubre nuestra selección de productos y servicios de climatización
+          </p>
         </div>
         
-        <Link href="/cart">
-          <Button className="flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4" />
-            Ver Carrito
-            {Object.keys(cartItems).length > 0 && (
-              <Badge variant="secondary">
-                {Object.values(cartItems).reduce((sum, qty) => sum + qty, 0)}
-              </Badge>
-            )}
-          </Button>
-        </Link>
+        <div className="flex items-center space-x-4">
+          {cart.items?.length > 0 && (
+            <Link href="/cart">
+              <Button variant="outline" className="relative">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Carrito
+                <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs">
+                  {cart.items.length}
+                </Badge>
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
-      {/* Filters and Search */}
-      <Card className="p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Buscar productos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </div>
-          
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full md:w-48">
-              <SelectValue placeholder="Categoría" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las categorías</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category.id} value={category.name}>
-                  {category.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
-          <div className="flex gap-2">
-            <Button
-              variant={viewMode === "grid" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-            >
-              <Grid className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("list")}
-            >
-              <List className="w-4 h-4" />
-            </Button>
+      {/* Filtros y búsqueda */}
+      <div className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-lg shadow-sm border">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Buscar productos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
         </div>
-      </Card>
+        
+        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+          <SelectTrigger className="w-full md:w-[200px]">
+            <Filter className="w-4 h-4 mr-2" />
+            <SelectValue placeholder="Categoría" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las categorías</SelectItem>
+            {categories.map((category: ProductCategory) => (
+              <SelectItem key={category.id} value={category.name}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      {/* Products */}
+        <div className="flex border rounded-md">
+          <Button
+            variant={viewMode === "grid" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("grid")}
+            className="rounded-r-none"
+          >
+            <div className="grid grid-cols-2 gap-1 w-4 h-4">
+              <div className="bg-current rounded-sm"></div>
+              <div className="bg-current rounded-sm"></div>
+              <div className="bg-current rounded-sm"></div>
+              <div className="bg-current rounded-sm"></div>
+            </div>
+          </Button>
+          <Button
+            variant={viewMode === "list" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("list")}
+            className="rounded-l-none"
+          >
+            <div className="space-y-1 w-4 h-4">
+              <div className="bg-current h-1 rounded-sm"></div>
+              <div className="bg-current h-1 rounded-sm"></div>
+              <div className="bg-current h-1 rounded-sm"></div>
+            </div>
+          </Button>
+        </div>
+      </div>
+
+      {/* Resultados */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-600">
-            {filteredProducts.length} productos encontrados
+          <p className="text-gray-600">
+            {filteredProducts.length} producto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
           </p>
+          
+          {favorites.size > 0 && (
+            <Button variant="outline" size="sm">
+              <Heart className="w-4 h-4 mr-2 fill-red-500 text-red-500" />
+              {favorites.size} favorito{favorites.size !== 1 ? 's' : ''}
+            </Button>
+          )}
         </div>
 
         {filteredProducts.length === 0 ? (
-          <Card className="p-8 text-center">
-            <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">
-              No se encontraron productos
-            </h3>
-            <p className="text-gray-500">
-              Intenta cambiar los filtros o términos de búsqueda
+          <div className="text-center py-12">
+            <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron productos</h3>
+            <p className="text-gray-600">
+              Intenta ajustar tus filtros o términos de búsqueda
             </p>
-          </Card>
-        ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredProducts.map((product) => (
-              <ProductListItem key={product.id} product={product} />
-            ))}
+          <div className={viewMode === "grid" 
+            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" 
+            : "space-y-4"
+          }>
+            {filteredProducts.map((product: Product) =>
+              viewMode === "grid" 
+                ? <ProductCard key={product.id} product={product} />
+                : <ProductListItem key={product.id} product={product} />
+            )}
           </div>
         )}
       </div>

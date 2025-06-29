@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList, ShoppingBag } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
@@ -125,6 +125,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       href: "/products",
       icon: Package,
       label: "Productos",
+      badge: null,
+      permission: "view_products",
+    },
+    {
+      href: "/catalog",
+      icon: ShoppingBag,
+      label: "Catálogo",
       badge: null,
       permission: "view_products",
     },
