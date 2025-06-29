@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AutoResponse, InsertAutoResponse } from "@shared/schema";
-import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw, Clock, ArrowLeft, Shield, Minus } from "lucide-react";
+import { Plus, Edit, Trash2, MessageSquare, Users, Settings, Bot, RotateCcw, Clock, ArrowLeft, Shield, Minus, HelpCircle, Book, Info } from "lucide-react";
 
 interface MenuOption {
   label: string;
@@ -141,6 +141,7 @@ function MenuOptionsEditor({ value, onChange }: { value?: string; onChange: (val
 
 export default function AutoResponsesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isHelpDialogOpen, setIsHelpDialogOpen] = useState(false);
   const [editingResponse, setEditingResponse] = useState<AutoResponse | null>(null);
   const [formData, setFormData] = useState<Partial<InsertAutoResponse>>({
     name: "",
@@ -375,6 +376,14 @@ export default function AutoResponsesPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setIsHelpDialogOpen(true)}
+            className="border-green-200 text-green-700 hover:bg-green-50"
+          >
+            <HelpCircle className="h-4 w-4 mr-2" />
+            Ayuda
+          </Button>
           <Button 
             variant="outline" 
             onClick={() => resetToDefaultsMutation.mutate()}
@@ -779,6 +788,235 @@ export default function AutoResponsesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal de Ayuda */}
+      <Dialog open={isHelpDialogOpen} onOpenChange={setIsHelpDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Book className="h-5 w-5 text-green-600" />
+              Guía de Respuestas Automáticas
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Sección 1: Introducción */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <Info className="h-5 w-5 text-blue-600" />
+                ¿Qué son las Respuestas Automáticas?
+              </h3>
+              <p className="text-gray-600 leading-relaxed">
+                Las respuestas automáticas permiten configurar mensajes que se envían automáticamente cuando los clientes 
+                interactúan con WhatsApp usando palabras clave específicas. Esto ayuda a brindar respuestas instantáneas 
+                y mejorar la experiencia del cliente las 24 horas del día.
+              </p>
+            </div>
+
+            {/* Sección 2: Cómo Crear/Editar */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <Edit className="h-5 w-5 text-blue-600" />
+                Cómo Crear o Editar Respuestas
+              </h3>
+              <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-blue-800">Para crear una nueva respuesta:</h4>
+                  <ol className="list-decimal list-inside space-y-1 text-blue-700 text-sm">
+                    <li>Haz clic en el botón "Nueva Respuesta" en la parte superior derecha</li>
+                    <li>Completa el formulario con los campos requeridos</li>
+                    <li>Configura las opciones avanzadas según tus necesidades</li>
+                    <li>Activa la respuesta usando el interruptor "Respuesta activa"</li>
+                    <li>Haz clic en "Crear" para guardar</li>
+                  </ol>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="font-medium text-blue-800">Para editar una respuesta existente:</h4>
+                  <ol className="list-decimal list-inside space-y-1 text-blue-700 text-sm">
+                    <li>Busca la tarjeta de la respuesta que deseas modificar</li>
+                    <li>Haz clic en el ícono de lápiz (editar) en la esquina superior derecha de la tarjeta</li>
+                    <li>Modifica los campos necesarios en el formulario</li>
+                    <li>Haz clic en "Actualizar" para guardar los cambios</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Sección 3: Campos del Formulario */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-blue-600" />
+                Campos del Formulario
+              </h3>
+              <div className="grid gap-4">
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Nombre *</h4>
+                  <p className="text-sm text-gray-600">Nombre descriptivo para identificar la respuesta en el panel de administración.</p>
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Mensaje de Respuesta *</h4>
+                  <p className="text-sm text-gray-600">El texto que se enviará a los clientes. Puede incluir emojis y saltos de línea.</p>
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Palabra Clave (Trigger) *</h4>
+                  <p className="text-sm text-gray-600">
+                    La palabra o frase que activará esta respuesta. Ejemplos: "menu", "ayuda", "productos", "servicios".
+                  </p>
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Opciones de Menú</h4>
+                  <p className="text-sm text-gray-600">
+                    Botones interactivos que aparecerán debajo del mensaje. Formato JSON con label, value y action.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sección 4: Opciones Avanzadas */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <Settings className="h-5 w-5 text-blue-600" />
+                Opciones Avanzadas
+              </h3>
+              <div className="grid gap-4">
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Tipo de Menú</h4>
+                  <p className="text-sm text-gray-600">
+                    <strong>Botones:</strong> Muestra opciones como botones interactivos<br/>
+                    <strong>Lista:</strong> Muestra opciones en una lista desplegable
+                  </p>
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Tiempo de Espera</h4>
+                  <p className="text-sm text-gray-600">
+                    Tiempo en segundos que el sistema esperará una respuesta del cliente (30-3600 segundos).
+                  </p>
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Máximo Reintentos</h4>
+                  <p className="text-sm text-gray-600">
+                    Número de veces que el sistema intentará enviar el mensaje en caso de falla (1-10 intentos).
+                  </p>
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-medium text-gray-800">Prioridad</h4>
+                  <p className="text-sm text-gray-600">
+                    Orden de procesamiento cuando múltiples respuestas coinciden (1 = mayor prioridad).
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sección 5: Ejemplo de Configuración */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <Bot className="h-5 w-5 text-blue-600" />
+                Ejemplo de Configuración de Menú
+              </h3>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-medium text-gray-800 mb-2">Formato JSON para Opciones de Menú:</h4>
+                <pre className="text-xs overflow-x-auto bg-white p-3 rounded border">
+{`[
+  {
+    "label": "Ver Productos",
+    "value": "products",
+    "action": "show_products"
+  },
+  {
+    "label": "Ver Servicios", 
+    "value": "services",
+    "action": "show_services"
+  },
+  {
+    "label": "Contactar Soporte",
+    "value": "support",
+    "action": "contact_support"
+  }
+]`}
+                </pre>
+                <p className="text-sm text-gray-600 mt-2">
+                  <strong>label:</strong> Texto que verá el cliente<br/>
+                  <strong>value:</strong> Valor interno para identificar la opción<br/>
+                  <strong>action:</strong> Acción que se ejecutará al seleccionar la opción
+                </p>
+              </div>
+            </div>
+
+            {/* Sección 6: Triggers Disponibles */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <ArrowLeft className="h-5 w-5 text-blue-600" />
+                Triggers (Palabras Clave) Disponibles
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="bg-green-50 p-3 rounded">
+                    <span className="font-medium text-green-800">welcome</span>
+                    <p className="text-xs text-green-600">Mensaje de bienvenida inicial</p>
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded">
+                    <span className="font-medium text-blue-800">menu</span>
+                    <p className="text-xs text-blue-600">Mostrar menú principal</p>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded">
+                    <span className="font-medium text-purple-800">show_products</span>
+                    <p className="text-xs text-purple-600">Mostrar catálogo de productos</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="bg-orange-50 p-3 rounded">
+                    <span className="font-medium text-orange-800">show_services</span>
+                    <p className="text-xs text-orange-600">Mostrar servicios disponibles</p>
+                  </div>
+                  <div className="bg-red-50 p-3 rounded">
+                    <span className="font-medium text-red-800">show_help</span>
+                    <p className="text-xs text-red-600">Mostrar ayuda y soporte</p>
+                  </div>
+                  <div className="bg-teal-50 p-3 rounded">
+                    <span className="font-medium text-teal-800">main_menu</span>
+                    <p className="text-xs text-teal-600">Volver al menú principal</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sección 7: Gestión de Respuestas */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <Switch className="h-5 w-5 text-blue-600" />
+                Gestión de Respuestas
+              </h3>
+              <div className="grid gap-3">
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-green-800 mb-1">Activar/Desactivar</h4>
+                  <p className="text-sm text-green-700">
+                    Usa el interruptor en cada tarjeta para activar o desactivar respuestas sin eliminarlas.
+                  </p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-blue-800 mb-1">Restaurar Valores</h4>
+                  <p className="text-sm text-blue-700">
+                    El botón "Restaurar Valores" elimina todas las respuestas personalizadas y restaura las predeterminadas.
+                  </p>
+                </div>
+                <div className="bg-red-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-red-800 mb-1">Eliminar Respuestas</h4>
+                  <p className="text-sm text-red-700">
+                    Usa el ícono de papelera para eliminar permanentemente una respuesta personalizada.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Botón de cerrar */}
+            <div className="flex justify-end pt-4 border-t">
+              <Button onClick={() => setIsHelpDialogOpen(false)} className="bg-green-600 hover:bg-green-700">
+                Entendido
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
