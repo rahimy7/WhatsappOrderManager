@@ -161,13 +161,20 @@ export const whatsappLogs = pgTable("whatsapp_logs", {
 export const autoResponses = pgTable("auto_responses", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  trigger: text("trigger").notNull(), // welcome, menu, product_inquiry, service_inquiry, contact_request
+  trigger: text("trigger").notNull(), // welcome, menu, product_inquiry, service_inquiry, contact_request, order_status, support, tracking
   isActive: boolean("is_active").default(true),
   priority: integer("priority").default(1),
   messageText: text("message_text").notNull(),
   requiresRegistration: boolean("requires_registration").default(false),
   menuOptions: text("menu_options"), // JSON array of menu options
-  nextAction: text("next_action"), // next_menu, collect_data, create_order, assign_technician
+  nextAction: text("next_action"), // next_menu, collect_data, create_order, assign_technician, show_products, show_services
+  menuType: text("menu_type").default("buttons"), // buttons, list, quick_reply, text_only
+  showBackButton: boolean("show_back_button").default(false),
+  allowFreeText: boolean("allow_free_text").default(true),
+  responseTimeout: integer("response_timeout").default(300), // seconds
+  maxRetries: integer("max_retries").default(3),
+  fallbackMessage: text("fallback_message"),
+  conditionalDisplay: text("conditional_display"), // JSON conditions for when to show this response
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

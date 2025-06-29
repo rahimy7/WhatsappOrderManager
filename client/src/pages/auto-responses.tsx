@@ -28,6 +28,13 @@ export default function AutoResponsesPage() {
     messageText: "",
     menuOptions: "",
     nextAction: "",
+    menuType: "buttons",
+    showBackButton: false,
+    allowFreeText: true,
+    responseTimeout: 300,
+    maxRetries: 3,
+    fallbackMessage: "",
+    conditionalDisplay: "",
     isActive: true,
   });
 
@@ -136,6 +143,13 @@ export default function AutoResponsesPage() {
       messageText: "",
       menuOptions: "",
       nextAction: "",
+      menuType: "buttons",
+      showBackButton: false,
+      allowFreeText: true,
+      responseTimeout: 300,
+      maxRetries: 3,
+      fallbackMessage: "",
+      conditionalDisplay: "",
       isActive: true,
     });
     setEditingResponse(null);
@@ -149,6 +163,13 @@ export default function AutoResponsesPage() {
       messageText: response.messageText,
       menuOptions: response.menuOptions || "",
       nextAction: response.nextAction || "",
+      menuType: response.menuType || "buttons",
+      showBackButton: response.showBackButton ?? false,
+      allowFreeText: response.allowFreeText ?? true,
+      responseTimeout: response.responseTimeout ?? 300,
+      maxRetries: response.maxRetries ?? 3,
+      fallbackMessage: response.fallbackMessage || "",
+      conditionalDisplay: response.conditionalDisplay || "",
       isActive: response.isActive ?? true,
     });
     setIsDialogOpen(true);
@@ -169,15 +190,33 @@ export default function AutoResponsesPage() {
     { value: "product_inquiry", label: "Consulta de Productos" },
     { value: "service_inquiry", label: "Consulta de Servicios" },
     { value: "contact_request", label: "Solicitud de Contacto" },
-    { value: "registration", label: "Registro de Cliente" }
+    { value: "registration", label: "Registro de Cliente" },
+    { value: "order_status", label: "Estado de Orden" },
+    { value: "support", label: "Soporte Técnico" },
+    { value: "tracking", label: "Seguimiento" },
+    { value: "payment", label: "Información de Pago" },
+    { value: "warranty", label: "Garantía" },
+    { value: "feedback", label: "Comentarios" }
   ];
 
   const nextActionOptions = [
-    { value: "next_menu", label: "Mostrar Siguiente Menú" },
-    { value: "collect_data", label: "Recopilar Datos" },
-    { value: "create_order", label: "Crear Pedido" },
-    { value: "assign_technician", label: "Asignar Técnico" },
-    { value: "end_conversation", label: "Finalizar Conversación" }
+    { value: "next_menu", label: "Mostrar siguiente menú" },
+    { value: "collect_data", label: "Recopilar información" },
+    { value: "create_order", label: "Crear orden" },
+    { value: "assign_technician", label: "Asignar técnico" },
+    { value: "show_products", label: "Mostrar productos" },
+    { value: "show_services", label: "Mostrar servicios" },
+    { value: "request_location", label: "Solicitar ubicación" },
+    { value: "calculate_price", label: "Calcular precio" },
+    { value: "schedule_appointment", label: "Programar cita" },
+    { value: "end_conversation", label: "Finalizar conversación" }
+  ];
+
+  const menuTypeOptions = [
+    { value: "buttons", label: "Botones Interactivos" },
+    { value: "list", label: "Lista Desplegable" },
+    { value: "quick_reply", label: "Respuestas Rápidas" },
+    { value: "text_only", label: "Solo Texto" }
   ];
 
   if (isLoading) {
