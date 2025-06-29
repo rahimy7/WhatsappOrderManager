@@ -433,6 +433,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Sistema de prioridades para aplicar múltiples reglas en orden de importancia
   - Integración automática en flujo de creación de órdenes tanto desde WhatsApp como desde panel administrativo
   - Notificaciones automáticas a técnicos asignados con detalles completos de la orden
+- June 29, 2025. INTEGRACIÓN DE CATÁLOGO PÚBLICO EN MENSAJES DE WHATSAPP COMPLETADA:
+  - Modificado mensajes de auto-respuesta para productos y servicios en WhatsApp
+  - Clientes que seleccionan "Ver Productos" o "Ver Servicios" ahora reciben enlace directo al catálogo público
+  - Eliminados botones específicos de productos para dirigir tráfico al catálogo web completo
+  - Mensajes incluyen instrucciones claras para navegar, agregar al carrito y enviar pedidos por WhatsApp
+  - Auto-respuestas actualizadas con URL completa del catálogo: /simple-catalog
+  - Integración perfecta entre WhatsApp y experiencia de compra web con carrito persistente
+  - Sistema optimizado para reducir fricción y mejorar experiencia de cliente en flujo de compras
 
 ## User Preferences
 
