@@ -1128,6 +1128,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const text = message.text?.body || '';
 
+      // PRIORITY 1: Check if message is a structured order from web catalog
+      if (await isOrderMessage(text)) {
+        await storage.addWhatsAppLog({
+          type: 'info',
+          phoneNumber: from,
+          messageContent: 'Mensaje de pedido detectado desde catálogo web',
+          status: 'processing',
+          rawData: JSON.stringify({ 
+            customerId: customer.id,
+            messageLength: text.length,
+            isNewCustomer: isNewCustomer
+          })
+        });
+
+        await processWebCatalogOrder(customer, from, text);
+        return; // Stop processing here - order handled
+      }
+
       // Determine conversation type based on customer's order history
       const conversationType = await storage.determineConversationType(customer.id);
 
@@ -1303,6 +1321,204 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rawData: JSON.stringify({ error: error.message, messageType: message.type })
       });
     }
+  }
+
+  // Function to detect if a message is a structured order from web catalog
+  async function isOrderMessage(text: string): Promise<boolean> {
+    // Check for order message indicators
+    const orderIndicators = [
+      '🛍️ *NUEVO PEDIDO',
+      'NUEVO PEDIDO',
+      'Cantidad:',
+      'Precio unitario:',
+      'Subtotal:',
+      '*TOTAL:',
+      'confirma tu pedido'
+    ];
+    
+    // Must contain several indicators to be considered an order
+    const indicatorCount = orderIndicators.reduce((count, indicator) => {
+      return count + (text.includes(indicator) ? 1 : 0);
+    }, 0);
+    
+    return indicatorCount >= 3; // At least 3 indicators to be considered an order
+  }
+
+  // Function to process orders from web catalog
+  async function processWebCatalogOrder(customer: any, phoneNumber: string, orderText: string) {
+    try {
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: phoneNumber,
+        messageContent: 'Iniciando procesamiento de pedido desde catálogo web',
+        status: 'processing',
+        rawData: JSON.stringify({ 
+          customerId: customer.id,
+          messageLength: orderText.length
+        })
+      });
+
+      // Parse the order message to extract products
+      const orderItems = parseOrderFromMessage(orderText);
+      
+      if (orderItems.length === 0) {
+        await sendWhatsAppMessage(phoneNumber, 
+          "No pude procesar los productos de tu pedido. ¿Podrías enviarlo nuevamente?");
+        return;
+      }
+
+      // Create order in the system
+      const orderNumber = `ORD-${Date.now()}`;
+      
+      // Calculate total from parsed items
+      const total = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      
+      const order = await storage.createOrder({
+        orderNumber: orderNumber,
+        customerId: customer.id,
+        status: 'pending',
+        totalAmount: total.toString(),
+        notes: `Pedido automático desde catálogo web. Productos: ${orderItems.map(item => `${item.name} (${item.quantity})`).join(', ')}`
+      });
+
+      // Add order items
+      for (const item of orderItems) {
+        await storage.createOrderItem({
+          orderId: order.id,
+          productId: item.productId || 0, // Use 0 for unknown products
+          quantity: item.quantity,
+          unitPrice: item.price.toString(),
+          totalPrice: (item.price * item.quantity).toString(),
+          notes: item.name
+        });
+      }
+
+      // Update conversation with order
+      const conversations = await storage.getActiveConversations();
+      const conversation = conversations.find(c => c.customer.phone === phoneNumber);
+      if (conversation) {
+        await storage.updateConversation(conversation.id, { 
+          orderId: order.id,
+          conversationType: 'initial' // Will be updated as needed
+        });
+      }
+
+      // Send confirmation message
+      const confirmationMessage = 
+        `✅ *PEDIDO RECIBIDO*\n\n` +
+        `📋 Número: ${orderNumber}\n` +
+        `💰 Total: $${total}\n\n` +
+        `📝 *Productos:*\n` +
+        orderItems.map((item, index) => 
+          `${index + 1}. ${item.name}\n   Cantidad: ${item.quantity} - $${item.price * item.quantity}`
+        ).join('\n\n') + '\n\n' +
+        `Para completar tu pedido necesito algunos datos:\n\n` +
+        `🏠 Tu dirección de entrega\n` +
+        `📞 Número de contacto\n` +
+        `💳 Método de pago preferido\n\n` +
+        `¿Podrías proporcionarme tu dirección de entrega?`;
+
+      await sendWhatsAppMessage(phoneNumber, confirmationMessage);
+
+      // Start registration flow for order completion
+      await storage.createRegistrationFlow({
+        phoneNumber: phoneNumber,
+        currentStep: 'collect_address',
+        customerData: JSON.stringify({ 
+          orderId: order.id,
+          orderNumber: orderNumber,
+          hasName: !customer.name.startsWith('Cliente ')
+        })
+      });
+
+      await storage.addWhatsAppLog({
+        type: 'success',
+        phoneNumber: phoneNumber,
+        messageContent: `Pedido ${orderNumber} creado exitosamente desde catálogo web`,
+        status: 'completed',
+        rawData: JSON.stringify({ 
+          orderId: order.id,
+          orderNumber: orderNumber,
+          total: total,
+          itemCount: orderItems.length
+        })
+      });
+
+    } catch (error: any) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: 'Error procesando pedido desde catálogo web',
+        status: 'error',
+        errorMessage: error.message,
+        rawData: JSON.stringify({ 
+          error: error.message,
+          customerId: customer.id,
+          messageLength: orderText.length
+        })
+      });
+
+      await sendWhatsAppMessage(phoneNumber, 
+        "Hubo un error procesando tu pedido. Por favor intenta nuevamente o contáctanos directamente.");
+    }
+  }
+
+  // Function to parse order items from catalog message
+  function parseOrderFromMessage(orderText: string): Array<{name: string, quantity: number, price: number, productId?: number}> {
+    const items: Array<{name: string, quantity: number, price: number, productId?: number}> = [];
+    
+    try {
+      // Split the message into lines
+      const lines = orderText.split('\n');
+      
+      let currentItem: any = null;
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        // Check if this line starts a new product (number followed by period)
+        if (/^\d+\.\s/.test(trimmedLine)) {
+          // Save previous item if exists
+          if (currentItem && currentItem.name && currentItem.quantity && currentItem.price) {
+            items.push(currentItem);
+          }
+          
+          // Start new item
+          currentItem = {
+            name: trimmedLine.replace(/^\d+\.\s/, ''),
+            quantity: 0,
+            price: 0
+          };
+        }
+        // Check for quantity line
+        else if (trimmedLine.startsWith('Cantidad:') && currentItem) {
+          const quantity = parseInt(trimmedLine.replace('Cantidad:', '').trim());
+          if (!isNaN(quantity)) {
+            currentItem.quantity = quantity;
+          }
+        }
+        // Check for unit price line
+        else if (trimmedLine.startsWith('Precio unitario:') && currentItem) {
+          const priceMatch = trimmedLine.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+          if (priceMatch) {
+            const price = parseFloat(priceMatch[1].replace(/,/g, ''));
+            if (!isNaN(price)) {
+              currentItem.price = price;
+            }
+          }
+        }
+      }
+      
+      // Don't forget the last item
+      if (currentItem && currentItem.name && currentItem.quantity && currentItem.price) {
+        items.push(currentItem);
+      }
+      
+    } catch (error) {
+      console.error('Error parsing order message:', error);
+    }
+    
+    return items;
   }
 
   // Helper function for tracking conversations
