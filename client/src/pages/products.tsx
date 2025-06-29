@@ -38,13 +38,15 @@ export default function Products() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Administrar Productos</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">Gestiona el catálogo completo de productos y servicios</p>
         </div>
-        <Link href="/catalog">
-          <Button variant="outline" className="flex items-center gap-2">
-            <ShoppingBag className="w-4 h-4" />
-            Ver Catálogo Público
-            <ExternalLink className="w-4 h-4" />
-          </Button>
-        </Link>
+        <Button 
+          variant="outline" 
+          className="flex items-center gap-2"
+          onClick={() => window.open('/public-catalog', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          Abrir Catálogo Público
+          <ExternalLink className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Product Overview */}

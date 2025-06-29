@@ -23,6 +23,7 @@ import Notifications from "@/pages/notifications";
 import TechnicianDashboard from "@/pages/technician-dashboard";
 import UserSettings from "@/pages/user-settings";
 import Catalog from "@/pages/catalog";
+import PublicCatalog from "@/pages/public-catalog";
 import Cart from "@/pages/cart";
 import AppLayout from "@/components/layout/app-layout";
 
@@ -90,6 +91,7 @@ function Router() {
       <Route path="/assignment-rules" component={() => <ProtectedRoute component={AssignmentRules} permission="manage_assignments" />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} permission="view_notifications" />} />
       <Route path="/catalog" component={Catalog} />
+      <Route path="/public-catalog" component={PublicCatalog} />
       <Route path="/cart" component={Cart} />
       <Route path="/user-settings" component={UserSettings} />
       <Route component={NotFound} />
