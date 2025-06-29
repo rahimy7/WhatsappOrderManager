@@ -217,6 +217,16 @@ export default function OrdersPage() {
         </div>
       </div>
 
+      {/* Test button for debugging */}
+      <div className="mb-4">
+        <Button 
+          onClick={() => console.log("TEST BUTTON CLICKED!")}
+          variant="outline"
+        >
+          Botón de Prueba
+        </Button>
+      </div>
+
       {/* Filters */}
       <Card>
         <CardHeader>
