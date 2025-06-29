@@ -2622,11 +2622,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Send text message
         await sendWhatsAppMessage(phoneNumber, welcomeResponse.messageText);
       }
-    } else {
-      // Fallback only if no welcome response is configured
-      const fallbackMessage = "👋 ¡Hola! Bienvenido a nuestro servicio. Escribe 'menu' para ver las opciones disponibles.";
-      await sendWhatsAppMessage(phoneNumber, fallbackMessage);
     }
+    // No fallback message - if no active welcome responses are configured, send nothing
   }
 
   async function sendHelpMenu(phoneNumber: string) {
@@ -2670,11 +2667,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Send text message
         await sendWhatsAppMessage(phoneNumber, helpResponse.messageText);
       }
-    } else {
-      // Fallback only if no help response is configured
-      const fallbackMessage = "❓ Centro de Ayuda\n\nPuedes escribir 'menu' para ver las opciones disponibles o contactarnos directamente.";
-      await sendWhatsAppMessage(phoneNumber, fallbackMessage);
     }
+    // No fallback message - if no active help responses are configured, send nothing
   }
 
   function getStatusEmoji(status: string): string {

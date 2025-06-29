@@ -380,6 +380,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Auto-response filtering by isActive status now working correctly with proper database queries
   - System now strictly follows configured response sequences and respects activation/deactivation settings
   - WhatsApp integration fully operational with customizable, database-driven message flows
+- June 29, 2025. RESOLVED: Eliminated all hardcoded fallback messages from WhatsApp system:
+  - Removed hardcoded welcome message "¡Hola! Bienvenido a nuestro servicio. Escribe 'menu' para ver las opciones disponibles."
+  - Removed hardcoded help message fallback from sendHelpMenu() function
+  - Fixed circular message loop issue between "Ver Productos" and "Ver Servicios" buttons
+  - Implemented processAutoResponse() function at global level for proper scope access
+  - System now respects deactivated auto-responses completely - no messages sent when all responses are disabled
+  - Interactive buttons now correctly trigger configured auto-responses instead of hardcoded functions
+  - WhatsApp system fully follows database configuration without any hardcoded message overrides
 
 ## User Preferences
 
