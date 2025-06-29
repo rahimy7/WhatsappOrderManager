@@ -46,20 +46,7 @@ export default function PublicCatalog() {
   });
 
   // Obtener carrito
-  const { data: cart = { items: [], subtotal: 0 } } = useQuery<{
-    items: Array<{
-      id: number;
-      sessionId: string;
-      userId: number | null;
-      productId: number;
-      quantity: number;
-      notes: string | null;
-      createdAt: string;
-      updatedAt: string;
-      product: ProductWithCategory;
-    }>;
-    subtotal: number;
-  }>({
+  const { data: cart = { items: [], subtotal: 0 } } = useQuery({
     queryKey: ["/api/cart", sessionId],
     queryFn: async () => {
       return apiRequest("GET", `/api/cart?sessionId=${sessionId}`);
@@ -130,7 +117,8 @@ export default function PublicCatalog() {
 
   // Función para enviar carrito por WhatsApp
   const sendToWhatsApp = () => {
-    if (!cart.items || cart.items.length === 0) {
+    const cartData = cart as any;
+    if (!cartData?.items || cartData.items.length === 0) {
       toast({
         title: "Carrito vacío",
         description: "Agrega productos al carrito antes de enviar a WhatsApp",
@@ -139,11 +127,11 @@ export default function PublicCatalog() {
       return;
     }
 
-    const cartMessage = cart.items.map((item: any) => 
-      `• ${item.productName || 'Producto'} - Cantidad: ${item.quantity} - Precio: $${item.unitPrice}`
+    const cartMessage = cartData.items.map((item: any) => 
+      `• ${item.product?.name || 'Producto'} - Cantidad: ${item.quantity} - Precio: $${item.product?.price || '0'}`
     ).join('\n');
 
-    const whatsappMessage = `¡Hola! Me interesa cotizar estos productos:\n\n${cartMessage}\n\nSubtotal: $${cart.subtotal}\n\n¿Podrían ayudarme con más información y el costo de instalación?`;
+    const whatsappMessage = `¡Hola! Me interesa cotizar estos productos:\n\n${cartMessage}\n\nSubtotal: $${cartData.subtotal}\n\n¿Podrían ayudarme con más información y el costo de instalación?`;
     
     const encodedMessage = encodeURIComponent(whatsappMessage);
     const whatsappNumber = "5215534166960"; // Número de WhatsApp de la empresa
@@ -160,11 +148,9 @@ export default function PublicCatalog() {
 
   // Obtener total de items en carrito
   const getTotalCartItems = () => {
-    console.log('Cart data in getTotalCartItems:', cart);
-    console.log('Cart items:', cart.items);
-    console.log('Is array?', Array.isArray(cart.items));
-    if (!cart.items || !Array.isArray(cart.items)) return 0;
-    return cart.items.reduce((total: number, item: any) => total + item.quantity, 0);
+    const cartData = cart as any;
+    if (!cartData?.items || !Array.isArray(cartData.items)) return 0;
+    return cartData.items.reduce((total: number, item: any) => total + item.quantity, 0);
   };
 
   // Filtrar productos
@@ -499,20 +485,20 @@ export default function PublicCatalog() {
         </div>
       </div>
 
-      {/* Botón flotante del carrito */}
-      {getTotalCartItems() > 0 && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <Button
-            onClick={() => setIsCartOpen(!isCartOpen)}
-            className="h-14 w-14 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 relative"
-          >
-            <ShoppingCart className="w-6 h-6" />
+      {/* Botón flotante del carrito - Siempre visible */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={() => setIsCartOpen(!isCartOpen)}
+          className="h-14 w-14 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 relative"
+        >
+          <ShoppingCart className="w-6 h-6" />
+          {getTotalCartItems() > 0 && (
             <Badge className="absolute -top-2 -right-2 px-2 py-1 text-xs bg-red-500 text-white">
               {getTotalCartItems()}
             </Badge>
-          </Button>
-        </div>
-      )}
+          )}
+        </Button>
+      </div>
 
       {/* Panel desplegable del carrito */}
       {isCartOpen && (
@@ -536,8 +522,10 @@ export default function PublicCatalog() {
 
             {/* Items del carrito */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4 max-h-96">
-              {cart.items && Array.isArray(cart.items) && cart.items.length > 0 ? (
-                cart.items.map((item: any) => (
+              {(() => {
+                const cartData = cart as any;
+                return cartData?.items && Array.isArray(cartData.items) && cartData.items.length > 0 ? (
+                cartData.items.map((item: any) => (
                   <div key={item.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
                       <ShoppingBag className="w-6 h-6 text-blue-600" />
@@ -598,7 +586,8 @@ export default function PublicCatalog() {
                   <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500">Tu carrito está vacío</p>
                 </div>
-              )}
+              );
+              })()}
             </div>
 
             {/* Footer con total y botón de WhatsApp */}
