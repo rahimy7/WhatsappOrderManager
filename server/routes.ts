@@ -3901,7 +3901,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sessionId = req.query.sessionId as string || req.session?.id || 'default';
       console.log('Getting cart for sessionId:', sessionId);
       const cart = await storage.getCart(sessionId);
-      console.log('Cart contents:', cart);
+      console.log('Cart response structure:', JSON.stringify(cart, null, 2));
+      console.log('Cart has items property?', 'items' in cart);
+      console.log('Cart has subtotal property?', 'subtotal' in cart);
       res.json(cart);
     } catch (error) {
       console.error('Error fetching cart:', error);
