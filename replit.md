@@ -441,6 +441,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Auto-respuestas actualizadas con URL completa del catálogo: /simple-catalog
   - Integración perfecta entre WhatsApp y experiencia de compra web con carrito persistente
   - Sistema optimizado para reducir fricción y mejorar experiencia de cliente en flujo de compras
+- June 29, 2025. PROCESAMIENTO AUTOMÁTICO DE PEDIDOS DESDE CATÁLOGO WEB COMPLETAMENTE FUNCIONAL:
+  - Sistema de detección automática de mensajes de pedido: detecta mensajes que comienzan con "🛍️ *NUEVO PEDIDO"
+  - Algoritmo inteligente de parsing que extrae productos, cantidades y precios del mensaje estructurado
+  - Búsqueda avanzada de productos con matching inteligente: "Aire Acondicionado 12k BTU" encuentra "Mini Split 12,000 BTU Inverter"
+  - Creación dinámica de productos cuando no existe coincidencia exacta en base de datos
+  - Integración completa con sistema de asignación automática de técnicos por ubicación/especialidad
+  - Flujo completo verificado: catálogo web → carrito → WhatsApp → orden automática → asignación de técnico
+  - Foreign key constraints resueltos mediante validación de productos y creación automática
+  - Sistema completamente operacional para conversión directa de carritos web a órdenes gestionadas
 
 ## User Preferences
 
