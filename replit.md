@@ -441,6 +441,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Auto-respuestas actualizadas con URL completa del catálogo: /simple-catalog
   - Integración perfecta entre WhatsApp y experiencia de compra web con carrito persistente
   - Sistema optimizado para reducir fricción y mejorar experiencia de cliente en flujo de compras
+- June 29, 2025. SISTEMA DE ENLACES DE GOOGLE MAPS PARA NAVEGACIÓN DE TÉCNICOS COMPLETADO:
+  - Implementada función generateGoogleMapsLink() que convierte coordenadas GPS en enlaces clickeables de Google Maps
+  - Agregado campo mapLink a tabla customers en base de datos para almacenar enlaces de navegación
+  - Actualizada función handleLocationMessage para generar automáticamente enlaces de Google Maps al recibir ubicación GPS
+  - Modificadas funciones handleLocationInOrderFlow y handleGeneralLocationSharing para incluir generación de mapLink
+  - Enlaces de Google Maps optimizados para dispositivos móviles con formato @lat,lng,15z para mejor integración con apps
+  - Sistema permite a técnicos hacer clic en enlaces almacenados para navegación directa a ubicación del cliente
+  - Interfaz IStorage y ambas implementaciones (MemStorage/DatabaseStorage) actualizadas para soportar campo mapLink opcional
+  - Enlaces generados automáticamente incluyen dirección readable cuando está disponible, o coordenadas GPS como fallback
 - June 29, 2025. PROCESAMIENTO AUTOMÁTICO DE PEDIDOS DESDE CATÁLOGO WEB COMPLETAMENTE FUNCIONAL:
   - Sistema de detección automática de mensajes de pedido: detecta mensajes que comienzan con "🛍️ *NUEVO PEDIDO"
   - Algoritmo inteligente de parsing que extrae productos, cantidades y precios del mensaje estructurado
