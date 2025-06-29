@@ -1426,10 +1426,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // If no productId, try to find product by name or create new one
         if (!productId) {
           const existingProducts = await storage.getAllProducts();
-          const existingProduct = existingProducts.find(p => 
-            p.name.toLowerCase().includes(item.name.toLowerCase()) || 
-            item.name.toLowerCase().includes(p.name.toLowerCase())
-          );
+          
+          // Enhanced product matching logic
+          const existingProduct = existingProducts.find(p => {
+            const productName = p.name.toLowerCase();
+            const itemName = item.name.toLowerCase();
+            
+            // Direct name matching
+            if (productName.includes(itemName) || itemName.includes(productName)) {
+              return true;
+            }
+            
+            // BTU matching for air conditioners
+            const productBTU = productName.match(/(\d+k?)\s*btu/i);
+            const itemBTU = itemName.match(/(\d+k?)\s*btu/i);
+            if (productBTU && itemBTU) {
+              // Normalize BTU values (12k = 12000)
+              const productBTUValue = productBTU[1].toLowerCase().replace('k', '000');
+              const itemBTUValue = itemBTU[1].toLowerCase().replace('k', '000');
+              
+              if (productBTUValue === itemBTUValue && 
+                  (productName.includes('aire') || productName.includes('split') || productName.includes('acondicionado')) &&
+                  (itemName.includes('aire') || itemName.includes('acondicionado'))) {
+                return true;
+              }
+            }
+            
+            return false;
+          });
           
           if (existingProduct) {
             productId = existingProduct.id;
@@ -1444,9 +1468,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const newProduct = await storage.createProduct({
               name: item.name,
               price: item.price.toString(),
-              category: 'Catálogo Web',
+              category: 'product',
               description: `Producto agregado automáticamente desde pedido de WhatsApp`,
-              isActive: true
+              status: 'active'
             });
             productId = newProduct.id;
             await storage.addWhatsAppLog({
