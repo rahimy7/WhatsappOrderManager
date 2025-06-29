@@ -491,6 +491,16 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Manejo completo de botones interactivos en función handleInteractiveMessage
   - Sistema robusto de manejo de errores en parsing de opciones de menú
   - Flujo de pedidos mejorado con experiencia de usuario más intuitiva y amigable
+- June 29, 2025. MENÚ INTERACTIVO PARA CLIENTES CON PEDIDOS ACTIVOS COMPLETAMENTE IMPLEMENTADO:
+  - Sistema inteligente de detección: clientes con pedidos activos reciben menú especializado con 3 opciones
+  - Opción 1 "📋 Seguimiento": muestra estado detallado de todos los pedidos activos con emojis de estado
+  - Opción 2 "✏️ Editar Pedido": permite ver productos del pedido y opción de eliminar productos o cancelar pedido completo
+  - Opción 3 "🛍️ Nuevo Pedido": reinicia flujo completo desde mensaje de bienvenida para crear orden nueva
+  - Submenu de edición con botones: "🗑️ Quitar Productos", "❌ Cancelar Pedido", "⬅️ Volver al Menú"
+  - Funcionalidad de cancelación de pedidos: actualiza estado a 'cancelled' y confirma al cliente
+  - Manejo de botones interactivos (track_order, edit_order, new_order, remove_products, cancel_order, back_to_menu)
+  - Integración perfecta con sistema de segmentación de conversaciones existente
+  - Experiencia optimizada para clientes recurrentes con gestión completa de pedidos activos
 
 ## User Preferences
 
