@@ -998,6 +998,17 @@ export class MemStorage implements IStorage {
     });
   }
 
+  // Order Items
+  async createOrderItem(insertOrderItem: InsertOrderItem): Promise<OrderItem> {
+    const itemId = this.currentOrderItemId++;
+    const orderItem: OrderItem = {
+      id: itemId,
+      ...insertOrderItem,
+    };
+    this.orderItems.set(itemId, orderItem);
+    return orderItem;
+  }
+
   async calculateDeliveryCost(
     customerLatitude: string,
     customerLongitude: string,

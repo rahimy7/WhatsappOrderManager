@@ -1392,11 +1392,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Create order in the system
+      // Create order in the system with items
       const orderNumber = `ORD-${Date.now()}`;
       
       // Calculate total from parsed items
       const total = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      
+      // Prepare order items for createOrder method
+      const orderItemsForCreation = orderItems.map(item => ({
+        productId: item.productId || 0, // Use 0 for unknown products
+        quantity: item.quantity,
+        unitPrice: item.price.toString(),
+        totalPrice: (item.price * item.quantity).toString(),
+        notes: item.name
+      }));
       
       const order = await storage.createOrder({
         orderNumber: orderNumber,
@@ -1404,19 +1413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'pending',
         totalAmount: total.toString(),
         notes: `Pedido automático desde catálogo web. Productos: ${orderItems.map(item => `${item.name} (${item.quantity})`).join(', ')}`
-      });
-
-      // Add order items
-      for (const item of orderItems) {
-        await storage.createOrderItem({
-          orderId: order.id,
-          productId: item.productId || 0, // Use 0 for unknown products
-          quantity: item.quantity,
-          unitPrice: item.price.toString(),
-          totalPrice: (item.price * item.quantity).toString(),
-          notes: item.name
-        });
-      }
+      }, orderItemsForCreation);
 
       // Update conversation with order
       const conversations = await storage.getActiveConversations();
