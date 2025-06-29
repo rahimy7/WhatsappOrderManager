@@ -151,10 +151,11 @@ export default function OrdersPage() {
     if (!selectedOrder) return;
 
     const formData = new FormData(e.currentTarget);
+    const assignedUserIdValue = formData.get("assignedUserId") as string;
     const updates = {
       id: selectedOrder.id,
       status: formData.get("status") as string,
-      assignedUserId: formData.get("assignedUserId") ? Number(formData.get("assignedUserId")) : null,
+      assignedUserId: assignedUserIdValue === "0" ? null : Number(assignedUserIdValue),
       notes: formData.get("notes") as string,
     };
 
@@ -342,12 +343,12 @@ export default function OrdersPage() {
               
               <div className="grid gap-2">
                 <Label htmlFor="assignedUserId">Asignar a</Label>
-                <Select name="assignedUserId" defaultValue={selectedOrder?.assignedUserId?.toString() || ""}>
+                <Select name="assignedUserId" defaultValue={selectedOrder?.assignedUserId?.toString() || "0"}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar técnico" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sin asignar</SelectItem>
+                    <SelectItem value="0">Sin asignar</SelectItem>
                     {users.filter(user => user.role === 'technician' || user.role === 'admin').map(user => (
                       <SelectItem key={user.id} value={user.id.toString()}>
                         {user.name}
