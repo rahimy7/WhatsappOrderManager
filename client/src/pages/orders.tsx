@@ -215,6 +215,11 @@ export default function OrdersPage() {
     setIsAssignDialogOpen(true);
   };
 
+  const handleCloseAssignModal = () => {
+    setIsAssignDialogOpen(false);
+    setSelectedOrder(null);
+  };
+
   const handleUpdateOrder = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedOrder) return;
@@ -593,6 +598,13 @@ export default function OrdersPage() {
           </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Assignment Modal */}
+    <AssignmentModal 
+      order={selectedOrder}
+      isOpen={isAssignDialogOpen}
+      onClose={handleCloseAssignModal}
+    />
 
     </div>
   );
