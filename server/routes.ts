@@ -18,6 +18,136 @@ import {
 } from "@shared/schema";
 import { loginSchema, AuthUser } from "@shared/auth";
 
+// Function to process auto-response by trigger
+async function processAutoResponse(trigger: string, phoneNumber: string) {
+  try {
+    const autoResponses = await storage.getAllAutoResponses();
+    const responses = autoResponses.filter(response => response.trigger === trigger && response.isActive);
+    
+    if (responses.length > 0) {
+      const response = responses[0]; // Use first active response for the trigger
+      
+      if (response.menuOptions && response.menuType && response.menuType !== 'text_only') {
+        // Send interactive message with menu options
+        try {
+          const menuOptions = JSON.parse(response.menuOptions);
+          const interactiveMessage = {
+            messaging_product: "whatsapp",
+            to: phoneNumber,
+            type: "interactive",
+            interactive: {
+              type: "button",
+              body: {
+                text: response.messageText
+              },
+              action: {
+                buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                  type: "reply",
+                  reply: {
+                    id: option.value || `option_${index}`,
+                    title: option.label.substring(0, 20) // WhatsApp button limit
+                  }
+                }))
+              }
+            }
+          };
+          
+          await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+        } catch (error) {
+          console.error('Error parsing menu options:', error);
+          // Fallback to simple text message
+          await sendWhatsAppMessage(phoneNumber, response.messageText);
+        }
+      } else {
+        // Send simple text message
+        await sendWhatsAppMessage(phoneNumber, response.messageText);
+      }
+      
+      // Log the auto-response
+      console.log(`Auto-response sent for trigger: ${trigger} to ${phoneNumber}`);
+    }
+  } catch (error) {
+    console.error('Error processing auto-response:', error);
+  }
+}
+
+// Helper functions for WhatsApp message sending
+async function sendWhatsAppMessage(phoneNumber: string, message: string) {
+  try {
+    const config = await storage.getWhatsAppConfig();
+    
+    if (!config) {
+      console.error('WhatsApp configuration not found');
+      return false;
+    }
+
+    const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
+    
+    const data = {
+      messaging_product: "whatsapp",
+      to: phoneNumber,
+      text: { body: message }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('WhatsApp API error:', errorText);
+      return false;
+    }
+
+    const result = await response.json();
+    console.log('WhatsApp message sent:', result);
+    return true;
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error);
+    return false;
+  }
+}
+
+async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
+  try {
+    const config = await storage.getWhatsAppConfig();
+    
+    if (!config) {
+      console.error('WhatsApp configuration not found');
+      return false;
+    }
+
+    const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('WhatsApp API error:', errorText);
+      return false;
+    }
+
+    const result = await response.json();
+    console.log('WhatsApp interactive message sent:', result);
+    return true;
+  } catch (error) {
+    console.error('Error sending WhatsApp interactive message:', error);
+    return false;
+  }
+}
+
 // Middleware de autenticación
 function authenticateToken(req: any, res: any, next: any) {
   const authHeader = req.headers['authorization'];
@@ -1775,11 +1905,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Handle menu buttons from welcome message
       if (buttonId === 'products') {
-        await sendProductMenu(phoneNumber);
+        // Use configured auto-response for product_inquiry
+        await processAutoResponse('product_inquiry', phoneNumber);
       } else if (buttonId === 'services') {
-        await sendProductMenu(phoneNumber); // Same menu, but focuses on services
+        // Use configured auto-response for service_inquiry
+        await processAutoResponse('service_inquiry', phoneNumber);
       } else if (buttonId === 'help') {
-        await sendHelpMenu(phoneNumber);
+        // Use configured auto-response for help
+        await processAutoResponse('help', phoneNumber);
       } else if (buttonId.startsWith('quantity_')) {
         const [, productId, quantity] = buttonId.split('_');
         await handleQuantitySelection(customer, parseInt(productId), parseInt(quantity), phoneNumber);
