@@ -528,6 +528,12 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Sistema simplificado ahora solo ofrece: "📋 Seguimiento" y "🛍️ Nuevo Pedido"
   - Enfoque mejorado en experiencia de usuario sin funcionalidades complejas que causan errores API
   - Clientes pueden consultar estado de pedidos y crear nuevos pedidos sin opciones de edición confusas
+- June 29, 2025. CORRECCIÓN DEL CARRITO: Funcionamiento del vaciado de carrito mejorado:
+  - Corregido problema donde el carrito no se limpiaba después de enviar mensaje por WhatsApp
+  - Implementado timeout de 500ms para asegurar limpieza del carrito después de abrir WhatsApp
+  - Agregado botón manual "Vaciar Carrito" para limpieza instantánea del carrito
+  - Limpieza completa del sessionId del localStorage para generar uno nuevo en próximo uso
+  - Mejorada experiencia de usuario con notificaciones de confirmación de vaciado
 - June 29, 2025. MENÚ INTERACTIVO PARA CLIENTES CON PEDIDOS ACTIVOS COMPLETAMENTE IMPLEMENTADO:
   - Sistema inteligente de detección: clientes con pedidos activos reciben menú especializado con 3 opciones
   - Opción 1 "📋 Seguimiento": muestra estado detallado de todos los pedidos activos con emojis de estado

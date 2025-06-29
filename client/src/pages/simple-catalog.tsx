@@ -210,18 +210,25 @@ export default function SimpleCatalog() {
     
     window.open(whatsappUrl, '_blank');
     
-    // Vaciar el carrito después del envío
-    const emptyCart = { items: [], subtotal: 0 };
-    setCart(emptyCart);
-    localStorage.setItem(`cart_${sessionId}`, JSON.stringify(emptyCart));
+    // Función para limpiar el carrito completamente
+    const clearCart = () => {
+      const emptyCart = { items: [], subtotal: 0 };
+      setCart(emptyCart);
+      localStorage.setItem(`cart_${sessionId}`, JSON.stringify(emptyCart));
+      // También limpiar el sessionId para generar uno nuevo en el próximo uso
+      localStorage.removeItem('cart_session_id');
+    };
     
-    // Cerrar el panel del carrito
-    setIsCartOpen(false);
-    
-    toast({
-      title: "Pedido enviado",
-      description: "Tu carrito se ha vaciado y el pedido se envió por WhatsApp",
-    });
+    // Usar setTimeout para asegurar que la limpieza ocurra después de abrir WhatsApp
+    setTimeout(() => {
+      clearCart();
+      setIsCartOpen(false);
+      
+      toast({
+        title: "¡Pedido enviado!",
+        description: "Tu carrito se ha vaciado y el pedido se envió por WhatsApp",
+      });
+    }, 500);
   };
 
   // Filtrar productos
@@ -436,13 +443,32 @@ export default function SimpleCatalog() {
                     <span className="text-green-600">${cart.subtotal}</span>
                   </div>
                   
-                  <Button
-                    onClick={sendToWhatsApp}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-lg"
-                  >
-                    <MessageCircle className="w-5 h-5 mr-2" />
-                    Hacer Pedido por WhatsApp
-                  </Button>
+                  <div className="space-y-3">
+                    <Button
+                      onClick={sendToWhatsApp}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-lg"
+                    >
+                      <MessageCircle className="w-5 h-5 mr-2" />
+                      Hacer Pedido por WhatsApp
+                    </Button>
+                    
+                    <Button
+                      onClick={() => {
+                        const emptyCart = { items: [], subtotal: 0 };
+                        setCart(emptyCart);
+                        localStorage.setItem(`cart_${sessionId}`, JSON.stringify(emptyCart));
+                        toast({
+                          title: "Carrito vaciado",
+                          description: "Todos los productos han sido removidos del carrito",
+                        });
+                      }}
+                      variant="outline"
+                      className="w-full h-10 text-sm border-red-300 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Vaciar Carrito
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
