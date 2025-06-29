@@ -2379,10 +2379,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (buttonId.startsWith('payment_')) {
         const paymentMethod = buttonId.split('_')[1];
         await handlePaymentMethodSelection(customer, paymentMethod, phoneNumber);
-      } else if (buttonId === 'use_whatsapp_number') {
-        await handleContactNumberSelection(customer, phoneNumber, phoneNumber);
-      } else if (buttonId === 'provide_different_number') {
-        await handleContactNumberRequest(customer, phoneNumber);
+      } else if (buttonId === 'use_whatsapp_number' || buttonId === 'use_current') {
+        // Customer wants to use their WhatsApp number as contact
+        const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+        if (registrationFlow && registrationFlow.currentStep === 'collect_contact') {
+          const data = JSON.parse(registrationFlow.collectedData || '{}');
+          const updatedData = { ...data, contactNumber: phoneNumber };
+          await storage.updateRegistrationFlow(phoneNumber, {
+            currentStep: 'collect_payment',
+            collectedData: JSON.stringify(updatedData)
+          });
+          await processAutoResponse('collect_payment', phoneNumber);
+        } else {
+          await handleContactNumberSelection(customer, phoneNumber, phoneNumber);
+        }
+      } else if (buttonId === 'provide_different_number' || buttonId === 'use_other') {
+        // Customer wants to provide a different contact number
+        const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+        if (registrationFlow && registrationFlow.currentStep === 'collect_contact') {
+          await sendWhatsAppMessage(phoneNumber, 
+            "📞 Por favor proporciona el número de contacto que prefieres usar:\n\n" +
+            "Escribe el número de 10 dígitos sin espacios ni guiones.\n" +
+            "Ejemplo: 5512345678"
+          );
+          const data = JSON.parse(registrationFlow.collectedData || '{}');
+          await storage.updateRegistrationFlow(phoneNumber, {
+            currentStep: 'collect_different_number',
+            collectedData: JSON.stringify(data)
+          });
+        } else {
+          await handleContactNumberRequest(customer, phoneNumber);
+        }
+      } else if (buttonId === 'payment_card') {
+        // Customer selected credit/debit card payment
+        const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+        if (registrationFlow && registrationFlow.currentStep === 'collect_payment') {
+          const data = JSON.parse(registrationFlow.collectedData || '{}');
+          const updatedData = { ...data, paymentMethod: 'card' };
+          await storage.updateRegistrationFlow(phoneNumber, {
+            currentStep: 'collect_notes',
+            collectedData: JSON.stringify(updatedData)
+          });
+          await processAutoResponse('collect_notes', phoneNumber);
+        } else {
+          await handlePaymentMethodSelection(customer, 'card', phoneNumber);
+        }
+      } else if (buttonId === 'payment_transfer') {
+        // Customer selected bank transfer payment
+        const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+        if (registrationFlow && registrationFlow.currentStep === 'collect_payment') {
+          const data = JSON.parse(registrationFlow.collectedData || '{}');
+          const updatedData = { ...data, paymentMethod: 'transfer' };
+          await storage.updateRegistrationFlow(phoneNumber, {
+            currentStep: 'collect_notes',
+            collectedData: JSON.stringify(updatedData)
+          });
+          await processAutoResponse('collect_notes', phoneNumber);
+        } else {
+          await handlePaymentMethodSelection(customer, 'transfer', phoneNumber);
+        }
+      } else if (buttonId === 'payment_cash') {
+        // Customer selected cash payment
+        const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+        if (registrationFlow && registrationFlow.currentStep === 'collect_payment') {
+          const data = JSON.parse(registrationFlow.collectedData || '{}');
+          const updatedData = { ...data, paymentMethod: 'cash' };
+          await storage.updateRegistrationFlow(phoneNumber, {
+            currentStep: 'collect_notes',
+            collectedData: JSON.stringify(updatedData)
+          });
+          await processAutoResponse('collect_notes', phoneNumber);
+        } else {
+          await handlePaymentMethodSelection(customer, 'cash', phoneNumber);
+        }
+      } else if (buttonId === 'skip_notes') {
+        // Customer wants to skip additional notes
+        const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
+        if (registrationFlow && registrationFlow.currentStep === 'collect_notes') {
+          await handleRegistrationFlow(phoneNumber, 'sin notas', registrationFlow);
+        }
       } else if (buttonId === 'confirm_saved_address') {
         await handleSavedAddressConfirmation(customer, phoneNumber);
       } else if (buttonId === 'update_address') {
@@ -3652,22 +3727,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
           paymentMethod = 'transfer';
         }
         
-        // Complete the order with all collected data
-        const orderCompleteData = { ...data, paymentMethod: paymentMethod };
+        // Move to next step - collect notes
+        const updatedData = { ...data, paymentMethod: paymentMethod };
+        await storage.updateRegistrationFlow(phoneNumber, {
+          currentStep: 'collect_notes',
+          collectedData: JSON.stringify(updatedData)
+        });
         
-        // Update order with complete information
+        await processAutoResponse('collect_notes', phoneNumber);
+        return;
+      }
+      
+      if (registrationFlow.currentStep === 'collect_notes') {
+        // Handle additional notes collection
+        let additionalNotes = '';
+        
+        // Check if customer wants to skip notes or provided custom notes
+        if (messageText.toLowerCase().includes('continuar') || 
+            messageText.toLowerCase().includes('no') ||
+            messageText.toLowerCase().includes('sin notas')) {
+          additionalNotes = 'Sin notas adicionales';
+        } else {
+          additionalNotes = messageText.trim();
+        }
+        
+        // Complete the order with all collected data
+        const orderCompleteData = { ...data, additionalNotes: additionalNotes };
+        
+        // Update order with complete information including notes
         if (data.orderId) {
+          const paymentText = data.paymentMethod === 'card' ? 'Tarjeta' : 
+                             data.paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo';
+          
+          const orderNotes = `Completado desde catálogo web.\n` +
+                           `Método de pago: ${paymentText}\n` +
+                           `Contacto: ${orderCompleteData.contactNumber || phoneNumber}\n` +
+                           `Notas adicionales: ${additionalNotes}`;
+          
           await storage.updateOrder(data.orderId, {
             status: 'confirmed',
-            notes: `Completado desde catálogo web. Método de pago: ${paymentMethod}. Contacto: ${orderCompleteData.contactNumber || phoneNumber}`
+            notes: orderNotes
           });
           
           // Send final confirmation
           const finalMessage = 
             `✅ *PEDIDO CONFIRMADO*\n\n` +
             `📋 Número: ${data.orderNumber}\n` +
-            `💳 Método de pago: ${paymentMethod === 'card' ? 'Tarjeta' : paymentMethod === 'transfer' ? 'Transferencia' : 'Efectivo'}\n` +
-            `📞 Contacto: ${orderCompleteData.contactNumber || phoneNumber}\n\n` +
+            `💳 Método de pago: ${paymentText}\n` +
+            `📞 Contacto: ${orderCompleteData.contactNumber || phoneNumber}\n` +
+            `📝 Notas: ${additionalNotes}\n\n` +
             `🎯 *¡Perfecto!* Tu pedido ha sido confirmado.\n` +
             `Un técnico te contactará pronto para coordinar la entrega.\n\n` +
             `📱 Puedes revisar el estado de tu pedido escribiendo *pedido*`;
