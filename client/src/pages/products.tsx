@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Package, Edit, Eye } from "lucide-react";
+import { Package, Edit, Eye, ShoppingBag, ExternalLink } from "lucide-react";
 import { Product } from "@shared/schema";
+import { Link } from "wouter";
 
 export default function Products() {
   const { data: products, isLoading } = useQuery({
@@ -31,6 +32,20 @@ export default function Products() {
 
   return (
     <div className="space-y-6">
+      {/* Header with title and catalog button */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Administrar Productos</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Gestiona el catálogo completo de productos y servicios</p>
+        </div>
+        <Link href="/catalog">
+          <Button variant="outline" className="flex items-center gap-2">
+            <ShoppingBag className="w-4 h-4" />
+            Ver Catálogo Público
+            <ExternalLink className="w-4 h-4" />
+          </Button>
+        </Link>
+      </div>
 
       {/* Product Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
