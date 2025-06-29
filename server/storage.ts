@@ -2037,7 +2037,7 @@ export class DatabaseStorage implements IStorage {
         eq(autoResponses.trigger, trigger),
         eq(autoResponses.isActive, true)
       ))
-      .orderBy(autoResponses.order);
+      .orderBy(autoResponses.priority);
   }
 
   // Customer Registration Flows with PostgreSQL
