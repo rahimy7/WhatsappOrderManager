@@ -1730,9 +1730,8 @@ export class DatabaseStorage implements IStorage {
     deliveryDistance?: string;
     notes?: string;
   }>): Promise<OrderWithDetails> {
-    // Generate unique order number using timestamp to avoid conflicts
-    const timestamp = Date.now();
-    const orderNumber = `ORD-${timestamp.toString().slice(-6)}`;
+    // Use provided orderNumber or generate unique one using timestamp to avoid conflicts
+    const orderNumber = insertOrder.orderNumber || `ORD-${Date.now().toString().slice(-6)}`;
 
     const [order] = await db.insert(orders).values({
       ...insertOrder,

@@ -314,9 +314,10 @@ export const insertProductSchema = createInsertSchema(products).omit({
 
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
-  orderNumber: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  orderNumber: z.string().optional(),
 });
 
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({

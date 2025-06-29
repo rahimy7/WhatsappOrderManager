@@ -3022,10 +3022,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }];
 
     try {
+      // Generate unique order number for WhatsApp orders
+      const timestamp = Date.now();
+      const orderNumber = `ORD-${timestamp.toString().slice(-6)}`;
+      
       const order = await storage.createOrder({
         customerId: customer.id,
         status: "pending",
         totalAmount: totalPrice.toString(),
+        orderNumber: orderNumber,
         notes: `Pedido generado desde WhatsApp - ${product.name} x${quantity}`,
         priority: "normal"
       }, orderItems);
