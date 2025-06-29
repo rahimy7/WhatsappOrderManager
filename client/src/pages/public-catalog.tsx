@@ -194,9 +194,7 @@ export default function PublicCatalog() {
 
   // Obtener total de items en carrito
   const getTotalCartItems = () => {
-    const cartData = cart as any;
-    if (!cartData?.items || !Array.isArray(cartData.items)) return 0;
-    return cartData.items.reduce((total: number, item: any) => total + item.quantity, 0);
+    return 0; // Placeholder - this catalog doesn't use cart functionality
   };
 
   // Filtrar productos

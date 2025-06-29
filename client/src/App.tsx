@@ -23,7 +23,7 @@ import Notifications from "@/pages/notifications";
 import TechnicianDashboard from "@/pages/technician-dashboard";
 import UserSettings from "@/pages/user-settings";
 import Catalog from "@/pages/catalog";
-import PublicCatalog from "@/pages/public-catalog";
+import PublicCatalogClean from "@/pages/public-catalog-clean";
 import SimpleCatalog from "@/pages/simple-catalog";
 import Cart from "@/pages/cart";
 import AppLayout from "@/components/layout/app-layout";
@@ -92,7 +92,7 @@ function Router() {
       <Route path="/assignment-rules" component={() => <ProtectedRoute component={AssignmentRules} permission="manage_assignments" />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} permission="view_notifications" />} />
       <Route path="/catalog" component={Catalog} />
-      <Route path="/public-catalog" component={PublicCatalog} />
+      <Route path="/public-catalog" component={PublicCatalogClean} />
       <Route path="/cart" component={Cart} />
       <Route path="/user-settings" component={UserSettings} />
       <Route component={NotFound} />
@@ -114,7 +114,7 @@ function AppWithAuth() {
   return (
     <Switch>
       {/* Rutas públicas sin layout */}
-      <Route path="/public-catalog" component={PublicCatalog} />
+      <Route path="/public-catalog" component={PublicCatalogClean} />
       <Route path="/simple-catalog" component={SimpleCatalog} />
       <Route path="/login" component={Login} />
       
