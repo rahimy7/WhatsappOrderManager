@@ -480,8 +480,6 @@ export default function OrdersPage() {
                 )}
               </div>
               
-              </div>
-              
               {/* Products/Services Section */}
               {selectedOrder.items && selectedOrder.items.length > 0 && (
                 <div className="mt-6">
