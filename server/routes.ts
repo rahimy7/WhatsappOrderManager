@@ -3802,19 +3802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Shopping Cart API
-  app.get("/api/cart", async (req, res) => {
-    try {
-      const sessionId = req.query.sessionId as string || req.sessionID;
-      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
-      
-      const cartItems = await storage.getCartItems(sessionId, userId);
-      res.json(cartItems);
-    } catch (error) {
-      console.error("Error fetching cart:", error);
-      res.status(500).json({ error: "Failed to fetch cart items" });
-    }
-  });
+  // Shopping Cart API - REMOVED: Duplicate endpoint, using the proper one below
 
   app.post("/api/cart", async (req, res) => {
     try {
@@ -3899,11 +3887,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/cart', async (req, res) => {
     try {
       const sessionId = req.query.sessionId as string || req.session?.id || 'default';
+      console.log('=== CART ENDPOINT CALLED ===');
       console.log('Getting cart for sessionId:', sessionId);
+      console.log('About to call storage.getCart...');
       const cart = await storage.getCart(sessionId);
+      console.log('=== CART RESULT ===');
       console.log('Cart response structure:', JSON.stringify(cart, null, 2));
+      console.log('Cart type:', typeof cart);
+      console.log('Cart is array?', Array.isArray(cart));
       console.log('Cart has items property?', 'items' in cart);
       console.log('Cart has subtotal property?', 'subtotal' in cart);
+      console.log('About to send response...');
       res.json(cart);
     } catch (error) {
       console.error('Error fetching cart:', error);
