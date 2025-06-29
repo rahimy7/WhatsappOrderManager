@@ -2234,12 +2234,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate address from GPS coordinates
       const gpsAddress = location.name || location.address || 
         `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+      
+      // Generate Google Maps link for technician navigation
+      const mapLink = generateGoogleMapsLink(location.latitude, location.longitude, gpsAddress);
 
-      // Update customer with location data
+      // Update customer with location data and map link
       const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
         latitude: location.latitude.toString(),
         longitude: location.longitude.toString(), 
-        address: gpsAddress
+        address: gpsAddress,
+        mapLink: mapLink
       });
 
       // Calculate delivery cost
@@ -2340,12 +2344,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Generate address from GPS coordinates
     const gpsAddress = location.name || location.address || 
       `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+    
+    // Generate Google Maps link for technician navigation
+    const mapLink = generateGoogleMapsLink(location.latitude, location.longitude, gpsAddress);
 
-    // Update customer with location data
+    // Update customer with location data and map link
     const updatedCustomer = await storage.updateCustomerLocation(customer.id, {
       latitude: location.latitude.toString(),
       longitude: location.longitude.toString(), 
-      address: gpsAddress
+      address: gpsAddress,
+      mapLink: mapLink
     });
 
     // Calculate delivery cost for sample

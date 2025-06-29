@@ -83,6 +83,7 @@ export interface IStorage {
     latitude: string;
     longitude: string;
     address: string;
+    mapLink?: string;
   }): Promise<Customer>;
   updateCustomerName(id: number, name: string): Promise<Customer | undefined>;
 
@@ -691,6 +692,7 @@ export class MemStorage implements IStorage {
     latitude: string;
     longitude: string;
     address: string;
+    mapLink?: string;
   }): Promise<Customer> {
     const customer = this.customers.get(id);
     if (!customer) {
@@ -702,6 +704,7 @@ export class MemStorage implements IStorage {
       latitude: location.latitude,
       longitude: location.longitude,
       address: location.address,
+      mapLink: location.mapLink || customer.mapLink,
       lastContact: new Date()
     };
 
@@ -1630,13 +1633,20 @@ export class DatabaseStorage implements IStorage {
     latitude: string;
     longitude: string;
     address: string;
+    mapLink?: string;
   }): Promise<Customer> {
-    const [customer] = await db.update(customers).set({
+    const updateData: any = {
       latitude: location.latitude,
       longitude: location.longitude,
       address: location.address,
       lastContact: new Date()
-    }).where(eq(customers.id, id)).returning();
+    };
+
+    if (location.mapLink) {
+      updateData.mapLink = location.mapLink;
+    }
+
+    const [customer] = await db.update(customers).set(updateData).where(eq(customers.id, id)).returning();
     return customer;
   }
 
