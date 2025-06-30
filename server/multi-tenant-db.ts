@@ -229,7 +229,7 @@ export async function getStoreInfo(storeId: number): Promise<VirtualStore | null
   const [store] = await masterDb
     .select()
     .from(schema.virtualStores)
-    .where(schema.virtualStores.id.eq(storeId))
+    .where(eq(schema.virtualStores.id, storeId))
     .limit(1);
     
   return store || null;
