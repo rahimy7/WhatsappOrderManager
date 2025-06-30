@@ -480,6 +480,12 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Configurado "Panel de Control General" como página principal para superadministradores (ruta raíz /)
   - Simplificada experiencia de usuario para nivel de superadministrador con funciones administrativas centralizadas
   - Sistema de navegación limpio enfocado en gestión multi-tenant y supervisión global del ecosistema de tiendas
+- June 30, 2025. ELIMINACIÓN DEL DASHBOARD PRINCIPAL PARA ADMINISTRADORES REGULARES:
+  - Removido "Dashboard Principal" con métricas de pedidos, conversaciones, técnicos e ingresos del día
+  - Administradores regulares ahora van directamente a página "Conversaciones" al iniciar sesión
+  - Eliminada opción "Dashboard" del sidebar para administradores regulares
+  - Simplificada navegación enfocando a administradores en gestión operativa directa (Pedidos, Conversaciones, Equipo)
+  - Sistema optimizado para acceso rápido a funciones de trabajo diario sin pantallas intermedias de métricas
 - June 29, 2025. MENSAJE DE ERROR "HUBO UN ERROR PROCESANDO TU PEDIDO" ELIMINADO COMPLETAMENTE:
   - Corregido error de schema en customer_registration_flows: cambio de customerData a collectedData
   - Agregado campo obligatorio expiresAt en creación de flujos de registro

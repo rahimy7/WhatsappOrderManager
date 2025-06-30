@@ -86,8 +86,8 @@ function RoleDashboard() {
     return <ProtectedRoute component={GlobalDashboard} permission="super_admin" />;
   }
   
-  // Administradores y otros roles al dashboard principal
-  return <ProtectedRoute component={Dashboard} permission="view_dashboard" />;
+  // Administradores y otros roles a conversaciones
+  return <ProtectedRoute component={Conversations} permission="view_conversations" />;
 }
 
 function Router() {

@@ -65,13 +65,6 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const allNavItems: NavItem[] = [
     // Items básicos para todos los roles
     {
-      href: "/dashboard",
-      icon: ChartLine,
-      label: "Dashboard",
-      badge: null,
-      permission: "view_dashboard",
-    },
-    {
       href: "/orders",
       icon: ShoppingCart,
       label: "Pedidos",
