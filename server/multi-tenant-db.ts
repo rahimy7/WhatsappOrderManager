@@ -79,7 +79,7 @@ export async function createTenantDatabase(store: VirtualStore): Promise<string>
  * Copia configuraciones predeterminadas (respuestas automáticas, productos base, etc.)
  * desde la base de datos maestra a una nueva tienda
  */
-async function copyDefaultConfigurationsToTenant(storeId: number): Promise<void> {
+export async function copyDefaultConfigurationsToTenant(storeId: number): Promise<void> {
   try {
     // Obtener respuestas automáticas predeterminadas de la base de datos maestra
     const defaultAutoResponses = await masterDb.select().from(schema.autoResponses);

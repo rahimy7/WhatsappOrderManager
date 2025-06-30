@@ -20,7 +20,7 @@ import {
   insertSystemAuditLogSchema,
 } from "@shared/schema";
 import { loginSchema, AuthUser } from "@shared/auth";
-import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore, createTenantDatabase } from "./multi-tenant-db";
+import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore, createTenantDatabase, copyDefaultConfigurationsToTenant } from "./multi-tenant-db";
 import * as schema from "@shared/schema";
 import { eq, sql, and, desc, ne, gte } from "drizzle-orm";
 
@@ -5680,21 +5680,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transformedStores = stores.map(store => ({
         id: store.id,
         name: store.name,
-        description: store.description,
-        domain: store.domain,
-        status: store.status,
-        subscriptionStatus: store.subscriptionStatus || 'trial',
-        planType: store.planType || 'basic',
-        contactEmail: store.contactEmail,
-        contactPhone: store.contactPhone,
-        address: store.address,
+        description: store.description || '',
+        domain: store.domain || '',
+        status: store.isActive ? 'active' : 'inactive',
+        subscriptionStatus: store.subscription || 'trial',
+        planType: store.subscription || 'basic',
+        contactEmail: '', // No existe en el schema actual, usar valor por defecto
+        contactPhone: store.whatsappNumber || '',
+        address: store.address || '',
         createdAt: store.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
         lastActivity: store.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
         monthlyOrders: 0, // Esto se calcularía desde la DB de la tienda específica
         monthlyRevenue: 0, // Esto se calcularía desde la DB de la tienda específica
         supportTickets: 0, // Esto se calcularía desde la DB de la tienda específica
         settings: {
-          whatsappEnabled: true,
+          whatsappEnabled: !!store.whatsappNumber,
           notificationsEnabled: true,
           analyticsEnabled: true
         }
@@ -5743,7 +5743,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
 
       // Configurar la nueva tienda con ajustes predeterminados
-      await copyDefaultConfigurationsToTenant(store);
+      await copyDefaultConfigurationsToTenant(store.id);
       
       console.log(`New store created: ${store.name} with default configurations`);
       
@@ -5751,21 +5751,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transformedStore = {
         id: store.id,
         name: store.name,
-        description: store.description,
-        domain: store.domain,
-        status: store.status,
-        subscriptionStatus: store.subscriptionStatus || 'trial',
-        planType: store.planType || 'basic',
-        contactEmail: store.contactEmail,
-        contactPhone: store.contactPhone,
-        address: store.address,
+        description: store.description || '',
+        domain: store.domain || '',
+        status: store.isActive ? 'active' : 'inactive',
+        subscriptionStatus: store.subscription || 'trial',
+        planType: store.subscription || 'basic',
+        contactEmail: '', // No existe en el schema actual
+        contactPhone: store.whatsappNumber || '',
+        address: store.address || '',
         createdAt: store.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
         lastActivity: store.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
         monthlyOrders: 0,
         monthlyRevenue: 0,
         supportTickets: 0,
         settings: {
-          whatsappEnabled: false,
+          whatsappEnabled: !!store.whatsappNumber,
           notificationsEnabled: true,
           analyticsEnabled: true
         }
