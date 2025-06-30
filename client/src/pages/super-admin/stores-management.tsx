@@ -160,6 +160,18 @@ export default function StoresManagement() {
       const response = await apiRequest("GET", `/api/admin/stores/${storeId}/validate`);
       const validation = await response.json();
       
+      if (!validation.valid) {
+        // Si la validación falla, preguntar si quiere reparar
+        const shouldRepair = confirm(
+          `${validation.message}\n\n¿Deseas reparar automáticamente el ecosistema de base de datos?`
+        );
+        
+        if (shouldRepair) {
+          await handleRepairStore(storeId);
+          return;
+        }
+      }
+      
       toast({
         title: validation.valid ? "Ecosistema Válido" : "Problemas Detectados",
         description: validation.message || "Validación completada",
@@ -169,6 +181,42 @@ export default function StoresManagement() {
       toast({
         title: "Error en Validación",
         description: "No se pudo validar el ecosistema de la tienda",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRepairStore = async (storeId: number) => {
+    try {
+      toast({
+        title: "Reparando Ecosistema",
+        description: "Iniciando reparación de base de datos...",
+      });
+
+      const response = await apiRequest("POST", `/api/admin/stores/${storeId}/repair`);
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: "Reparación Exitosa",
+          description: result.message,
+        });
+        
+        // Volver a validar después de la reparación
+        setTimeout(() => {
+          handleValidateStore(storeId);
+        }, 1000);
+      } else {
+        toast({
+          title: "Error en Reparación",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error en Reparación",
+        description: "No se pudo reparar el ecosistema de la tienda",
         variant: "destructive",
       });
     }
