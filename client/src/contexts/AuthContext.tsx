@@ -60,6 +60,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     
     localStorage.setItem('auth_token', token);
     setUser(userData);
+    
+    // Redirección automática después del login exitoso
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 100);
   };
 
   const logout = () => {
