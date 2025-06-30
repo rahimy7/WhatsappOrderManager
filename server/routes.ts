@@ -1977,7 +1977,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Function to process incoming WhatsApp messages
-  async function processWhatsAppMessage(value: any) {
+  // New function to handle store routing for WhatsApp messages
+  async function processWhatsAppMessageWithStoreRouting(value: any, receivingNumber: string) {
+    try {
+      // For now, default to store ID 1 until we implement proper multi-tenant WhatsApp routing
+      // TODO: Implement proper store detection based on receivingNumber
+      console.log(`Routing WhatsApp message for number: ${receivingNumber}`);
+      
+      // Get the first active store (temporary solution)
+      const stores = await masterDb.select().from(schema.virtualStores)
+        .where(eq(schema.virtualStores.isActive, true))
+        .limit(1);
+      
+      if (stores.length === 0) {
+        console.error('No active stores found for WhatsApp message routing');
+        return;
+      }
+
+      // Process message for the found store
+      const store = stores[0];
+      await processWhatsAppMessageForStore(value, store);
+      
+    } catch (error: any) {
+      console.error('Error in processWhatsAppMessageWithStoreRouting:', error);
+      await masterDb.query(`
+        INSERT INTO whatsapp_logs (type, phone_number, message_content, status, error_message, raw_data, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      `, ['error', null, 'Error en enrutamiento de mensaje', 'error', error.message, JSON.stringify({ error: error.toString(), receivingNumber })]);
+    }
+  }
+
+  // Process WhatsApp message for a specific store
+  async function processWhatsAppMessageForStore(value: any, store: any) {
+    try {
+      // Get tenant database for this store
+      const tenantDb = await getTenantDb(store.id);
+      
+      // Log that we found the correct store
+      await masterDb.query(`
+        INSERT INTO whatsapp_logs (type, phone_number, message_content, status, raw_data, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+      `, ['info', null, `Procesando mensaje para tienda: ${store.name}`, 'processing', JSON.stringify({ storeId: store.id, storeName: store.name })]);
+
+      // Call the original message processing function with the tenant storage
+      await processWhatsAppMessageWithTenantStorage(value, tenantDb);
+      
+    } catch (error: any) {
+      console.error(`Error processing message for store ${store.id}:`, error);
+      await masterDb.query(`
+        INSERT INTO whatsapp_logs (type, phone_number, message_content, status, error_message, raw_data, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      `, ['error', null, `Error procesando mensaje para tienda ${store.name}`, 'error', error.message, JSON.stringify({ storeId: store.id, error: error.toString() })]);
+    }
+  }
+
+  // Original message processing function modified to accept tenant storage
+  async function processWhatsAppMessageWithTenantStorage(value: any, tenantStorage: any) {
     try {
       if (value.messages && value.messages.length > 0) {
         for (const message of value.messages) {
@@ -2029,7 +2084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           // Find or create customer
-          await storage.addWhatsAppLog({
+          await tenantStorage.addWhatsAppLog({
             type: 'debug',
             phoneNumber: from,
             messageContent: 'Buscando cliente por teléfono',
@@ -2037,7 +2092,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             rawData: JSON.stringify({ phoneNumber: from })
           });
 
-          let customer = await storage.getCustomerByPhone(from);
+          let customer = await tenantStorage.getCustomerByPhone(from);
           let isNewCustomer = false;
           
           await storage.addWhatsAppLog({
@@ -3524,7 +3579,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     rawData: JSON.stringify({ value: change.value })
                   });
                   
-                  await processWhatsAppMessage(change.value);
+                  // Determine which store this message belongs to
+                  const receivingNumber = change.value.metadata?.display_phone_number || change.value.metadata?.phone_number_id;
+                  
+                  await processWhatsAppMessageWithStoreRouting(change.value, receivingNumber);
                   
                   await storage.addWhatsAppLog({
                     type: 'debug',

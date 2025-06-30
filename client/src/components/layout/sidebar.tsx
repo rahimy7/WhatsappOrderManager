@@ -59,7 +59,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   const pendingOrders = Array.isArray(orders) ? orders.filter((order: any) => order.status === "pending").length : 0;
   const activeConversations = Array.isArray(conversations) ? conversations.filter((conv: any) => conv.unreadCount > 0).length : 0;
-  const unreadNotifications = notificationCounts.unread || 0;
+  const unreadNotifications = typeof notificationCounts === 'object' && 'unread' in notificationCounts ? notificationCounts.unread || 0 : 0;
 
   // Configurar elementos del menú basado en el rol del usuario
   const allNavItems: NavItem[] = [
