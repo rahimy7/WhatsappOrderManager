@@ -4548,18 +4548,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (result.success) {
         res.json({
           success: true,
-          message: `Orden asignada automáticamente a ${result.assignedTechnician?.user.name} (${result.assignedTechnician?.employeeId})`,
-          assignedTechnician: result.assignedTechnician
+          message: `Orden asignada automáticamente a ${result.assignedTechnician?.user.name}`,
+          technician: result.assignedTechnician
         });
       } else {
-        res.status(400).json({
+        res.json({
           success: false,
           message: result.reason || "No se pudo asignar automáticamente"
         });
       }
     } catch (error) {
-      console.error("Error in auto-assignment:", error);
-      res.status(500).json({ error: "Error en el sistema de asignación automática" });
+      console.error("Error in auto-assign:", error);
+      res.status(500).json({ 
+        success: false, 
+        error: "Error interno del sistema de asignación" 
+      });
+    }
+  });
+
+  // Test automatic assignment for development
+  app.post("/api/assignment/test", async (req, res) => {
+    try {
+      const { orderId, customerLocation } = req.body;
+      const bestMatch = await storage.findBestTechnician(orderId, customerLocation);
+      
+      if (bestMatch) {
+        res.json({
+          success: true,
+          technician: bestMatch.technician,
+          distance: bestMatch.distance,
+          estimatedTime: bestMatch.estimatedTime,
+          matchingRules: bestMatch.matchingRules.map(rule => ({
+            name: rule.name,
+            priority: rule.priority,
+            method: rule.assignmentMethod
+          }))
+        });
+      } else {
+        res.json({
+          success: false,
+          message: "No hay técnicos disponibles que cumplan los criterios"
+        });
+      }
+    } catch (error) {
+      console.error("Error testing assignment:", error);
+      res.status(500).json({ error: "Error testing automatic assignment" });
     }
   });
 
