@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedAutoResponses } from "./seed-auto-responses";
+import { seedAssignmentRules } from "./seed-assignment-rules";
 import { getStoreInfo, getTenantDb, masterDb } from "./multi-tenant-db";
 
 const app = express();
@@ -258,8 +259,9 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  // Seed default auto responses
+  // Seed default auto responses and assignment rules
   await seedAutoResponses();
+  await seedAssignmentRules();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

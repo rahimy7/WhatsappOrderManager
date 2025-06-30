@@ -2500,48 +2500,60 @@ export class DatabaseStorage implements IStorage {
             ruleMatches = false;
             continue;
           }
-          ruleScore += 10; // Specialization match bonus
+          ruleScore += 20; // High score for specialization match
         }
 
-        // Check location-based assignment
-        if (rule.useLocationBased && location && technician.baseLatitude && technician.baseLongitude) {
+        // Check location/distance requirements
+        if (rule.useLocationBased && location) {
           const distance = this.calculateDistance(
             parseFloat(location.latitude),
             parseFloat(location.longitude),
-            parseFloat(technician.baseLatitude),
-            parseFloat(technician.baseLongitude)
+            parseFloat(technician.latitude || '0'),
+            parseFloat(technician.longitude || '0')
           );
           
-          const maxDistance = parseFloat(rule.maxDistanceKm || "15");
+          const maxDistance = parseFloat(rule.maxDistanceKm || '50');
           if (distance > maxDistance) {
             ruleMatches = false;
             continue;
           }
           
-          // Distance score (closer is better)
-          ruleScore += Math.max(0, 10 - (distance / maxDistance) * 10);
+          // Closer technicians get higher scores
+          ruleScore += Math.max(0, 20 - distance);
         }
 
-        // Check workload
+        // Check workload requirements
         if (rule.useWorkloadBased) {
-          const currentOrders = technician.currentOrders || 0;
+          const technicianOrders = await this.getTechnicianOrders(technician.userId);
+          const activeOrders = technicianOrders.filter(order => 
+            ['assigned', 'in_progress'].includes(order.status)
+          ).length;
+          
           const maxOrders = rule.maxOrdersPerTechnician || 5;
-          if (currentOrders >= maxOrders) {
+          if (activeOrders >= maxOrders) {
             ruleMatches = false;
             continue;
           }
           
-          // Workload score (less busy is better)
-          ruleScore += Math.max(0, 5 - currentOrders);
+          // Less busy technicians get higher scores
+          ruleScore += Math.max(0, 15 - activeOrders * 3);
         }
 
-        // Check skill level
-        const skillLevel = technician.skillLevel || 1;
-        ruleScore += skillLevel;
+        // Check availability requirements
+        if (rule.useTimeBased && rule.availabilityRequired) {
+          // For now, assume all technicians are available during business hours
+          // In a real system, this would check actual schedules
+          const currentHour = new Date().getHours();
+          if (currentHour < 8 || currentHour > 18) {
+            ruleMatches = false;
+            continue;
+          }
+          ruleScore += 10;
+        }
 
         if (ruleMatches) {
           applicableRules.push(rule);
-          score += ruleScore * (rule.priority || 1);
+          score += ruleScore * rule.priority; // Weight by rule priority
         }
       }
 
@@ -2554,25 +2566,19 @@ export class DatabaseStorage implements IStorage {
 
     if (!bestTechnician) return null;
 
-    // Calculate distance and estimated time
-    let distance;
-    let estimatedTime = 60; // Default 60 minutes
-
-    if (location && bestTechnician.baseLatitude && bestTechnician.baseLongitude) {
-      distance = this.calculateDistance(
-        parseFloat(location.latitude),
-        parseFloat(location.longitude),
-        parseFloat(bestTechnician.baseLatitude),
-        parseFloat(bestTechnician.baseLongitude)
-      );
-      
-      // Estimate time: 30min base + 5min per km
-      estimatedTime = 30 + (distance * 5);
-    }
+    // Calculate estimated response time based on matching rules
+    const estimatedTime = matchingRules.reduce((min, rule) => 
+      Math.min(min, rule.estimatedResponseTime || 120), 180
+    );
 
     return {
       technician: bestTechnician,
-      distance,
+      distance: location ? this.calculateDistance(
+        parseFloat(location.latitude),
+        parseFloat(location.longitude),
+        parseFloat(bestTechnician.latitude || '0'),
+        parseFloat(bestTechnician.longitude || '0')
+      ) : undefined,
       estimatedTime,
       matchingRules
     };
@@ -2580,6 +2586,142 @@ export class DatabaseStorage implements IStorage {
 
   async autoAssignOrder(orderId: number): Promise<{
     success: boolean;
+    assignedTechnician?: EmployeeProfile & { user: User };
+    reason?: string;
+  }> {
+    try {
+      const order = await this.getOrder(orderId);
+      if (!order) {
+        return { success: false, reason: "Orden no encontrada" };
+      }
+
+      if (order.assignedUserId) {
+        return { success: false, reason: "La orden ya está asignada" };
+      }
+
+      const bestMatch = await this.findBestTechnician(orderId);
+      if (!bestMatch) {
+        return { 
+          success: false, 
+          reason: "No hay técnicos disponibles que cumplan los criterios" 
+        };
+      }
+
+      // Check if auto-assignment is enabled for the matching rules
+      const autoAssignRules = bestMatch.matchingRules.filter(rule => rule.autoAssign);
+      if (autoAssignRules.length === 0) {
+        return { 
+          success: false, 
+          reason: "Asignación automática no está habilitada para esta orden" 
+        };
+      }
+
+      // Assign the order
+      await this.assignOrder(orderId, bestMatch.technician.userId);
+
+      // Create notification for the technician
+      await this.createNotification({
+        userId: bestMatch.technician.userId,
+        type: 'assignment',
+        title: 'Nueva Orden Asignada',
+        message: `Se te ha asignado la orden #${order.orderNumber} - ${order.customer.name}`,
+        priority: 'high',
+        metadata: {
+          orderId: orderId,
+          orderNumber: order.orderNumber,
+          customerName: order.customer.name,
+          estimatedTime: bestMatch.estimatedTime
+        }
+      });
+
+      // Optionally notify customer if rules allow it
+      const notifyCustomerRules = bestMatch.matchingRules.filter(rule => rule.notifyCustomer);
+      if (notifyCustomerRules.length > 0) {
+        // This would typically send a WhatsApp message to the customer
+        console.log(`Would notify customer ${order.customer.phone} about assignment`);
+      }
+
+      return {
+        success: true,
+        assignedTechnician: bestMatch.technician
+      };
+
+    } catch (error) {
+      console.error("Error in autoAssignOrder:", error);
+      return { 
+        success: false, 
+        reason: "Error interno del sistema de asignación" 
+      };
+    }
+  }
+
+  async getAvailableTechnicians(
+    specializations?: string[], 
+    maxDistance?: number, 
+    customerLocation?: { latitude: string; longitude: string }
+  ): Promise<(EmployeeProfile & { user: User })[]> {
+    // Get all technicians who are active
+    const techniciansWithUsers = await db.select({
+      profile: employeeProfiles,
+      user: users
+    })
+    .from(employeeProfiles)
+    .innerJoin(users, eq(employeeProfiles.userId, users.id))
+    .where(
+      and(
+        eq(users.status, 'active'),
+        eq(employeeProfiles.role, 'technical')
+      )
+    );
+
+    let availableTechnicians = techniciansWithUsers.map(({ profile, user }) => ({
+      ...profile,
+      user
+    }));
+
+    // Filter by specializations if provided
+    if (specializations && specializations.length > 0) {
+      availableTechnicians = availableTechnicians.filter(tech => {
+        const techSpecs = tech.specializations || [];
+        return specializations.some(spec => techSpecs.includes(spec));
+      });
+    }
+
+    // Filter by distance if location and maxDistance provided
+    if (customerLocation && maxDistance) {
+      availableTechnicians = availableTechnicians.filter(tech => {
+        if (!tech.latitude || !tech.longitude) return false;
+        
+        const distance = this.calculateDistance(
+          parseFloat(customerLocation.latitude),
+          parseFloat(customerLocation.longitude),
+          parseFloat(tech.latitude),
+          parseFloat(tech.longitude)
+        );
+        
+        return distance <= maxDistance;
+      });
+    }
+
+    return availableTechnicians;
+  }
+
+  // Haversine formula for calculating distance between two GPS coordinates
+  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = this.toRadians(lat2 - lat1);
+    const dLon = this.toRadians(lon2 - lon1);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  private toRadians(degrees: number): number {
+    return degrees * (Math.PI/180);
+  }
     assignedTechnician?: EmployeeProfile & { user: User };
     reason?: string;
   }> {
