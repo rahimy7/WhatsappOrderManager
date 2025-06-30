@@ -2,84 +2,141 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedAutoResponses } from "./seed-auto-responses";
-import { getStoreInfo, getTenantDb } from "./multi-tenant-db";
+import { getStoreInfo, getTenantDb, masterDb } from "./multi-tenant-db";
 
 const app = express();
 
 // CRITICAL: Super admin validation endpoint MUST be registered BEFORE any middleware
 app.get('/api/super-admin/stores/:id/validate', async (req, res) => {
   try {
-    console.log('=== VALIDANDO TIENDA (DIRECT ENDPOINT) ===');
+    console.log('=== VALIDACIÓN COMPLETA DE ECOSISTEMA MULTI-TENANT ===');
     const storeId = parseInt(req.params.id);
     console.log('Store ID:', storeId);
     
-    // Obtener información de la tienda directamente desde master DB
-    console.log('Obteniendo información de la tienda desde master DB...');
+    // Obtener información de la tienda desde master DB
     const store = await getStoreInfo(storeId);
-    console.log('Store info:', store);
     
     if (!store) {
-      console.log('Tienda no encontrada');
       return res.status(404).json({ 
         valid: false, 
-        message: 'Tienda no encontrada' 
+        message: 'Tienda no encontrada en base de datos global' 
       });
     }
 
-    // Validar que la tienda esté activa
-    console.log('Store active?', store.isActive);
-    if (!store.isActive) {
-      console.log('Tienda inactiva');
-      return res.json({
-        valid: false,
-        message: 'Tienda inactiva - No se puede validar',
-        details: {
-          store: store.name,
-          status: 'inactive'
-        }
-      });
-    }
+    console.log(`Validando tienda: ${store.name}`);
 
-    // Intentar obtener la base de datos de la tienda
-    console.log('Intentando obtener tenantDb...');
-    let tenantDb;
-    try {
-      tenantDb = await getTenantDb(storeId);
-      console.log('TenantDb obtenido exitosamente');
-    } catch (error) {
-      console.error('Error al obtener tenantDb:', error);
-      return res.json({
-        valid: false,
-        message: 'Error al conectar con la base de datos de la tienda',
-        details: {
-          store: store.name,
-          error: 'Database connection failed'
-        }
-      });
-    }
-
-    // Validación simplificada exitosa
-    console.log('Validación completada exitosamente');
-    
-    res.json({
-      valid: true,
-      message: `Ecosistema de ${store.name} completamente funcional`,
-      details: {
-        store: store.name,
-        storeId: storeId,
-        isActive: store.isActive,
-        validationResults: {
-          tablesExist: true,
-          configExists: true,
-          autoResponsesExist: true,
-          errors: []
-        }
+    const validationResults = {
+      store: store.name,
+      storeId: storeId,
+      isActive: store.isActive,
+      architecture: 'ANÁLISIS CRÍTICO',
+      issues: [] as string[],
+      recommendations: [] as string[],
+      databaseStructure: {
+        global: { status: '', tables: [] as string[] },
+        tenant: { status: '', tables: [] as string[], exists: false }
       }
+    };
+
+    // 1. Verificar estructura de BD Global
+    console.log('1. Verificando estructura de BD Global...');
+    try {
+      const globalTables = await masterDb.execute(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        ORDER BY table_name
+      `);
+      
+      const globalTableNames = globalTables.rows.map(row => row.table_name as string);
+      validationResults.databaseStructure.global.tables = globalTableNames;
+      
+      // Verificar si tenemos tablas que NO deberían estar en BD global
+      const tenantTables = [
+        'users', 'customers', 'products', 'orders', 'order_items', 
+        'conversations', 'messages', 'auto_responses', 'store_settings',
+        'whatsapp_settings', 'notifications', 'assignment_rules',
+        'customer_history', 'shopping_cart', 'whatsapp_logs'
+      ];
+      
+      const incorrectTablesInGlobal = tenantTables.filter(table => 
+        globalTableNames.includes(table)
+      );
+      
+      if (incorrectTablesInGlobal.length > 0) {
+        validationResults.issues.push(
+          `❌ ARQUITECTURA INCORRECTA: ${incorrectTablesInGlobal.length} tablas de tienda encontradas en BD global`
+        );
+        validationResults.issues.push(
+          `Tablas problemáticas: ${incorrectTablesInGlobal.join(', ')}`
+        );
+        validationResults.recommendations.push(
+          'Migrar datos a bases de datos separadas por tienda'
+        );
+      }
+
+      validationResults.databaseStructure.global.status = 
+        incorrectTablesInGlobal.length > 0 ? 'ESTRUCTURA INCORRECTA' : 'Correcta';
+        
+    } catch (error) {
+      validationResults.issues.push('Error al verificar BD global');
+    }
+
+    // 2. Verificar si existe BD separada para la tienda
+    console.log('2. Verificando BD separada para la tienda...');
+    try {
+      // Intentar conectar a la BD específica de la tienda
+      if (store.databaseUrl && store.databaseUrl !== process.env.DATABASE_URL) {
+        const tenantDb = await getTenantDb(storeId);
+        
+        const tenantTables = await tenantDb.execute(`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          ORDER BY table_name
+        `);
+        
+        validationResults.databaseStructure.tenant.exists = true;
+        validationResults.databaseStructure.tenant.tables = 
+          tenantTables.rows.map(row => row.table_name as string);
+        validationResults.databaseStructure.tenant.status = 'BD separada existe';
+        
+      } else {
+        validationResults.databaseStructure.tenant.exists = false;
+        validationResults.databaseStructure.tenant.status = 
+          'BD separada NO existe - usando BD global';
+        validationResults.issues.push(
+          '❌ CRITICAL: Tienda usa la misma BD que el sistema global'
+        );
+        validationResults.recommendations.push(
+          'Crear BD separada para la tienda y migrar datos'
+        );
+      }
+    } catch (error) {
+      validationResults.issues.push('Error al verificar BD de tienda');
+    }
+
+    // 3. Determinar si la arquitectura es correcta
+    const isArchitectureCorrect = 
+      validationResults.issues.length === 0 &&
+      validationResults.databaseStructure.tenant.exists;
+
+    // 4. Generar mensaje final
+    let message;
+    if (isArchitectureCorrect) {
+      message = `✅ Ecosistema multi-tenant de ${store.name} correctamente configurado`;
+    } else {
+      message = `⚠️ PROBLEMA DETECTADO: ${store.name} NO tiene arquitectura multi-tenant correcta`;
+    }
+
+    res.json({
+      valid: isArchitectureCorrect,
+      message: message,
+      details: validationResults
     });
 
   } catch (error) {
-    console.error('=== ERROR EN VALIDACIÓN (DIRECT ENDPOINT) ===');
-    console.error('Error validating store ecosystem:', error);
+    console.error('Error en validación completa:', error);
     res.status(500).json({ 
       valid: false, 
       message: 'Error interno durante la validación',
