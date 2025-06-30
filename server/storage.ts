@@ -2660,19 +2660,28 @@ export class DatabaseStorage implements IStorage {
     maxDistance?: number, 
     customerLocation?: { latitude: string; longitude: string }
   ): Promise<(EmployeeProfile & { user: User })[]> {
-    // Get all technicians who are active
-    const techniciansWithUsers = await db.select({
-      profile: employeeProfiles,
-      user: users
-    })
-    .from(employeeProfiles)
-    .innerJoin(users, eq(employeeProfiles.userId, users.id))
-    .where(
-      and(
-        eq(users.status, 'active'),
-        eq(employeeProfiles.role, 'technical')
-      )
-    );
+    try {
+      console.log('🔍 Getting available technicians with criteria:', { specializations, maxDistance, customerLocation });
+      
+      // Get all technicians who are active
+      const techniciansWithUsers = await db.select({
+        profile: employeeProfiles,
+        user: users
+      })
+      .from(employeeProfiles)
+      .innerJoin(users, eq(employeeProfiles.userId, users.id))
+      .where(
+        and(
+          eq(users.status, 'active'),
+          eq(employeeProfiles.department, 'technical')
+        )
+      );
+      
+      console.log('✅ Found technicians:', techniciansWithUsers.length);
+    } catch (error) {
+      console.error('❌ SQL Error in getAvailableTechnicians:', error);
+      throw error;
+    }
 
     let availableTechnicians = techniciansWithUsers.map(({ profile, user }) => ({
       ...profile,
