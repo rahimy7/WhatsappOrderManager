@@ -39,12 +39,18 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
           rawData: JSON.stringify(message)
         });
 
-        // Send a simple test response
+        // Send a simple test response using token from database
         try {
-          const response = await fetch(`https://graph.facebook.com/v21.0/667993026397854/messages`, {
+          // Get WhatsApp config from database
+          const config = await storage.getWhatsAppConfig();
+          if (!config) {
+            throw new Error('No WhatsApp configuration found');
+          }
+
+          const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
             method: 'POST',
             headers: {
-              'Authorization': 'Bearer EAAKHVoxT6IUBOZCBvpyAorwxPe1O6HXxTuh6xVZCODMQvdORgN6g9q4ujC1bV2stIx4CzgiWeSGaZBNproRbWUUrHcZADXyKxjOcvxNwiEV3SeZC6uP8Nun0fJBikTilZAH5EfGeGZAcuNThZCCwBIyybmk15imXP1Ly3P2YVnmj2cl3GSOviX5gXHZClaOVom0u8NakjR1Xm9gscFpmyHZBSkP9kCctFZC2xVQDp2vRTqF3s5BM8PD4cLMyJy44J39ZCx25',
+              'Authorization': `Bearer ${config.accessToken}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({

@@ -390,7 +390,9 @@ export default function Settings() {
                     <strong>Token de WhatsApp Expirado</strong> - El token actual expiró el 26 de junio de 2025.
                     <br />
                     <span className="text-sm mt-2 block">
-                      Para renovarlo: Ve a Meta Developer Console → Tu App → WhatsApp → API Setup → Genera un nuevo token de 60 días.
+                      Para renovarlo: Ve a Meta Developer Console → Tu App → WhatsApp → API Setup → Genera un nuevo token.
+                      <br />
+                      El sistema está recibiendo mensajes correctamente pero no puede responder hasta renovar el token.
                     </span>
                   </AlertDescription>
                 </Alert>
