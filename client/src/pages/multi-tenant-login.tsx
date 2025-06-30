@@ -32,31 +32,16 @@ export default function MultiTenantLogin() {
     setError("");
 
     try {
-      // Si es super admin, no enviamos companyId
-      const loginData = loginMode === "super_admin" 
-        ? { username: data.username, password: data.password }
-        : data;
-
-      const response = await apiRequest("POST", "/api/auth/login", loginData);
+      const companyId = loginMode === "super_admin" ? undefined : data.companyId;
       
-      if (response.success) {
-        localStorage.setItem("token", response.token);
-        localStorage.setItem("user", JSON.stringify(response.user));
-        
-        toast({
-          title: "Inicio de sesión exitoso",
-          description: `Bienvenido ${response.user.name}`,
-        });
+      await login(data.username, data.password, companyId);
+      
+      toast({
+        title: "Inicio de sesión exitoso",
+        description: "Bienvenido al sistema",
+      });
 
-        // Redireccionar según el tipo de usuario
-        if (response.user.role === "super_admin") {
-          window.location.href = "/super-admin-dashboard";
-        } else {
-          window.location.href = "/";
-        }
-      } else {
-        setError(response.message || "Error en el inicio de sesión");
-      }
+      // La redirección la maneja el contexto de autenticación automáticamente
     } catch (error: any) {
       setError(error.message || "Error de conexión");
       toast({
