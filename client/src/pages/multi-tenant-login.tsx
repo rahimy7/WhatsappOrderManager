@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { loginSchema, type LoginRequest } from "@shared/auth";
-import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Building2, Shield, User } from "lucide-react";
 
 export default function MultiTenantLogin() {
@@ -16,6 +16,7 @@ export default function MultiTenantLogin() {
   const [error, setError] = useState<string>("");
   const [loginMode, setLoginMode] = useState<"tenant" | "super_admin">("tenant");
   const { toast } = useToast();
+  const { login } = useAuth();
 
   const form = useForm<LoginRequest>({
     resolver: zodResolver(loginSchema),

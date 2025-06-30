@@ -44,7 +44,7 @@ function ProtectedRoute({ component: Component, permission }: { component: React
   }
 
   if (!user) {
-    return <Login />;
+    return <MultiTenantLogin />;
   }
 
   if (permission && !hasPermission(user.role, permission)) {
@@ -124,13 +124,13 @@ function AppWithAuth() {
       {/* Rutas públicas sin layout */}
       <Route path="/public-catalog" component={PublicCatalogClean} />
       <Route path="/simple-catalog" component={SimpleCatalog} />
-      <Route path="/login" component={Login} />
+      <Route path="/login" component={MultiTenantLogin} />
       <Route path="/multi-tenant-login" component={MultiTenantLogin} />
       
       {/* Rutas que requieren autenticación con layout */}
       <Route>
         {!user ? (
-          <Login />
+          <MultiTenantLogin />
         ) : (
           <AppLayout>
             <Router />

@@ -5,7 +5,7 @@ import { apiRequest } from '@/lib/queryClient';
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, companyId?: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -44,11 +44,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const login = async (username: string, password: string) => {
-    const response = await apiRequest('POST', '/api/auth/login', {
-      username,
-      password,
-    });
+  const login = async (username: string, password: string, companyId?: string) => {
+    const loginData = companyId 
+      ? { username, password, companyId }
+      : { username, password };
+      
+    const response = await apiRequest('POST', '/api/auth/login', loginData);
 
     if (!response.ok) {
       const error = await response.json();
