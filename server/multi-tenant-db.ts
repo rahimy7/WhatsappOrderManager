@@ -34,7 +34,7 @@ export async function getTenantDb(storeId: number): Promise<any> {
   const [store] = await masterDb
     .select()
     .from(schema.virtualStores)
-    .where(schema.virtualStores.id.eq(storeId))
+    .where(eq(schema.virtualStores.id, storeId))
     .limit(1);
 
   if (!store) {
