@@ -30,6 +30,9 @@ import StoreManagement from "@/pages/store-management";
 import MultiTenantLogin from "@/pages/multi-tenant-login";
 import SuperAdminDashboard from "@/pages/super-admin-dashboard";
 import GlobalUsersManagement from "@/pages/global-users-management";
+import GlobalDashboard from "@/pages/super-admin/global-dashboard";
+import StoresManagement from "@/pages/super-admin/stores-management";
+import GlobalSettings from "@/pages/super-admin/global-settings";
 import AppLayout from "@/components/layout/app-layout";
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -98,6 +101,9 @@ function Router() {
       <Route path="/store-management" component={() => <ProtectedRoute component={StoreManagement} permission="manage_settings" />} />
       <Route path="/super-admin-dashboard" component={() => <ProtectedRoute component={SuperAdminDashboard} permission="super_admin" />} />
       <Route path="/global-users-management" component={() => <ProtectedRoute component={GlobalUsersManagement} permission="super_admin" />} />
+      <Route path="/super-admin/dashboard" component={() => <ProtectedRoute component={GlobalDashboard} permission="super_admin" />} />
+      <Route path="/super-admin/stores" component={() => <ProtectedRoute component={StoresManagement} permission="super_admin" />} />
+      <Route path="/super-admin/settings" component={() => <ProtectedRoute component={GlobalSettings} permission="super_admin" />} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/public-catalog" component={PublicCatalogClean} />
       <Route path="/cart" component={Cart} />
