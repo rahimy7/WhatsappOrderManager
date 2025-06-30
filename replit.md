@@ -600,6 +600,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Manejo de botones interactivos (track_order, edit_order, new_order, remove_products, cancel_order, back_to_menu)
   - Integración perfecta con sistema de segmentación de conversaciones existente
   - Experiencia optimizada para clientes recurrentes con gestión completa de pedidos activos
+- June 30, 2025. SISTEMA DE ENRUTAMIENTO DE MENSAJES WHATSAPP POR TIENDA IMPLEMENTADO:
+  - Cada tienda puede configurar su número de WhatsApp para recibir mensajes en Configuración → WhatsApp para Pedidos
+  - Campo "storeWhatsAppNumber" agregado a configuración de tienda para especificar número de contacto
+  - Sistema preparado para enrutar mensajes entrantes a la base de datos correcta según número receptor
+  - Interfaz clara en configuración con placeholder: "5215512345678" (incluir código país 52)
+  - Instrucciones específicas para usuarios: número donde se enviarán pedidos del catálogo público
+  - Dashboard principal restaurado para administradores regulares (separado de super admin)
+  - Menú "Dashboard Principal" agregado a sidebar para administradores con exclusión de super admin y técnicos
+  - Corrección de routing: administradores ahora van a dashboard en lugar de conversaciones directamente
 - June 30, 2025. SISTEMA DE GENERACIÓN AUTOMÁTICA DE CREDENCIALES COMPLETAMENTE OPERACIONAL:
   - Generación automática de username único basado en email (maria.garcia@ejemplo.com → maria.garcia)
   - Contraseñas temporales seguras con algoritmo robusto usando caracteres alfanuméricos y símbolos
