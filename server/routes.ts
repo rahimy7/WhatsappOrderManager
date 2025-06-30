@@ -5858,6 +5858,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Resetear contraseña de usuario
+  app.post('/api/super-admin/users/:id/reset-password', requireSuperAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+
+      // Verificar que el usuario existe
+      const user = await masterDb
+        .select()
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.id, userId))
+        .limit(1);
+
+      if (user.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Generar nueva contraseña temporal
+      const newPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Actualizar la contraseña en la base de datos
+      await masterDb
+        .update(schema.systemUsers)
+        .set({ password: hashedPassword })
+        .where(eq(schema.systemUsers.id, userId));
+
+      res.json({ 
+        message: 'Password reset successfully',
+        newPassword: newPassword
+      });
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
   // ====== SUPER ADMIN ENDPOINTS ======
   
   // Super Admin Dashboard Metrics
