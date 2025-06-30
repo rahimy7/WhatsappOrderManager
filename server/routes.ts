@@ -5194,28 +5194,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Crear usuario global
+  // Crear usuario propietario/administrador de tienda
   app.post('/api/super-admin/users', async (req, res) => {
     try {
-      const validatedData = insertSystemUserSchema.parse(req.body);
-      
-      // Hash de la contraseña
-      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
-      
+      const { name, email, phone, role, storeId, sendInvitation, invitationMessage } = req.body;
+
+      // Validar que la tienda existe
+      const store = await masterDb
+        .select()
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, storeId))
+        .limit(1);
+
+      if (!store.length) {
+        return res.status(400).json({ error: 'Tienda no encontrada' });
+      }
+
+      // Verificar si el email ya existe
+      const existingUser = await masterDb
+        .select()
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.email, email))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        return res.status(400).json({ error: 'Ya existe un usuario con este email' });
+      }
+
+      // Generar username automáticamente desde el email
+      const username = email.split('@')[0].toLowerCase();
+
+      // Generar contraseña temporal aleatoria
+      const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+      // Crear el usuario
       const [user] = await masterDb
         .insert(schema.systemUsers)
         .values({
-          ...validatedData,
+          username,
+          name,
+          email,
+          phone: phone || null,
+          role,
+          storeId,
           password: hashedPassword,
+          isActive: true,
         })
         .returning();
 
+      // Si se solicita envío de invitación, simular el envío del email
+      let invitationSent = false;
+      if (sendInvitation) {
+        try {
+          // En producción, aquí se enviaría un email real
+          console.log(`=== INVITACIÓN POR EMAIL ===`);
+          console.log(`Para: ${email}`);
+          console.log(`Nombre: ${name}`);
+          console.log(`Tienda: ${store[0].name}`);
+          console.log(`Rol: ${role === 'store_owner' ? 'Propietario de Tienda' : 'Administrador de Tienda'}`);
+          console.log(`Usuario: ${username}`);
+          console.log(`Contraseña temporal: ${tempPassword}`);
+          console.log(`Mensaje: ${invitationMessage || 'Bienvenido al sistema'}`);
+          console.log(`==========================`);
+          
+          invitationSent = true;
+        } catch (emailError) {
+          console.error('Error enviando invitación:', emailError);
+          // No fallar la creación del usuario si falla el email
+        }
+      }
+
       // Remover password del response
       const { password, ...userResponse } = user;
-      res.status(201).json(userResponse);
+      
+      res.status(201).json({
+        ...userResponse,
+        storeName: store[0].name,
+        tempPassword: tempPassword, // Solo para pruebas, en producción no se devolvería
+        invitationSent,
+      });
+
     } catch (error) {
-      console.error('Error creating system user:', error);
-      res.status(500).json({ error: 'Failed to create user' });
+      console.error('Error creating user:', error);
+      res.status(500).json({ error: 'Error al crear usuario' });
+    }
+  });
+
+  // Obtener métricas de usuarios
+  app.get('/api/super-admin/user-metrics', async (req, res) => {
+    try {
+      const users = await masterDb.select().from(schema.systemUsers);
+      
+      const totalUsers = users.length;
+      const activeUsers = users.filter(user => user.isActive).length;
+      const storeOwners = users.filter(user => user.role === 'store_owner').length;
+      const superAdmins = users.filter(user => user.role === 'super_admin').length;
+      const suspendedUsers = users.filter(user => !user.isActive).length;
+      
+      // Usuarios nuevos este mes
+      const currentMonth = new Date();
+      currentMonth.setDate(1);
+      currentMonth.setHours(0, 0, 0, 0);
+      const newUsersThisMonth = users.filter(user => 
+        user.createdAt && new Date(user.createdAt) >= currentMonth
+      ).length;
+
+      const metrics = {
+        totalUsers,
+        activeUsers,
+        storeOwners,
+        superAdmins,
+        suspendedUsers,
+        newUsersThisMonth,
+      };
+
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error fetching user metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch user metrics' });
     }
   });
 
