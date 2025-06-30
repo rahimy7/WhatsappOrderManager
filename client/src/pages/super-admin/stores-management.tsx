@@ -157,7 +157,7 @@ export default function StoresManagement() {
 
   const handleValidateStore = async (storeId: number) => {
     try {
-      const response = await apiRequest("GET", `/api/admin/stores/${storeId}/validate`);
+      const response = await apiRequest("GET", `/api/super-admin/stores/${storeId}/validate`);
       const validation = await response.json();
       
       if (!validation.valid) {

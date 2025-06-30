@@ -5813,8 +5813,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Validate Store Ecosystem
-  app.get('/api/admin/stores/:id/validate', async (req, res) => {
+  // Validate Store Ecosystem (without tenant middleware)
+  app.get('/api/super-admin/stores/:id/validate', async (req, res) => {
     try {
       const storeId = parseInt(req.params.id);
       
@@ -5916,7 +5916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create/Repair Store Ecosystem
-  app.post('/api/admin/stores/:id/repair', async (req, res) => {
+  app.post('/api/super-admin/stores/:id/repair', async (req, res) => {
     try {
       const storeId = parseInt(req.params.id);
       
