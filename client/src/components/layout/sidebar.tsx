@@ -63,6 +63,15 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   // Configurar elementos del menú basado en el rol del usuario
   const allNavItems: NavItem[] = [
+    // Dashboard principal para administradores regulares
+    {
+      href: "/",
+      icon: ChartLine,
+      label: "Dashboard Principal",
+      badge: null,
+      permission: "view_dashboard",
+      excludeRoles: ["super_admin", "technician"], // Excluir super admin y técnicos
+    },
     // Items básicos para todos los roles
     {
       href: "/orders",
