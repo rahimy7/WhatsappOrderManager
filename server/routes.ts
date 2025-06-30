@@ -201,10 +201,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validar acceso según tipo de usuario
       if (user.role === 'super_admin') {
-        // Super admin puede acceder sin companyId
-        if (companyId) {
-          return res.status(400).json({ message: "Super admin no requiere ID de empresa" });
-        }
+        // Super admin puede acceder sin companyId - no se requiere validación adicional
+        console.log(`Super admin login: ${username}`);
       } else {
         // Usuarios regulares requieren companyId
         if (!companyId) {
@@ -212,6 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         // Aquí podrías validar que el usuario pertenece a la empresa especificada
         // Por ahora, simplemente almacenamos el companyId en el token
+        console.log(`Tenant user login: ${username} for company: ${companyId}`);
       }
 
       // Generar token JWT
