@@ -2678,41 +2678,43 @@ export class DatabaseStorage implements IStorage {
       );
       
       console.log('✅ Found technicians:', techniciansWithUsers.length);
+
+      let availableTechnicians = techniciansWithUsers.map(({ profile, user }) => ({
+        ...profile,
+        user
+      }));
+
+      // Filter by specializations if provided
+      if (specializations && specializations.length > 0) {
+        availableTechnicians = availableTechnicians.filter(tech => {
+          const techSpecs = tech.specializations || [];
+          return specializations.some(spec => techSpecs.includes(spec));
+        });
+      }
+
+      // Filter by distance if location and maxDistance provided
+      if (customerLocation && maxDistance) {
+        availableTechnicians = availableTechnicians.filter(tech => {
+          if (!tech.baseLatitude || !tech.baseLongitude) return false;
+          
+          const distance = this.calculateDistance(
+            parseFloat(customerLocation.latitude),
+            parseFloat(customerLocation.longitude),
+            parseFloat(tech.baseLatitude),
+            parseFloat(tech.baseLongitude)
+          );
+          
+          return distance <= maxDistance;
+        });
+      }
+
+      console.log('🎯 Filtered technicians:', availableTechnicians.length);
+      return availableTechnicians;
+      
     } catch (error) {
       console.error('❌ SQL Error in getAvailableTechnicians:', error);
       throw error;
     }
-
-    let availableTechnicians = techniciansWithUsers.map(({ profile, user }) => ({
-      ...profile,
-      user
-    }));
-
-    // Filter by specializations if provided
-    if (specializations && specializations.length > 0) {
-      availableTechnicians = availableTechnicians.filter(tech => {
-        const techSpecs = tech.specializations || [];
-        return specializations.some(spec => techSpecs.includes(spec));
-      });
-    }
-
-    // Filter by distance if location and maxDistance provided
-    if (customerLocation && maxDistance) {
-      availableTechnicians = availableTechnicians.filter(tech => {
-        if (!tech.latitude || !tech.longitude) return false;
-        
-        const distance = this.calculateDistance(
-          parseFloat(customerLocation.latitude),
-          parseFloat(customerLocation.longitude),
-          parseFloat(tech.latitude),
-          parseFloat(tech.longitude)
-        );
-        
-        return distance <= maxDistance;
-      });
-    }
-
-    return availableTechnicians;
   }
 
   // Haversine formula for calculating distance between two GPS coordinates
