@@ -86,6 +86,30 @@ const createUserSchema = z.object({
 
 type CreateUserForm = z.infer<typeof createUserSchema>;
 
+// Schema para editar usuario
+const editUserSchema = z.object({
+  name: z.string().min(2, {
+    message: "El nombre debe tener al menos 2 caracteres",
+  }),
+  email: z.string().email({
+    message: "Email inválido",
+  }),
+  phone: z.string().min(10, {
+    message: "Teléfono debe tener al menos 10 dígitos",
+  }),
+  role: z.enum(["store_admin", "store_owner", "super_admin"], {
+    required_error: "Rol requerido",
+  }),
+  status: z.enum(["active", "inactive", "suspended"], {
+    required_error: "Estado requerido",
+  }),
+  storeId: z.number({
+    required_error: "Tienda requerida",
+  }),
+});
+
+type EditUserForm = z.infer<typeof editUserSchema>;
+
 export default function SuperAdminUsers() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -93,7 +117,9 @@ export default function SuperAdminUsers() {
   const [selectedUser, setSelectedUser] = useState<StoreOwner | null>(null);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCredentialsDialogOpen, setIsCredentialsDialogOpen] = useState(false);
+  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
   const [userCredentials, setUserCredentials] = useState<{
     name: string;
     email: string;
@@ -117,6 +143,19 @@ export default function SuperAdminUsers() {
       role: "store_admin",
       sendInvitation: true,
       invitationMessage: "",
+    },
+  });
+
+  // Formulario para editar usuario
+  const editForm = useForm<EditUserForm>({
+    resolver: zodResolver(editUserSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      role: "store_admin",
+      status: "active",
+      storeId: 1,
     },
   });
 
@@ -215,6 +254,62 @@ export default function SuperAdminUsers() {
     },
   });
 
+  // Mutación para editar usuario
+  const editUserMutation = useMutation({
+    mutationFn: async (data: EditUserForm & { id: number }) => {
+      return apiRequest("PUT", `/api/super-admin/users/${data.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/user-metrics"] });
+      setIsEditDialogOpen(false);
+      editForm.reset();
+      setSelectedUser(null);
+      toast({
+        title: "Usuario actualizado",
+        description: "La información del usuario ha sido actualizada exitosamente",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el usuario",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutación para resetear contraseña
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      return apiRequest("POST", `/api/super-admin/users/${userId}/reset-password`);
+    },
+    onSuccess: (response: any) => {
+      setUserCredentials({
+        name: selectedUser?.name || "",
+        email: selectedUser?.email || "",
+        username: selectedUser?.username || "",
+        tempPassword: response.newPassword,
+        storeName: selectedUser?.storeName || "",
+        role: selectedUser?.role || "",
+        invitationSent: false,
+      });
+      setIsResetPasswordDialogOpen(false);
+      setIsCredentialsDialogOpen(true);
+      toast({
+        title: "Contraseña restablecida",
+        description: "Se ha generado una nueva contraseña temporal",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo restablecer la contraseña",
+        variant: "destructive",
+      });
+    },
+  });
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
@@ -264,6 +359,36 @@ export default function SuperAdminUsers() {
   const handleViewDetails = (user: StoreOwner) => {
     setSelectedUser(user);
     setIsDetailsDialogOpen(true);
+  };
+
+  const handleEditUser = (user: StoreOwner) => {
+    setSelectedUser(user);
+    editForm.reset({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role as any,
+      status: user.status as any,
+      storeId: user.storeId || 1,
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditUserSubmit = (data: EditUserForm) => {
+    if (selectedUser) {
+      editUserMutation.mutate({ ...data, id: selectedUser.id });
+    }
+  };
+
+  const handleResetPassword = (user: StoreOwner) => {
+    setSelectedUser(user);
+    setIsResetPasswordDialogOpen(true);
+  };
+
+  const confirmResetPassword = () => {
+    if (selectedUser) {
+      resetPasswordMutation.mutate(selectedUser.id);
+    }
   };
 
   if (metricsLoading || usersLoading) {
@@ -665,7 +790,11 @@ export default function SuperAdminUsers() {
                     <Eye className="h-4 w-4 mr-2" />
                     Ver Detalles
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleEditUser(user)}
+                  >
                     <Edit className="h-4 w-4 mr-2" />
                     Editar
                   </Button>
