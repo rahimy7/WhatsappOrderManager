@@ -541,10 +541,16 @@ export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 // Store configuration table
 export const storeSettings = pgTable("store_settings", {
   id: serial("id").primaryKey(),
+  storeId: integer("store_id").references(() => virtualStores.id),
   storeWhatsAppNumber: text("store_whatsapp_number").notNull(),
   storeName: text("store_name").notNull(),
   storeAddress: text("store_address"),
   storeEmail: text("store_email"),
+  businessHours: text("business_hours").default("09:00-18:00"),
+  deliveryRadius: text("delivery_radius").default("50"),
+  baseSiteUrl: text("base_site_url"),
+  enableNotifications: boolean("enable_notifications").default(true),
+  autoAssignOrders: boolean("auto_assign_orders").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

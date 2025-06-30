@@ -56,21 +56,54 @@ export async function getTenantDb(storeId: number): Promise<any> {
 }
 
 /**
- * Crea una nueva base de datos para una tienda virtual
- * Esto incluye crear el esquema completo y configuraciones predeterminadas
+ * Crea configuraciones predeterminadas para una tienda virtual
+ * NOTA: Actualmente todas las tiendas usan la misma BD con filtros por storeId
+ * En el futuro esto se migrará a bases de datos separadas
  */
 export async function createTenantDatabase(store: VirtualStore): Promise<string> {
   try {
-    // Generar URL de base de datos (en producción, esto sería una nueva base de datos)
-    const databaseUrl = process.env.DATABASE_URL + `?schema=store_${store.id}`;
+    console.log(`Configurando tienda: ${store.name} (ID: ${store.id})`);
     
-    // Copiar configuraciones predeterminadas desde la base de datos maestra
+    // IMPORTANTE: Actualmente usamos la misma BD para todas las tiendas
+    // Esto es temporal hasta que implementemos verdaderas BDs separadas
+    const databaseUrl = store.databaseUrl || process.env.DATABASE_URL;
+    
+    // Verificar si la tienda ya tiene configuraciones
+    const existingSettings = await masterDb
+      .select()
+      .from(schema.storeSettings)
+      .where(eq(schema.storeSettings.storeId, store.id))
+      .limit(1);
+    
+    if (existingSettings.length === 0) {
+      console.log(`Creando configuraciones iniciales para tienda ${store.id}`);
+      
+      // Crear configuración inicial única para esta tienda
+      await masterDb.insert(schema.storeSettings).values({
+        storeId: store.id,
+        storeWhatsAppNumber: store.whatsappNumber || `+52 55 ${store.id}000 0000`,
+        storeName: store.name,
+        storeAddress: store.address || '',
+        storeEmail: 'contacto@tienda.com', // Valor por defecto
+        businessHours: '09:00-18:00',
+        deliveryRadius: '50',
+        baseSiteUrl: `https://${process.env.REPL_SLUG || 'localhost:5000'}.replit.dev`,
+        enableNotifications: true,
+        autoAssignOrders: true,
+      });
+      
+      console.log(`Configuraciones base creadas para tienda ${store.id}`);
+    } else {
+      console.log(`Tienda ${store.id} ya tiene configuraciones, saltando creación`);
+    }
+    
+    // Copiar/crear configuraciones predeterminadas
     await copyDefaultConfigurationsToTenant(store.id);
     
-    console.log(`Database created for store: ${store.name} with default configurations`);
+    console.log(`Setup completed for store: ${store.name}`);
     return databaseUrl;
   } catch (error) {
-    console.error(`Failed to create database for store ${store.id}:`, error);
+    console.error(`Failed to setup store ${store.id}:`, error);
     throw error;
   }
 }
@@ -114,38 +147,76 @@ export async function copyDefaultConfigurationsToTenant(storeId: number): Promis
       console.log(`Copied ${responsesToInsert.length} auto responses to store ${storeId}`);
     }
     
-    // Copiar productos base/plantilla (opcional)
-    const defaultProducts = await masterDb.select().from(schema.products).limit(3); // Solo productos base
-    if (defaultProducts.length > 0) {
-      const productsToInsert = defaultProducts.map(product => ({
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        category: product.category,
-        type: product.type,
-        isActive: product.isActive,
-        sku: `${storeId}-${product.sku}`, // Hacer SKU único por tienda
-        stock: product.stock,
-        imageUrl: product.imageUrl,
-        specifications: product.specifications,
-        installationCost: product.installationCost,
-        warrantyMonths: product.warrantyMonths,
-      }));
+    // Verificar si ya existen productos para esta tienda (evitar duplicados)
+    const existingProducts = await tenantDb.select().from(schema.products).limit(1);
+    
+    if (existingProducts.length === 0) {
+      // Crear productos base únicos para esta tienda
+      const baseProducts = [
+        {
+          name: "Instalación de Aire Acondicionado",
+          description: "Instalación profesional de equipos de aire acondicionado",
+          price: "2500.00",
+          category: "servicios",
+          type: "service",
+          isActive: true,
+          sku: `STORE${storeId}-INSTALL-AC-001`,
+          stock: null,
+          imageUrl: null,
+          specifications: "Instalación completa con materiales básicos",
+          installationCost: "0.00",
+          warrantyMonths: 12,
+        },
+        {
+          name: "Mini Split 12,000 BTU Inverter",
+          description: "Aire acondicionado mini split inverter de alta eficiencia",
+          price: "8500.00", 
+          category: "electrodomesticos",
+          type: "product",
+          isActive: true,
+          sku: `STORE${storeId}-AC-12K-001`,
+          stock: 10,
+          imageUrl: null,
+          specifications: "12,000 BTU, Inverter, R410A",
+          installationCost: "1500.00",
+          warrantyMonths: 24,
+        },
+        {
+          name: "Servicio de Mantenimiento",
+          description: "Mantenimiento preventivo de equipos de refrigeración",
+          price: "800.00",
+          category: "servicios", 
+          type: "service",
+          isActive: true,
+          sku: `STORE${storeId}-MAINT-001`,
+          stock: null,
+          imageUrl: null,
+          specifications: "Limpieza, revisión y ajustes",
+          installationCost: "0.00",
+          warrantyMonths: 3,
+        }
+      ];
       
-      await tenantDb.insert(schema.products).values(productsToInsert);
-      console.log(`Copied ${productsToInsert.length} base products to store ${storeId}`);
+      await tenantDb.insert(schema.products).values(baseProducts);
+      console.log(`Created ${baseProducts.length} base products for store ${storeId}`);
+    } else {
+      console.log(`Store ${storeId} already has products, skipping product creation`);
     }
     
-    // Crear configuración inicial de la tienda
-    const defaultSettings = {
-      storeWhatsAppNumber: store.whatsappNumber || '+52 55 0000 0000',
-      businessHours: '09:00-18:00',
-      deliveryRadius: '50', // km
-      baseSiteUrl: `https://${process.env.REPL_SLUG || 'localhost:5000'}.replit.dev`,
-      enableNotifications: true,
-      autoAssignOrders: true,
-    };
+    console.log(`Configurations copied successfully for store ${storeId}`);
     
+  } catch (error) {
+    console.error(`Failed to copy default configurations to store ${storeId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * DEPRECATED: Esta función será reemplazada por configuraciones separadas
+ * Mantenida temporalmente para compatibilidad
+ */
+async function createLegacyStoreSettings(storeId: number) {
+  try {
     // Obtener información de la tienda desde la base de datos maestra
     const [storeInfo] = await masterDb
       .select()
@@ -154,12 +225,9 @@ export async function copyDefaultConfigurationsToTenant(storeId: number): Promis
       .limit(1);
     
     if (storeInfo) {
-      await tenantDb.insert(schema.storeSettings).values({
-        key: 'general_settings',
-        value: JSON.stringify(defaultSettings),
-      });
-      
-      console.log(`Created default settings for store ${storeId}`);
+      console.log(`Legacy settings for store ${storeId} - data available`);
+    } else {
+      console.log(`No store info found for store ${storeId}`);
     }
     
   } catch (error) {
