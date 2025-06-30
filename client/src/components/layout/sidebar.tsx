@@ -13,6 +13,16 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+interface NavItem {
+  href: string;
+  icon: any;
+  label: string;
+  badge: number | string | null;
+  permission: string;
+  roles?: string[];
+  excludeRoles?: string[];
+}
+
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const [location] = useLocation();
   const [isMobile, setIsMobile] = useState(false);
@@ -52,7 +62,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const unreadNotifications = notificationCounts.unread || 0;
 
   // Configurar elementos del menú basado en el rol del usuario
-  const allNavItems = [
+  const allNavItems: NavItem[] = [
     // Items básicos para todos los roles
     {
       href: "/dashboard",
@@ -92,13 +102,14 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       roles: ["technician"],
     },
 
-    // Items para managers y admins
+    // Items para managers y admins de tiendas individuales (NO para super admin)
     {
       href: "/team",
       icon: Users,
       label: "Equipo",
       badge: null,
       permission: "manage_users",
+      excludeRoles: ["super_admin"], // Excluir del super admin
     },
     {
       href: "/customers",
@@ -106,6 +117,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Clientes",
       badge: null,
       permission: "manage_users",
+      excludeRoles: ["super_admin"], // Excluir del super admin
     },
     {
       href: "/orders",
@@ -113,6 +125,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Órdenes/Pedidos",
       badge: null,
       permission: "manage_orders",
+      excludeRoles: ["super_admin"], // Excluir del super admin
     },
     {
       href: "/employees",
@@ -120,6 +133,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Empleados",
       badge: null,
       permission: "manage_users",
+      excludeRoles: ["super_admin"], // Excluir del super admin
     },
     {
       href: "/products",
@@ -127,6 +141,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Administrar Productos",
       badge: null,
       permission: "manage_orders",
+      excludeRoles: ["super_admin"], // Excluir del super admin
     },
     {
       href: "/catalog",
@@ -134,6 +149,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Catálogo",
       badge: null,
       permission: "view_products",
+      excludeRoles: ["super_admin"], // Excluir del super admin
     },
     {
       href: "/reports",
@@ -141,6 +157,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Reportes",
       badge: null,
       permission: "view_reports",
+      excludeRoles: ["super_admin"], // Excluir del super admin
     },
     // Items solo para super admins - 8 ventanas principales
     {
@@ -243,6 +260,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     
     // Si el item tiene roles específicos, verificar si el usuario tiene ese rol
     if (item.roles && !item.roles.includes(user.role)) {
+      return false;
+    }
+    
+    // Si el item tiene roles excluidos, verificar que el usuario NO tenga ese rol
+    if (item.excludeRoles && item.excludeRoles.includes(user.role)) {
       return false;
     }
     
