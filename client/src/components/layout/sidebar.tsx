@@ -161,7 +161,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     },
     // Items solo para super admins - 8 ventanas principales
     {
-      href: "/super-admin/dashboard",
+      href: "/",
       icon: Shield,
       label: "1️⃣ Panel de Control General",
       badge: null,

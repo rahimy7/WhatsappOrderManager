@@ -473,6 +473,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Conversaciones mantienen historial pero se desvinculan de órdenes eliminadas (order_id = null)
   - Sistema de eliminación seguro que preserva integridad referencial de la base de datos
   - Verificado funcionamiento correcto con múltiples órdenes de prueba eliminadas exitosamente
+- June 30, 2025. REORGANIZACIÓN DEL DASHBOARD DEL SUPERADMINISTRADOR COMPLETADA:
+  - Eliminadas opciones específicas de empresas individuales del sidebar del super admin (Equipo, Clientes, Empleados, Administrar Productos, Catálogo, Reportes de tienda)
+  - Implementado sistema de exclusión por roles (excludeRoles) para ocultar elementos de menú específicos para super_admin
+  - Reorganizada navegación para mostrar solo funciones globales: Panel de Control General, Tiendas Registradas, Suscripciones, Pedidos Globales, Usuarios/Propietarios, Reportes/Estadísticas, Soporte/Tickets, Configuración Global
+  - Configurado "Panel de Control General" como página principal para superadministradores (ruta raíz /)
+  - Simplificada experiencia de usuario para nivel de superadministrador con funciones administrativas centralizadas
+  - Sistema de navegación limpio enfocado en gestión multi-tenant y supervisión global del ecosistema de tiendas
 - June 29, 2025. MENSAJE DE ERROR "HUBO UN ERROR PROCESANDO TU PEDIDO" ELIMINADO COMPLETAMENTE:
   - Corregido error de schema en customer_registration_flows: cambio de customerData a collectedData
   - Agregado campo obligatorio expiresAt en creación de flujos de registro

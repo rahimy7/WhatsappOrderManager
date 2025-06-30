@@ -81,6 +81,11 @@ function RoleDashboard() {
     return <ProtectedRoute component={TechnicianDashboard} permission="technician_work" />;
   }
   
+  // Super administradores al Panel de Control General
+  if (user?.role === 'super_admin') {
+    return <ProtectedRoute component={GlobalDashboard} permission="super_admin" />;
+  }
+  
   // Administradores y otros roles al dashboard principal
   return <ProtectedRoute component={Dashboard} permission="view_dashboard" />;
 }
