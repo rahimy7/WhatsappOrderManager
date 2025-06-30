@@ -39,12 +39,35 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
           rawData: JSON.stringify(message)
         });
 
-        // Send a simple test response using token from database
+        // Process auto-response based on message content
         try {
           // Get WhatsApp config from database
           const config = await storage.getWhatsAppConfig();
           if (!config) {
             throw new Error('No WhatsApp configuration found');
+          }
+
+          // Check for auto-responses based on message trigger
+          let autoResponse = null;
+          const messageTextLower = messageText.toLowerCase().trim();
+          
+          // Look for exact trigger matches
+          const autoResponses = await storage.getAutoResponses();
+          autoResponse = autoResponses.find(resp => 
+            resp.isActive && resp.trigger.toLowerCase() === messageTextLower
+          );
+          
+          // If no exact match, check for welcome trigger on any first message
+          if (!autoResponse) {
+            autoResponse = autoResponses.find(resp => 
+              resp.isActive && resp.trigger === 'welcome'
+            );
+          }
+
+          let responseText = `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`;
+          
+          if (autoResponse) {
+            responseText = autoResponse.messageText || autoResponse.message || responseText;
           }
 
           const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
@@ -58,7 +81,7 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
               to: from,
               type: 'text',
               text: {
-                body: `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`
+                body: responseText
               }
             })
           });

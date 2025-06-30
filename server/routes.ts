@@ -3528,9 +3528,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   
                   // Use full WhatsApp processor with auto-responses
                   try {
+                    console.log('Attempting full WhatsApp message processing...');
                     await processWhatsAppMessage(change.value);
+                    console.log('Full WhatsApp processing completed successfully');
                   } catch (error) {
                     console.error('Error in full WhatsApp processing, falling back to simple:', error);
+                    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
                     const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
                     await processWhatsAppMessageSimple(change.value);
                   }
