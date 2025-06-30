@@ -130,9 +130,9 @@ export default function GlobalDashboard() {
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{globalMetrics.totalStores}</div>
+            <div className="text-2xl font-bold">{globalMetrics.totalStores || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {globalMetrics.activeStores} activas • {globalMetrics.inactiveStores} inactivas
+              {globalMetrics.activeStores || 0} activas • {globalMetrics.inactiveStores || 0} inactivas
             </p>
           </CardContent>
         </Card>
@@ -143,7 +143,7 @@ export default function GlobalDashboard() {
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{globalMetrics.totalOrders.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{(globalMetrics.totalOrders || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               En los últimos {timeRange === '7d' ? '7 días' : timeRange === '30d' ? '30 días' : '90 días'}
             </p>
@@ -156,7 +156,7 @@ export default function GlobalDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${globalMetrics.monthlyRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">${(globalMetrics.monthlyRevenue || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               Revenue total del ecosistema
             </p>
@@ -169,14 +169,14 @@ export default function GlobalDashboard() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{globalMetrics.averageRetention}%</div>
-            <Progress value={globalMetrics.averageRetention} className="mt-2" />
+            <div className="text-2xl font-bold">{(globalMetrics.averageRetention || 0)}%</div>
+            <Progress value={globalMetrics.averageRetention || 0} className="mt-2" />
           </CardContent>
         </Card>
       </div>
 
       {/* Alertas y Notificaciones */}
-      {globalMetrics.pendingSupport > 0 && (
+      {(globalMetrics.pendingSupport || 0) > 0 && (
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-orange-800">
@@ -186,7 +186,7 @@ export default function GlobalDashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-orange-700">
-              Tienes {globalMetrics.pendingSupport} tickets de soporte pendientes que requieren atención.
+              Tienes {globalMetrics.pendingSupport || 0} tickets de soporte pendientes que requieren atención.
             </p>
             <Button className="mt-2" variant="outline">
               Ver Tickets de Soporte
