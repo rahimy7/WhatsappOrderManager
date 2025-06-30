@@ -18,7 +18,8 @@ import {
   Crown,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  UserCheck
 } from "lucide-react";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
