@@ -615,9 +615,9 @@ export default function SuperAdminUsers() {
                   
                   {user.role === 'store_owner' && (
                     <div className="text-right">
-                      <div className="font-semibold">${user.monthlyRevenue.toLocaleString()}/mes</div>
+                      <div className="font-semibold">${(user.monthlyRevenue || 0).toLocaleString()}/mes</div>
                       <div className="text-sm text-muted-foreground">
-                        {user.totalOrders} pedidos totales
+                        {user.totalOrders || 0} pedidos totales
                       </div>
                     </div>
                   )}
@@ -772,11 +772,11 @@ export default function SuperAdminUsers() {
                     <div className="mt-4 grid grid-cols-2 gap-4">
                       <div>
                         <span className="text-sm text-muted-foreground">Ingresos mensuales:</span>
-                        <div className="font-semibold">${selectedUser.monthlyRevenue.toLocaleString()}</div>
+                        <div className="font-semibold">${(selectedUser.monthlyRevenue || 0).toLocaleString()}</div>
                       </div>
                       <div>
                         <span className="text-sm text-muted-foreground">Total de pedidos:</span>
-                        <div className="font-semibold">{selectedUser.totalOrders}</div>
+                        <div className="font-semibold">{selectedUser.totalOrders || 0}</div>
                       </div>
                     </div>
                   </div>
