@@ -52,7 +52,7 @@ interface UserMetrics {
   newUsersThisMonth: number;
 }
 
-export default function Users() {
+export default function SuperAdminUsers() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");

@@ -33,6 +33,11 @@ import GlobalUsersManagement from "@/pages/global-users-management";
 import GlobalDashboard from "@/pages/super-admin/global-dashboard";
 import StoresManagement from "@/pages/super-admin/stores-management";
 import GlobalSettings from "@/pages/super-admin/global-settings";
+import Subscriptions from "@/pages/super-admin/subscriptions";
+import GlobalOrders from "@/pages/super-admin/global-orders";
+import SuperAdminUsers from "@/pages/super-admin/users";
+import SuperAdminReports from "@/pages/super-admin/reports";
+import Support from "@/pages/super-admin/support";
 import AppLayout from "@/components/layout/app-layout";
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -103,6 +108,11 @@ function Router() {
       <Route path="/global-users-management" component={() => <ProtectedRoute component={GlobalUsersManagement} permission="super_admin" />} />
       <Route path="/super-admin/dashboard" component={() => <ProtectedRoute component={GlobalDashboard} permission="super_admin" />} />
       <Route path="/super-admin/stores" component={() => <ProtectedRoute component={StoresManagement} permission="super_admin" />} />
+      <Route path="/super-admin/subscriptions" component={() => <ProtectedRoute component={Subscriptions} permission="super_admin" />} />
+      <Route path="/super-admin/global-orders" component={() => <ProtectedRoute component={GlobalOrders} permission="super_admin" />} />
+      <Route path="/super-admin/users" component={() => <ProtectedRoute component={SuperAdminUsers} permission="super_admin" />} />
+      <Route path="/super-admin/reports" component={() => <ProtectedRoute component={SuperAdminReports} permission="super_admin" />} />
+      <Route path="/super-admin/support" component={() => <ProtectedRoute component={Support} permission="super_admin" />} />
       <Route path="/super-admin/settings" component={() => <ProtectedRoute component={GlobalSettings} permission="super_admin" />} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/public-catalog" component={PublicCatalogClean} />
