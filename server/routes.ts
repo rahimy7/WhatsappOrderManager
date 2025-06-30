@@ -1978,7 +1978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
-  // Original message processing function  
+  // Simplified WhatsApp message processing function
   async function processWhatsAppMessage(value: any) {
     try {
       if (value.messages && value.messages.length > 0) {
@@ -2031,7 +2031,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           // Find or create customer
-          await tenantStorage.addWhatsAppLog({
+          await storage.addWhatsAppLog({
             type: 'debug',
             phoneNumber: from,
             messageContent: 'Buscando cliente por teléfono',
@@ -2039,7 +2039,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             rawData: JSON.stringify({ phoneNumber: from })
           });
 
-          let customer = await tenantStorage.getCustomerByPhone(from);
+          let customer = await storage.getCustomerByPhone(from);
           let isNewCustomer = false;
           
           await storage.addWhatsAppLog({
