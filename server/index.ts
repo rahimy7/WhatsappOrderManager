@@ -179,7 +179,7 @@ app.post('/api/super-admin/stores/:id/repair', async (req, res) => {
         WHERE sku LIKE 'STORE${storeId}-%'
       `);
       
-      const productCount = (existingProducts.rows[0] as any)?.count || 0;
+      const productCount = parseInt((existingProducts.rows[0] as any)?.count || '0', 10);
       
       if (productCount === 0) {
         // Crear productos únicos para esta tienda
