@@ -803,9 +803,9 @@ export default function SuperAdminUsers() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Credenciales de Acceso Generadas</DialogTitle>
-            <p className="text-sm text-muted-foreground">
+            <DialogDescription>
               Se han generado las credenciales de acceso para el nuevo usuario
-            </p>
+            </DialogDescription>
           </DialogHeader>
           {userCredentials && (
             <div className="space-y-4">
