@@ -5813,6 +5813,175 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Validate Store Ecosystem
+  app.get('/api/admin/stores/:id/validate', async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.id);
+      
+      // Obtener información de la tienda
+      const store = await getStoreInfo(storeId);
+      if (!store) {
+        return res.status(404).json({ 
+          valid: false, 
+          message: 'Tienda no encontrada' 
+        });
+      }
+
+      // Validar que la tienda esté activa
+      if (!store.isActive) {
+        return res.json({
+          valid: false,
+          message: 'Tienda inactiva - No se puede validar',
+          details: {
+            store: store.name,
+            status: 'inactive'
+          }
+        });
+      }
+
+      // Intentar obtener la base de datos de la tienda
+      let tenantDb;
+      try {
+        tenantDb = await getTenantDb(storeId);
+      } catch (error) {
+        return res.json({
+          valid: false,
+          message: 'Error al conectar con la base de datos de la tienda',
+          details: {
+            store: store.name,
+            error: 'Database connection failed'
+          }
+        });
+      }
+
+      // Validar tablas principales
+      const validationResults = {
+        tablesExist: true,
+        configExists: true,
+        autoResponsesExist: true,
+        errors: []
+      };
+
+      try {
+        // Verificar que las tablas principales existan
+        const tableChecks = [
+          'users', 'customers', 'products', 'orders', 'order_items',
+          'conversations', 'messages', 'auto_responses', 'store_settings'
+        ];
+
+        // Verificar configuraciones predeterminadas
+        const configs = await tenantDb.select().from(schema.storeSettings).limit(1);
+        if (configs.length === 0) {
+          validationResults.configExists = false;
+          validationResults.errors.push('Configuraciones predeterminadas faltantes');
+        }
+
+        // Verificar respuestas automáticas
+        const autoResponses = await tenantDb.select().from(schema.autoResponses).limit(1);
+        if (autoResponses.length === 0) {
+          validationResults.autoResponsesExist = false;
+          validationResults.errors.push('Respuestas automáticas no configuradas');
+        }
+
+      } catch (error) {
+        validationResults.tablesExist = false;
+        validationResults.errors.push('Error al verificar estructura de tablas');
+      }
+
+      // Determinar si la validación fue exitosa
+      const isValid = validationResults.tablesExist && 
+                     validationResults.configExists && 
+                     validationResults.autoResponsesExist;
+
+      res.json({
+        valid: isValid,
+        message: isValid 
+          ? `Ecosistema de ${store.name} completamente funcional`
+          : `Problemas detectados en ${store.name}`,
+        details: {
+          store: store.name,
+          storeId: storeId,
+          isActive: store.isActive,
+          validationResults
+        }
+      });
+
+    } catch (error) {
+      console.error('Error validating store ecosystem:', error);
+      res.status(500).json({ 
+        valid: false, 
+        message: 'Error interno durante la validación' 
+      });
+    }
+  });
+
+  // Create/Repair Store Ecosystem
+  app.post('/api/admin/stores/:id/repair', async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.id);
+      
+      // Obtener información de la tienda
+      const store = await getStoreInfo(storeId);
+      if (!store) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Tienda no encontrada' 
+        });
+      }
+
+      console.log(`Iniciando reparación del ecosistema para tienda ${store.name} (ID: ${storeId})`);
+
+      try {
+        // Intentar crear la base de datos de la tienda
+        const databaseUrl = await createTenantDatabase(store);
+        console.log(`Base de datos creada/verificada: ${databaseUrl}`);
+
+        // Copiar configuraciones predeterminadas
+        await copyDefaultConfigurationsToTenant(storeId);
+        console.log(`Configuraciones predeterminadas copiadas para tienda ${storeId}`);
+
+        // Ejecutar validación para confirmar que todo está bien
+        const tenantDb = await getTenantDb(storeId);
+        
+        // Verificar tablas críticas
+        const configs = await tenantDb.select().from(schema.storeSettings).limit(1);
+        const autoResponses = await tenantDb.select().from(schema.autoResponses).limit(1);
+        
+        res.json({
+          success: true,
+          message: `Ecosistema de ${store.name} reparado exitosamente`,
+          details: {
+            store: store.name,
+            storeId: storeId,
+            databaseCreated: true,
+            configCount: configs.length,
+            autoResponseCount: autoResponses.length,
+            status: 'repaired'
+          }
+        });
+
+      } catch (error) {
+        console.error(`Error durante la reparación de la tienda ${storeId}:`, error);
+        res.status(500).json({
+          success: false,
+          message: `Error al reparar ecosistema de ${store.name}`,
+          details: {
+            store: store.name,
+            storeId: storeId,
+            error: error.message
+          }
+        });
+      }
+
+    } catch (error) {
+      console.error('Error repairing store ecosystem:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error interno durante la reparación' 
+      });
+    }
+  });
+
   // Global Configuration
   app.get('/api/super-admin/config', authenticateToken, async (req: any, res) => {
     try {

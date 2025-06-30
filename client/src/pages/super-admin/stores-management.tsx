@@ -31,7 +31,8 @@ import {
   Mail,
   MapPin,
   Edit,
-  Trash2
+  Trash2,
+  Database
 } from "lucide-react";
 
 interface VirtualStore {
@@ -152,6 +153,25 @@ export default function StoresManagement() {
 
   const handleToggleStore = (storeId: number, action: 'enable' | 'disable' | 'suspend') => {
     toggleStoreMutation.mutate({ storeId, action });
+  };
+
+  const handleValidateStore = async (storeId: number) => {
+    try {
+      const response = await apiRequest("GET", `/api/admin/stores/${storeId}/validate`);
+      const validation = await response.json();
+      
+      toast({
+        title: validation.valid ? "Ecosistema Válido" : "Problemas Detectados",
+        description: validation.message || "Validación completada",
+        variant: validation.valid ? "default" : "destructive",
+      });
+    } catch (error) {
+      toast({
+        title: "Error en Validación",
+        description: "No se pudo validar el ecosistema de la tienda",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -442,6 +462,15 @@ export default function StoresManagement() {
                     Activar
                   </Button>
                 )}
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleValidateStore(store.id)}
+                  title="Validar ecosistema de BD"
+                >
+                  <Database className="h-4 w-4" />
+                </Button>
                 
                 <Button
                   variant="outline"
