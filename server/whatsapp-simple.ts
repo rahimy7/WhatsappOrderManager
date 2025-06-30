@@ -52,14 +52,14 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
           const messageTextLower = messageText.toLowerCase().trim();
           
           // Look for exact trigger matches
-          const autoResponses = await storage.getAutoResponses();
-          autoResponse = autoResponses.find(resp => 
+          const autoResponses = await storage.getAllAutoResponses();
+          autoResponse = autoResponses.find((resp: any) => 
             resp.isActive && resp.trigger.toLowerCase() === messageTextLower
           );
           
           // If no exact match, check for welcome trigger on any first message
           if (!autoResponse) {
-            autoResponse = autoResponses.find(resp => 
+            autoResponse = autoResponses.find((resp: any) => 
               resp.isActive && resp.trigger === 'welcome'
             );
           }
