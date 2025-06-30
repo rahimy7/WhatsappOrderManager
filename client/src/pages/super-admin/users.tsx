@@ -23,6 +23,13 @@ import {
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 interface StoreOwner {
   id: number;
@@ -52,15 +59,55 @@ interface UserMetrics {
   newUsersThisMonth: number;
 }
 
+interface VirtualStore {
+  id: number;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  subscription: string;
+  subscriptionExpiry?: string;
+}
+
+// Esquema de validación para crear usuarios
+const createUserSchema = z.object({
+  name: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
+  email: z.string().email("Email válido requerido"),
+  phone: z.string().min(10, "Teléfono debe tener al menos 10 dígitos").optional(),
+  role: z.enum(["store_owner", "store_admin"], {
+    required_error: "Rol requerido",
+  }),
+  storeId: z.number({
+    required_error: "Tienda requerida",
+  }),
+  sendInvitation: z.boolean().default(true),
+  invitationMessage: z.string().optional(),
+});
+
+type CreateUserForm = z.infer<typeof createUserSchema>;
+
 export default function SuperAdminUsers() {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<StoreOwner | null>(null);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Formulario para crear nuevo usuario
+  const form = useForm<CreateUserForm>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      role: "store_admin",
+      sendInvitation: true,
+      invitationMessage: "",
+    },
+  });
 
   const { data: metrics, isLoading: metricsLoading } = useQuery<UserMetrics>({
     queryKey: ["/api/super-admin/user-metrics"],
@@ -68,6 +115,35 @@ export default function SuperAdminUsers() {
 
   const { data: users, isLoading: usersLoading } = useQuery<StoreOwner[]>({
     queryKey: ["/api/super-admin/users"],
+  });
+
+  // Obtener tiendas disponibles para asignar usuarios
+  const { data: stores, isLoading: storesLoading } = useQuery<VirtualStore[]>({
+    queryKey: ["/api/super-admin/stores"],
+  });
+
+  // Mutación para crear nuevo usuario
+  const createUserMutation = useMutation({
+    mutationFn: async (userData: CreateUserForm) => {
+      return apiRequest("POST", "/api/super-admin/users", userData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/user-metrics"] });
+      setIsCreateDialogOpen(false);
+      form.reset();
+      toast({
+        title: "Usuario creado",
+        description: "El usuario ha sido creado exitosamente",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo crear el usuario",
+        variant: "destructive",
+      });
+    },
   });
 
   const suspendUserMutation = useMutation({
@@ -89,6 +165,11 @@ export default function SuperAdminUsers() {
       });
     },
   });
+
+  // Función para manejar el envío del formulario
+  const handleCreateUser = (data: CreateUserForm) => {
+    createUserMutation.mutate(data);
+  };
 
   const reactivateUserMutation = useMutation({
     mutationFn: async (userId: number) => {
