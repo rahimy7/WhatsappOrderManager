@@ -22,7 +22,7 @@ import {
 import { loginSchema, AuthUser } from "@shared/auth";
 import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore, createTenantDatabase } from "./multi-tenant-db";
 import * as schema from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql, and, desc, ne, gte } from "drizzle-orm";
 
 // Function to generate Google Maps link from GPS coordinates
 function generateGoogleMapsLink(latitude: string | number, longitude: string | number, address?: string): string {
@@ -5405,6 +5405,222 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error in admin login:', error);
       res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  // SUPER ADMIN ENDPOINTS
+  // Middleware para verificar super admin
+  const requireSuperAdmin = (req: any, res: any, next: any) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ error: 'Token required' });
+    }
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
+      if (decoded.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Super admin access required' });
+      }
+      req.user = decoded;
+      next();
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+  };
+
+  // Obtener métricas del sistema
+  app.get('/api/super-admin/metrics', requireSuperAdmin, async (req, res) => {
+    try {
+      // Total de tiendas
+      const [storesCount] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.isActive, true));
+
+      // Total de usuarios
+      const [usersCount] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.systemUsers);
+
+      // Usuarios activos (con último login en los últimos 30 días)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const [activeUsersCount] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.systemUsers)
+        .where(and(
+          eq(schema.systemUsers.isActive, true),
+          gte(schema.systemUsers.lastLogin, thirtyDaysAgo)
+        ));
+
+      const metrics = {
+        totalStores: storesCount?.count || 0,
+        totalUsers: usersCount?.count || 0,
+        activeUsers: activeUsersCount?.count || 0,
+        totalOrders: 0, // Se calculará agregando todas las tiendas
+        ordersToday: 0,
+        totalRevenue: "0",
+        storageUsed: "45.2 MB",
+        systemStatus: "healthy" as const
+      };
+
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error fetching super admin metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch metrics' });
+    }
+  });
+
+  // Obtener usuarios globales
+  app.get('/api/super-admin/users', requireSuperAdmin, async (req, res) => {
+    try {
+      const users = await masterDb
+        .select({
+          id: schema.systemUsers.id,
+          username: schema.systemUsers.username,
+          name: schema.systemUsers.name,
+          email: schema.systemUsers.email,
+          role: schema.systemUsers.role,
+          status: sql<string>`CASE WHEN ${schema.systemUsers.isActive} THEN 'active' ELSE 'inactive' END`,
+          companyId: schema.systemUsers.storeId,
+          companyName: schema.virtualStores.name,
+          lastLogin: schema.systemUsers.lastLogin,
+          createdAt: schema.systemUsers.createdAt,
+        })
+        .from(schema.systemUsers)
+        .leftJoin(schema.virtualStores, eq(schema.systemUsers.storeId, schema.virtualStores.id))
+        .where(ne(schema.systemUsers.role, 'super_admin'))
+        .orderBy(desc(schema.systemUsers.createdAt));
+
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ error: 'Failed to fetch users' });
+    }
+  });
+
+  // Obtener empresas/tiendas
+  app.get('/api/super-admin/companies', requireSuperAdmin, async (req, res) => {
+    try {
+      const companies = await masterDb
+        .select({
+          id: schema.virtualStores.id,
+          name: schema.virtualStores.name,
+        })
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.isActive, true))
+        .orderBy(schema.virtualStores.name);
+
+      res.json(companies);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      res.status(500).json({ error: 'Failed to fetch companies' });
+    }
+  });
+
+  // Crear usuario
+  app.post('/api/super-admin/users', requireSuperAdmin, async (req, res) => {
+    try {
+      const { username, name, email, role, status, companyId, password } = req.body;
+
+      // Verificar si el usuario ya existe
+      const existingUser = await masterDb
+        .select()
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.username, username))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        return res.status(400).json({ error: 'Username already exists' });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Crear usuario
+      const [newUser] = await masterDb
+        .insert(schema.systemUsers)
+        .values({
+          username,
+          name,
+          email,
+          role,
+          isActive: status === 'active',
+          storeId: companyId ? parseInt(companyId) : null,
+          password: hashedPassword,
+          createdAt: new Date(),
+          lastLogin: null,
+        })
+        .returning();
+
+      res.json({ message: 'User created successfully', userId: newUser.id });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
+  // Actualizar usuario
+  app.put('/api/super-admin/users/:id', requireSuperAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const { username, name, email, role, status, companyId, password } = req.body;
+
+      const updateData: any = {
+        username,
+        name,
+        email,
+        role,
+        isActive: status === 'active',
+        storeId: companyId ? parseInt(companyId) : null,
+      };
+
+      // Solo actualizar password si se proporciona
+      if (password && password.trim() !== '') {
+        updateData.password = await bcrypt.hash(password, 10);
+      }
+
+      await masterDb
+        .update(schema.systemUsers)
+        .set(updateData)
+        .where(eq(schema.systemUsers.id, userId));
+
+      res.json({ message: 'User updated successfully' });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Eliminar usuario
+  app.delete('/api/super-admin/users/:id', requireSuperAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+
+      // Verificar que no sea super admin
+      const user = await masterDb
+        .select()
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.id, userId))
+        .limit(1);
+
+      if (user.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user[0].role === 'super_admin') {
+        return res.status(400).json({ error: 'Cannot delete super admin user' });
+      }
+
+      await masterDb
+        .delete(schema.systemUsers)
+        .where(eq(schema.systemUsers.id, userId));
+
+      res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ error: 'Failed to delete user' });
     }
   });
 

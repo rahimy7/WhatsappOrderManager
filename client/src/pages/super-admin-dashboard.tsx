@@ -1,237 +1,262 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Building2, Users, MessageSquare, Database, Activity, TrendingUp, Clock, AlertCircle } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Shield, Building2, Users, Database, TrendingUp, AlertTriangle } from "lucide-react";
 
-interface GlobalMetrics {
+interface SystemMetrics {
   totalStores: number;
-  activeStores: number;
   totalUsers: number;
-  totalMessages: number;
-  dbConnections: number;
-  systemUptime: string;
-  apiCalls: number;
-  storageUsage: string;
-}
-
-interface StoreMetrics {
-  id: number;
-  name: string;
-  status: string;
-  lastActivity: string;
-  messageCount: number;
-  userCount: number;
-  dbSize: string;
-  subscription: string;
+  activeUsers: number;
+  totalOrders: number;
+  ordersToday: number;
+  totalRevenue: string;
+  storageUsed: string;
+  systemStatus: "healthy" | "warning" | "critical";
 }
 
 export default function SuperAdminDashboard() {
-  const { data: metrics, isLoading: metricsLoading } = useQuery<GlobalMetrics>({
+  const { data: metrics, isLoading, error } = useQuery<SystemMetrics>({
     queryKey: ["/api/super-admin/metrics"],
   });
 
-  const { data: storeMetrics, isLoading: storesLoading } = useQuery<StoreMetrics[]>({
-    queryKey: ["/api/super-admin/store-metrics"],
-  });
-
-  if (metricsLoading || storesLoading) {
+  if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="p-6">
+        <div className="flex items-center space-x-2 mb-6">
+          <Shield className="w-8 h-8 text-red-600" />
+          <h1 className="text-3xl font-bold">Dashboard Global</h1>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[...Array(8)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      active: "default",
-      inactive: "secondary",
-      maintenance: "destructive",
-      warning: "outline",
-    } as const;
-    
+  if (error) {
     return (
-      <Badge variant={variants[status as keyof typeof variants] || "secondary"}>
-        {status.toUpperCase()}
-      </Badge>
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Error al cargar las métricas del sistema. Verifique su conexión.
+          </AlertDescription>
+        </Alert>
+      </div>
     );
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "healthy": return "text-green-600";
+      case "warning": return "text-yellow-600";
+      case "critical": return "text-red-600";
+      default: return "text-gray-600";
+    }
   };
 
-  const getSubscriptionColor = (subscription: string) => {
-    const colors = {
-      free: "text-gray-600",
-      basic: "text-blue-600", 
-      premium: "text-purple-600",
-      enterprise: "text-green-600",
-    } as const;
-    
-    return colors[subscription as keyof typeof colors] || "text-gray-600";
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "healthy": return "Saludable";
+      case "warning": return "Advertencia";
+      case "critical": return "Crítico";
+      default: return "Desconocido";
+    }
   };
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard Global del Sistema</h1>
-          <p className="text-muted-foreground">
-            Gestión y monitoreo de todas las tiendas virtuales
-          </p>
+        <div className="flex items-center space-x-3">
+          <Shield className="w-8 h-8 text-red-600" />
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Dashboard Global
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Administración del sistema completo
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Clock className="w-4 h-4" />
-          Actualizado: {new Date().toLocaleTimeString()}
+        <div className={`flex items-center space-x-2 ${getStatusColor(metrics?.systemStatus || "healthy")}`}>
+          <div className="w-3 h-3 rounded-full bg-current animate-pulse"></div>
+          <span className="font-medium">
+            Sistema: {getStatusText(metrics?.systemStatus || "healthy")}
+          </span>
         </div>
       </div>
 
-      {/* Métricas Globales */}
+      {/* Métricas principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
+        <Card className="border-l-4 border-l-blue-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tiendas Totales</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Tiendas Activas</CardTitle>
+            <Building2 className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics?.totalStores || 0}</div>
+            <div className="text-2xl font-bold text-blue-600">
+              {metrics?.totalStores || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              {metrics?.activeStores || 0} activas
+              Empresas registradas
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Usuarios del Sistema</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics?.totalUsers || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Todos los roles
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Mensajes WhatsApp</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics?.totalMessages || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Últimas 24h
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Uso de Base de Datos</CardTitle>
-            <Database className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics?.storageUsage || "0 MB"}</div>
-            <p className="text-xs text-muted-foreground">
-              {metrics?.dbConnections || 0} conexiones
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Métricas Adicionales */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sistema Activo</CardTitle>
-            <Activity className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Usuarios Totales</CardTitle>
+            <Users className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {metrics?.systemUptime || "0h 0m"}
+              {metrics?.totalUsers || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              Tiempo de actividad
+              {metrics?.activeUsers || 0} activos
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-purple-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Llamadas API</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Órdenes Totales</CardTitle>
+            <TrendingUp className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics?.apiCalls || 0}</div>
+            <div className="text-2xl font-bold text-purple-600">
+              {metrics?.totalOrders || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Últimas 24h
+              {metrics?.ordersToday || 0} hoy
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-orange-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estado del Sistema</CardTitle>
-            <AlertCircle className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
+            <TrendingUp className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">Operativo</div>
+            <div className="text-2xl font-bold text-orange-600">
+              ${metrics?.totalRevenue || "0"}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Todos los servicios funcionando
+              Todas las tiendas
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabla de Tiendas con Métricas */}
+      {/* Métricas del sistema */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Database className="w-5 h-5" />
+              <span>Estado del Sistema</span>
+            </CardTitle>
+            <CardDescription>
+              Información técnica del sistema
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Almacenamiento usado:</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {metrics?.storageUsed || "0 MB"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Estado del sistema:</span>
+              <span className={`text-sm font-semibold ${getStatusColor(metrics?.systemStatus || "healthy")}`}>
+                {getStatusText(metrics?.systemStatus || "healthy")}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Última actualización:</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {new Date().toLocaleString()}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <TrendingUp className="w-5 h-5" />
+              <span>Rendimiento Global</span>
+            </CardTitle>
+            <CardDescription>
+              Métricas de rendimiento del sistema
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Tiendas activas:</span>
+              <span className="text-sm font-semibold text-green-600">
+                {metrics?.totalStores || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Usuarios activos:</span>
+              <span className="text-sm font-semibold text-blue-600">
+                {metrics?.activeUsers || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Órdenes del día:</span>
+              <span className="text-sm font-semibold text-purple-600">
+                {metrics?.ordersToday || 0}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Acciones rápidas */}
       <Card>
         <CardHeader>
-          <CardTitle>Estado de Tiendas Virtuales</CardTitle>
+          <CardTitle>Acciones Rápidas</CardTitle>
+          <CardDescription>
+            Administración y herramientas del sistema
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {storeMetrics?.map((store) => (
-              <div
-                key={store.id}
-                className="flex items-center justify-between p-4 border rounded-lg"
-              >
-                <div className="flex items-center gap-4">
-                  <div>
-                    <h3 className="font-medium">{store.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      ID: {store.id}
-                    </p>
-                  </div>
-                  {getStatusBadge(store.status)}
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div className="text-center">
-                    <p className="font-medium">{store.messageCount}</p>
-                    <p className="text-muted-foreground">Mensajes</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-medium">{store.userCount}</p>
-                    <p className="text-muted-foreground">Usuarios</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-medium">{store.dbSize}</p>
-                    <p className="text-muted-foreground">BD Tamaño</p>
-                  </div>
-                  <div className="text-center">
-                    <p className={`font-medium ${getSubscriptionColor(store.subscription)}`}>
-                      {store.subscription.toUpperCase()}
-                    </p>
-                    <p className="text-muted-foreground">Plan</p>
-                  </div>
-                </div>
-
-                <div className="text-right text-sm text-muted-foreground">
-                  <p>Última actividad:</p>
-                  <p>{store.lastActivity}</p>
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+              <Users className="w-8 h-8 mx-auto mb-2 text-blue-600" />
+              <h3 className="font-medium">Gestión de Usuarios</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Administrar usuarios globales
+              </p>
+            </div>
+            <div className="text-center p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+              <Building2 className="w-8 h-8 mx-auto mb-2 text-green-600" />
+              <h3 className="font-medium">Gestión de Tiendas</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Administrar empresas
+              </p>
+            </div>
+            <div className="text-center p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+              <Database className="w-8 h-8 mx-auto mb-2 text-purple-600" />
+              <h3 className="font-medium">Configuración</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Configuración del sistema
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
