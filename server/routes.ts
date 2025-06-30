@@ -5623,6 +5623,296 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ====== SUPER ADMIN ENDPOINTS ======
+  
+  // Super Admin Dashboard Metrics
+  app.get('/api/super-admin/metrics', authenticateToken, async (req: any, res) => {
+    try {
+      // Verificar que sea super admin
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const timeRange = req.query.timeRange || '30d';
+      let dateFilter = new Date();
+      
+      switch (timeRange) {
+        case '7d':
+          dateFilter.setDate(dateFilter.getDate() - 7);
+          break;
+        case '90d':
+          dateFilter.setDate(dateFilter.getDate() - 90);
+          break;
+        default: // 30d
+          dateFilter.setDate(dateFilter.getDate() - 30);
+      }
+
+      // Mock data para demonstración - en producción esto vendría de base de datos real
+      const mockMetrics = {
+        totalStores: 25,
+        activeStores: 18,
+        inactiveStores: 7,
+        totalOrders: 1250,
+        monthlyRevenue: 89500,
+        averageRetention: 85,
+        pendingSupport: 3
+      };
+
+      res.json(mockMetrics);
+    } catch (error) {
+      console.error('Error fetching super admin metrics:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Super Admin Stores List
+  app.get('/api/super-admin/stores', authenticateToken, async (req: any, res) => {
+    try {
+      // Verificar que sea super admin
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      // Mock data para demonstración - en producción esto vendría de base de datos multi-tenant
+      const mockStores = [
+        {
+          id: 1,
+          name: "TechnoFix México",
+          description: "Reparación de aires acondicionados y electrodomésticos",
+          domain: "technofix.mx",
+          status: "active",
+          subscriptionStatus: "active",
+          planType: "premium",
+          contactEmail: "contacto@technofix.mx",
+          contactPhone: "+52 55 1234 5678",
+          address: "Av. Insurgentes Sur 123, CDMX",
+          createdAt: "2024-01-15",
+          lastActivity: "2025-06-29",
+          monthlyOrders: 145,
+          monthlyRevenue: 12500,
+          supportTickets: 1,
+          settings: {
+            whatsappEnabled: true,
+            notificationsEnabled: true,
+            analyticsEnabled: true
+          }
+        },
+        {
+          id: 2,
+          name: "Servicios Premium",
+          description: "Instalaciones y mantenimiento premium",
+          domain: "servicios-premium.com",
+          status: "active",
+          subscriptionStatus: "trial",
+          planType: "enterprise",
+          contactEmail: "info@servicios-premium.com",
+          contactPhone: "+52 55 9876 5432",
+          address: "Polanco, CDMX",
+          createdAt: "2024-06-01",
+          lastActivity: "2025-06-29",
+          monthlyOrders: 89,
+          monthlyRevenue: 8900,
+          supportTickets: 0,
+          settings: {
+            whatsappEnabled: true,
+            notificationsEnabled: false,
+            analyticsEnabled: true
+          }
+        },
+        {
+          id: 3,
+          name: "RepairCorp",
+          description: "Corporativo de reparaciones",
+          domain: "repaircorp.net",
+          status: "inactive",
+          subscriptionStatus: "expired",
+          planType: "basic",
+          contactEmail: "admin@repaircorp.net",
+          contactPhone: "+52 55 5555 1111",
+          address: "Santa Fe, CDMX",
+          createdAt: "2023-10-20",
+          lastActivity: "2025-05-15",
+          monthlyOrders: 0,
+          monthlyRevenue: 0,
+          supportTickets: 2,
+          settings: {
+            whatsappEnabled: false,
+            notificationsEnabled: false,
+            analyticsEnabled: false
+          }
+        }
+      ];
+
+      res.json(mockStores);
+    } catch (error) {
+      console.error('Error fetching stores:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Create New Store
+  app.post('/api/super-admin/stores', authenticateToken, async (req: any, res) => {
+    try {
+      // Verificar que sea super admin
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const { name, description, domain, contactEmail, contactPhone, address, planType } = req.body;
+
+      // Validar datos requeridos
+      if (!name || !description || !domain || !contactEmail || !contactPhone || !address || !planType) {
+        return res.status(400).json({ message: "Todos los campos son requeridos" });
+      }
+
+      // En producción, aquí se crearía la nueva tienda en la base de datos multi-tenant
+      const newStore = {
+        id: Date.now(), // Mock ID
+        name,
+        description,
+        domain,
+        status: "active",
+        subscriptionStatus: "trial",
+        planType,
+        contactEmail,
+        contactPhone,
+        address,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString(),
+        monthlyOrders: 0,
+        monthlyRevenue: 0,
+        supportTickets: 0,
+        settings: {
+          whatsappEnabled: false,
+          notificationsEnabled: true,
+          analyticsEnabled: true
+        }
+      };
+
+      res.status(201).json(newStore);
+    } catch (error) {
+      console.error('Error creating store:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Update Store Status
+  app.patch('/api/super-admin/stores/:id/status', authenticateToken, async (req: any, res) => {
+    try {
+      // Verificar que sea super admin
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const { id } = req.params;
+      const { action } = req.body;
+
+      if (!['enable', 'disable', 'suspend'].includes(action)) {
+        return res.status(400).json({ message: "Acción inválida" });
+      }
+
+      // En producción, aquí se actualizaría el estado de la tienda
+      const statusMap = {
+        enable: 'active',
+        disable: 'inactive',
+        suspend: 'suspended'
+      };
+
+      const newStatus = statusMap[action as keyof typeof statusMap];
+
+      res.json({ 
+        success: true, 
+        message: `Tienda ${action === 'enable' ? 'activada' : action === 'disable' ? 'desactivada' : 'suspendida'} exitosamente`,
+        status: newStatus
+      });
+    } catch (error) {
+      console.error('Error updating store status:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Global Configuration
+  app.get('/api/super-admin/config', authenticateToken, async (req: any, res) => {
+    try {
+      // Verificar que sea super admin
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      // Mock global configuration - en producción esto vendría de base de datos de configuración global
+      const globalConfig = {
+        platform: {
+          name: "OrderManager Pro",
+          version: "1.0.0",
+          maintenanceMode: false,
+          defaultLanguage: "es",
+          supportedLanguages: ["es", "en", "pt"],
+          timezone: "America/Mexico_City"
+        },
+        pricing: {
+          basicPlan: 29,
+          premiumPlan: 59,
+          enterprisePlan: 99,
+          currency: "USD",
+          trialDays: 14
+        },
+        notifications: {
+          emailEnabled: true,
+          smsEnabled: false,
+          pushEnabled: true,
+          systemAlerts: true
+        },
+        security: {
+          sessionTimeout: 24,
+          passwordMinLength: 8,
+          twoFactorRequired: false,
+          ipWhitelist: []
+        },
+        legal: {
+          termsOfService: "Términos y condiciones de la plataforma...",
+          privacyPolicy: "Política de privacidad...",
+          cookiePolicy: "Política de cookies...",
+          lastUpdated: "2025-06-30"
+        },
+        support: {
+          supportEmail: "support@orderManager.com",
+          supportPhone: "+52 55 1234 5678",
+          supportHours: "Lunes a Viernes 9:00 - 18:00",
+          ticketResponseTime: 24
+        }
+      };
+
+      res.json(globalConfig);
+    } catch (error) {
+      console.error('Error fetching global config:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Update Global Configuration
+  app.put('/api/super-admin/config', authenticateToken, async (req: any, res) => {
+    try {
+      // Verificar que sea super admin
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const configData = req.body;
+
+      // En producción, aquí se actualizaría la configuración global en base de datos
+      console.log('Updating global configuration:', configData);
+
+      res.json({ 
+        success: true, 
+        message: "Configuración global actualizada exitosamente",
+        data: configData
+      });
+    } catch (error) {
+      console.error('Error updating global config:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
@@ -5846,3 +6136,4 @@ async function sendInvoiceOptions(customer: any, phoneNumber: string, recentOrde
 
   await sendWhatsAppMessage(phoneNumber, message);
 }
+

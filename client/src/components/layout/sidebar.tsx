@@ -144,9 +144,23 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     },
     // Items solo para super admins
     {
-      href: "/super-admin-dashboard",
+      href: "/super-admin/dashboard",
       icon: Shield,
       label: "Dashboard Global",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/super-admin/stores",
+      icon: Store,
+      label: "Gestión de Tiendas",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/super-admin/settings",
+      icon: Settings,
+      label: "Configuración Global",
       badge: null,
       permission: "super_admin",
     },
