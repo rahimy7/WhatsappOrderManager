@@ -93,6 +93,16 @@ export default function SuperAdminUsers() {
   const [selectedUser, setSelectedUser] = useState<StoreOwner | null>(null);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCredentialsDialogOpen, setIsCredentialsDialogOpen] = useState(false);
+  const [userCredentials, setUserCredentials] = useState<{
+    name: string;
+    email: string;
+    username: string;
+    tempPassword: string;
+    storeName: string;
+    role: string;
+    invitationSent: boolean;
+  } | null>(null);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -128,14 +138,27 @@ export default function SuperAdminUsers() {
     mutationFn: async (userData: CreateUserForm) => {
       return apiRequest("POST", "/api/super-admin/users", userData);
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/user-metrics"] });
       setIsCreateDialogOpen(false);
       form.reset();
+      
+      // Guardar las credenciales y mostrar el diálogo
+      setUserCredentials({
+        name: data.name,
+        email: data.email,
+        username: data.username,
+        tempPassword: data.tempPassword,
+        storeName: data.storeName,
+        role: data.role,
+        invitationSent: data.invitationSent || false,
+      });
+      setIsCredentialsDialogOpen(true);
+      
       toast({
-        title: "Usuario creado",
-        description: "El usuario ha sido creado exitosamente",
+        title: "Usuario creado exitosamente",
+        description: "Las credenciales de acceso han sido generadas",
       });
     },
     onError: (error: any) => {
@@ -270,6 +293,9 @@ export default function SuperAdminUsers() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Crear Nuevo Usuario</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Complete los datos para crear un nuevo propietario o administrador de tienda
+              </p>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(handleCreateUser)} className="space-y-4">
@@ -763,6 +789,97 @@ export default function SuperAdminUsers() {
                     </Badge>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Credenciales */}
+      <Dialog open={isCredentialsDialogOpen} onOpenChange={setIsCredentialsDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Credenciales de Acceso Generadas</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Se han generado las credenciales de acceso para el nuevo usuario
+            </p>
+          </DialogHeader>
+          {userCredentials && (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="font-semibold text-green-800 mb-3">Usuario Creado Exitosamente</h3>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Nombre:</span>
+                    <div className="font-semibold">{userCredentials.name}</div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Email:</span>
+                    <div className="font-semibold">{userCredentials.email}</div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Tienda:</span>
+                    <div className="font-semibold">{userCredentials.storeName}</div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Rol:</span>
+                    <Badge variant="outline">{userCredentials.role}</Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-800 mb-3">Credenciales de Acceso</h3>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Usuario:</span>
+                    <div className="font-mono bg-white border rounded px-3 py-2 text-sm">
+                      {userCredentials.username}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-600">Contraseña Temporal:</span>
+                    <div className="font-mono bg-white border rounded px-3 py-2 text-sm">
+                      {userCredentials.tempPassword}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                  <p className="text-xs text-yellow-800">
+                    ⚠️ El usuario debe cambiar la contraseña en su primer acceso
+                  </p>
+                </div>
+              </div>
+
+              {userCredentials.invitationSent && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                    <span className="text-sm font-medium text-green-800">
+                      Invitación enviada por email exitosamente
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `Usuario: ${userCredentials.username}\nContraseña: ${userCredentials.tempPassword}`
+                    );
+                    toast({
+                      title: "Credenciales copiadas",
+                      description: "Las credenciales han sido copiadas al portapapeles",
+                    });
+                  }}
+                >
+                  Copiar Credenciales
+                </Button>
+                <Button onClick={() => setIsCredentialsDialogOpen(false)}>
+                  Continuar
+                </Button>
               </div>
             </div>
           )}

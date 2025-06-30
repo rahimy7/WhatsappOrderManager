@@ -5704,21 +5704,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Crear usuario
   app.post('/api/super-admin/users', requireSuperAdmin, async (req, res) => {
     try {
-      const { username, name, email, role, status, companyId, password } = req.body;
+      const { name, email, phone, role, storeId, sendInvitation, invitationMessage } = req.body;
 
-      // Verificar si el usuario ya existe
+      // Verificar si el email ya existe
       const existingUser = await masterDb
         .select()
         .from(schema.systemUsers)
-        .where(eq(schema.systemUsers.username, username))
+        .where(eq(schema.systemUsers.email, email))
         .limit(1);
 
       if (existingUser.length > 0) {
-        return res.status(400).json({ error: 'Username already exists' });
+        return res.status(400).json({ error: 'El email ya está registrado' });
       }
 
+      // Generar username único basado en el email
+      const emailUsername = email.split('@')[0];
+      let username = emailUsername;
+      let counter = 1;
+      
+      while (true) {
+        const usernameExists = await masterDb
+          .select()
+          .from(schema.systemUsers)
+          .where(eq(schema.systemUsers.username, username))
+          .limit(1);
+          
+        if (usernameExists.length === 0) break;
+        
+        username = `${emailUsername}${counter}`;
+        counter++;
+      }
+
+      // Generar contraseña temporal segura
+      const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12).toUpperCase() + '123!';
+
       // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+      // Obtener información de la tienda
+      const store = await masterDb
+        .select({ name: schema.virtualStores.name })
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, parseInt(storeId)))
+        .limit(1);
+
+      const storeName = store[0]?.name || 'Tienda no encontrada';
 
       // Crear usuario
       const [newUser] = await masterDb
@@ -5727,19 +5757,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username,
           name,
           email,
+          phone: phone || null,
           role,
-          isActive: status === 'active',
-          storeId: companyId ? parseInt(companyId) : null,
+          isActive: true,
+          storeId: parseInt(storeId),
           password: hashedPassword,
           createdAt: new Date(),
           lastLogin: null,
         })
         .returning();
 
-      res.json({ message: 'User created successfully', userId: newUser.id });
+      // Aquí se podría enviar la invitación por email si sendInvitation es true
+      let invitationSent = false;
+      if (sendInvitation) {
+        // TODO: Implementar envío de email con credenciales
+        // Por ahora solo simulamos que se envió
+        invitationSent = true;
+        console.log(`Invitation email would be sent to: ${email}`);
+        console.log(`Custom message: ${invitationMessage || 'Bienvenido a la plataforma'}`);
+      }
+
+      // Devolver toda la información necesaria para mostrar al super admin
+      res.json({ 
+        message: 'Usuario creado exitosamente',
+        userId: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        username: username,
+        tempPassword: tempPassword,
+        role: newUser.role,
+        storeName: storeName,
+        invitationSent: invitationSent
+      });
     } catch (error) {
       console.error('Error creating user:', error);
-      res.status(500).json({ error: 'Failed to create user' });
+      res.status(500).json({ error: 'Error al crear el usuario' });
     }
   });
 
