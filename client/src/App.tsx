@@ -102,6 +102,7 @@ function Router() {
       <Route path="/public-catalog" component={PublicCatalogClean} />
       <Route path="/cart" component={Cart} />
       <Route path="/user-settings" component={UserSettings} />
+      <Route path="/login" component={MultiTenantLogin} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,214 +1,217 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Store, User, Lock, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
-interface VirtualStore {
-  id: number;
-  name: string;
-  slug: string;
-  description?: string;
-  isActive: boolean;
-}
+import { loginSchema, type LoginRequest } from "@shared/auth";
+import { apiRequest } from "@/lib/queryClient";
+import { Building2, Shield, User } from "lucide-react";
 
 export default function MultiTenantLogin() {
-  const [selectedStoreId, setSelectedStoreId] = useState<string>("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [loginMode, setLoginMode] = useState<"tenant" | "super_admin">("tenant");
   const { toast } = useToast();
 
-  // Obtener lista de tiendas virtuales activas
-  const { data: stores, isLoading: storesLoading } = useQuery<VirtualStore[]>({
-    queryKey: ["/api/admin/stores"],
-  });
-
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: { username: string; password: string; storeId: number }) => {
-      return apiRequest("POST", "/api/auth/login", credentials);
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        toast({
-          title: "Inicio de sesión exitoso",
-          description: `Bienvenido al sistema de ${stores?.find(s => s.id === parseInt(selectedStoreId))?.name}`,
-        });
-        // Recargar la página para inicializar el contexto de autenticación
-        window.location.href = "/";
-      }
-    },
-    onError: (error: any) => {
-      setError(error.message || "Error de autenticación");
-      toast({
-        title: "Error de autenticación",
-        description: "Verifica tus credenciales e intenta nuevamente",
-        variant: "destructive",
-      });
+  const form = useForm<LoginRequest>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      username: "",
+      password: "",
+      companyId: "",
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: LoginRequest) => {
+    setIsLoading(true);
     setError("");
 
-    if (!selectedStoreId) {
-      setError("Por favor selecciona una tienda virtual");
-      return;
-    }
+    try {
+      // Si es super admin, no enviamos companyId
+      const loginData = loginMode === "super_admin" 
+        ? { username: data.username, password: data.password }
+        : data;
 
-    if (!username || !password) {
-      setError("Por favor completa todos los campos");
-      return;
-    }
+      const response = await apiRequest("POST", "/api/auth/login", loginData);
+      
+      if (response.success) {
+        localStorage.setItem("token", response.token);
+        localStorage.setItem("user", JSON.stringify(response.user));
+        
+        toast({
+          title: "Inicio de sesión exitoso",
+          description: `Bienvenido ${response.user.name}`,
+        });
 
-    loginMutation.mutate({
-      username,
-      password,
-      storeId: parseInt(selectedStoreId),
-    });
+        // Redireccionar según el tipo de usuario
+        if (response.user.role === "super_admin") {
+          window.location.href = "/super-admin-dashboard";
+        } else {
+          window.location.href = "/";
+        }
+      } else {
+        setError(response.message || "Error en el inicio de sesión");
+      }
+    } catch (error: any) {
+      setError(error.message || "Error de conexión");
+      toast({
+        title: "Error",
+        description: "No se pudo iniciar sesión",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
-
-  const activeStores = stores?.filter(store => store.isActive) || [];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
-            <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-300" />
-          </div>
-          <CardTitle className="text-2xl font-bold">Sistema Multi-Tenant</CardTitle>
-          <p className="text-muted-foreground">
-            Selecciona tu tienda virtual e inicia sesión
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Selector de tienda virtual */}
-            <div className="space-y-2">
-              <Label htmlFor="store-select" className="flex items-center gap-2">
-                <Store className="h-4 w-4" />
-                Tienda Virtual
-              </Label>
-              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona tu tienda virtual" />
-                </SelectTrigger>
-                <SelectContent>
-                  {storesLoading ? (
-                    <SelectItem value="loading" disabled>
-                      Cargando tiendas...
-                    </SelectItem>
-                  ) : activeStores.length === 0 ? (
-                    <SelectItem value="no-stores" disabled>
-                      No hay tiendas disponibles
-                    </SelectItem>
-                  ) : (
-                    activeStores.map((store) => (
-                      <SelectItem key={store.id} value={store.id.toString()}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{store.name}</span>
-                          {store.description && (
-                            <span className="text-xs text-muted-foreground">
-                              {store.description}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))
+      <div className="w-full max-w-md space-y-6">
+        {/* Selector de modo de login */}
+        <div className="flex space-x-2 bg-white dark:bg-gray-800 p-1 rounded-lg shadow-sm">
+          <Button
+            type="button"
+            variant={loginMode === "tenant" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1"
+            onClick={() => setLoginMode("tenant")}
+          >
+            <Building2 className="w-4 h-4 mr-2" />
+            Empresa
+          </Button>
+          <Button
+            type="button"
+            variant={loginMode === "super_admin" ? "default" : "ghost"}
+            size="sm"
+            className="flex-1"
+            onClick={() => setLoginMode("super_admin")}
+          >
+            <Shield className="w-4 h-4 mr-2" />
+            Super Admin
+          </Button>
+        </div>
+
+        <Card className="shadow-xl">
+          <CardHeader className="space-y-1">
+            <div className="flex items-center justify-center mb-4">
+              {loginMode === "super_admin" ? (
+                <Shield className="w-12 h-12 text-red-600" />
+              ) : (
+                <User className="w-12 h-12 text-blue-600" />
+              )}
+            </div>
+            <CardTitle className="text-2xl text-center">
+              {loginMode === "super_admin" ? "Administración Global" : "Iniciar Sesión"}
+            </CardTitle>
+            <CardDescription className="text-center">
+              {loginMode === "super_admin" 
+                ? "Acceso al panel de administración del sistema"
+                : "Accede a tu cuenta empresarial"
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Campo ID de Empresa - Solo para modo tenant */}
+                {loginMode === "tenant" && (
+                  <FormField
+                    control={form.control}
+                    name="companyId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ID de Empresa</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="ID de tu empresa"
+                            {...field}
+                            disabled={isLoading}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Usuario</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={loginMode === "super_admin" ? "superadmin" : "Tu usuario"}
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </SelectContent>
-              </Select>
-            </div>
+                />
 
-            {/* Campo de usuario */}
-            <div className="space-y-2">
-              <Label htmlFor="username" className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Usuario
-              </Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Ingresa tu usuario"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contraseña</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="Tu contraseña"
+                          {...field}
+                          disabled={isLoading}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            {/* Campo de contraseña */}
-            <div className="space-y-2">
-              <Label htmlFor="password" className="flex items-center gap-2">
-                <Lock className="h-4 w-4" />
-                Contraseña
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Ingresa tu contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-            {/* Mensaje de error */}
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
+                </Button>
+              </form>
+            </Form>
 
-            {/* Botón de inicio de sesión */}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loginMutation.isPending || storesLoading || !selectedStoreId}
-            >
-              {loginMutation.isPending ? "Iniciando sesión..." : "Iniciar Sesión"}
-            </Button>
-          </form>
-
-          {/* Información adicional */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Sistema de gestión de órdenes y WhatsApp
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Cada tienda opera independientemente con su propia base de datos
-            </p>
-          </div>
-
-          {/* Estadísticas del sistema */}
-          {activeStores.length > 0 && (
-            <div className="mt-4 p-3 bg-muted rounded-lg">
-              <div className="text-center">
-                <p className="text-sm font-medium">
-                  {activeStores.length} tienda{activeStores.length !== 1 ? 's' : ''} disponible{activeStores.length !== 1 ? 's' : ''}
-                </p>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <div>✓ Multi-tenant</div>
-                  <div>✓ WhatsApp integrado</div>
-                </div>
+            {/* Información de ejemplo */}
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                Cuentas de ejemplo:
+              </h4>
+              <div className="space-y-2 text-xs text-gray-600 dark:text-gray-400">
+                {loginMode === "super_admin" ? (
+                  <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                    <strong>Super Admin:</strong> superadmin / password
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                      <strong>Admin:</strong> admin / password (Empresa: 1)
+                    </div>
+                    <div className="bg-green-50 dark:bg-green-900/20 p-2 rounded">
+                      <strong>Técnico:</strong> tech1 / password (Empresa: 1)
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

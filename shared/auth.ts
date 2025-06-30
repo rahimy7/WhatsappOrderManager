@@ -3,6 +3,7 @@ import { z } from "zod";
 export const loginSchema = z.object({
   username: z.string().min(1, "Usuario requerido"),
   password: z.string().min(1, "Contraseña requerida"),
+  companyId: z.string().optional(),
 });
 
 export type LoginRequest = z.infer<typeof loginSchema>;
@@ -13,6 +14,7 @@ export interface AuthUser {
   name: string;
   role: string;
   status: string;
+  companyId?: string;
   phone?: string;
   email?: string;
   department?: string;

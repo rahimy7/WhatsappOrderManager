@@ -187,7 +187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rutas de autenticación
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { username, password } = loginSchema.parse(req.body);
+      const { username, password, companyId } = loginSchema.parse(req.body);
       
       const user = await storage.getUserByUsername(username);
       if (!user) {
@@ -199,12 +199,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
       }
 
+      // Validar acceso según tipo de usuario
+      if (user.role === 'super_admin') {
+        // Super admin puede acceder sin companyId
+        if (companyId) {
+          return res.status(400).json({ message: "Super admin no requiere ID de empresa" });
+        }
+      } else {
+        // Usuarios regulares requieren companyId
+        if (!companyId) {
+          return res.status(400).json({ message: "ID de empresa requerido" });
+        }
+        // Aquí podrías validar que el usuario pertenece a la empresa especificada
+        // Por ahora, simplemente almacenamos el companyId en el token
+      }
+
       // Generar token JWT
       const token = jwt.sign(
         { 
           id: user.id, 
           username: user.username, 
-          role: user.role 
+          role: user.role,
+          companyId: user.role === 'super_admin' ? undefined : companyId
         },
         process.env.JWT_SECRET || 'default-secret',
         { expiresIn: '24h' }
@@ -217,17 +233,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: user.name,
         role: user.role,
         status: user.status,
-        phone: user.phone,
-        email: user.email,
-        department: user.department,
+        companyId: user.role === 'super_admin' ? undefined : companyId,
+        phone: user.phone || undefined,
+        email: user.email || undefined,
+        department: user.department || undefined,
       };
 
-      res.json({ user: authUser, token });
+      res.json({ 
+        success: true,
+        user: authUser, 
+        token,
+        message: user.role === 'super_admin' ? 'Acceso de administrador global' : 'Acceso empresarial autorizado'
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Datos inválidos", details: error.errors });
+        return res.status(400).json({ 
+          success: false,
+          message: "Datos inválidos", 
+          details: error.errors 
+        });
       }
-      res.status(500).json({ message: "Error interno del servidor" });
+      res.status(500).json({ 
+        success: false,
+        message: "Error interno del servidor" 
+      });
     }
   });
 
@@ -244,9 +273,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: user.name,
         role: user.role,
         status: user.status,
-        phone: user.phone,
-        email: user.email,
-        department: user.department,
+        companyId: req.user.companyId,
+        phone: user.phone || undefined,
+        email: user.email || undefined,
+        department: user.department || undefined,
       };
 
       res.json(authUser);
