@@ -383,6 +383,18 @@ export default function Settings() {
                 </p>
               </CardHeader>
               <CardContent>
+                {/* Token Expired Alert */}
+                <Alert className="mb-6 border-red-200 bg-red-50">
+                  <XCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-800">
+                    <strong>Token de WhatsApp Expirado</strong> - El token actual expiró el 26 de junio de 2025.
+                    <br />
+                    <span className="text-sm mt-2 block">
+                      Para renovarlo: Ve a Meta Developer Console → Tu App → WhatsApp → API Setup → Genera un nuevo token de 60 días.
+                    </span>
+                  </AlertDescription>
+                </Alert>
+
                 {connectionStatus && !connectionStatus.connected && (
                   <Alert className="mb-6">
                     <XCircle className="h-4 w-4" />

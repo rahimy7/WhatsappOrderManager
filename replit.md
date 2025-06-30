@@ -611,6 +611,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Corrección de routing: administradores ahora van a dashboard en lugar de conversaciones directamente
   - Tienda "PECADORES ANONIMOS" configurada completamente con número WhatsApp 5215579096161
   - Configuración validada en virtual_stores y store_settings para recepción de mensajes WhatsApp
+- June 30, 2025. CORRECCIÓN CRÍTICA DEL SISTEMA WHATSAPP Y GESTIÓN DE TOKEN EXPIRADO:
+  - Corregido error crítico en función processWhatsAppMessage que causaba crashes del sistema
+  - Creada función simplificada processWhatsAppMessageSimple para procesamiento estable de mensajes
+  - Sistema ahora recibe mensajes de WhatsApp correctamente y los procesa sin errores de código
+  - Agregada alerta prominente en configuración que identifica token expirado (26 junio 2025)
+  - Webhook verificado funcional - recibe y procesa mensajes pero no puede responder por token vencido
+  - Instrucciones claras agregadas para renovar token en Meta Developer Console
+  - Sistema completamente operacional excepto por necesidad de renovación de token de acceso
 - June 30, 2025. SISTEMA DE GENERACIÓN AUTOMÁTICA DE CREDENCIALES COMPLETAMENTE OPERACIONAL:
   - Generación automática de username único basado en email (maria.garcia@ejemplo.com → maria.garcia)
   - Contraseñas temporales seguras con algoritmo robusto usando caracteres alfanuméricos y símbolos
