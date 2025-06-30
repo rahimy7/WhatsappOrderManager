@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList, ShoppingBag, Store } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList, ShoppingBag, Store, Shield } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
@@ -141,6 +141,21 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Reportes",
       badge: null,
       permission: "view_reports",
+    },
+    // Items solo para super admins
+    {
+      href: "/super-admin-dashboard",
+      icon: Shield,
+      label: "Dashboard Global",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/global-users-management",
+      icon: Users,
+      label: "Usuarios Globales",
+      badge: null,
+      permission: "super_admin",
     },
     // Items solo para admins
     {

@@ -18,6 +18,15 @@ async function seedDatabase() {
     console.log("Datos existentes eliminados.");
 
     // Insertar usuarios
+    const [superAdmin] = await db.insert(users).values({
+      username: "superadmin",
+      password: "password",
+      email: "superadmin@orderManager.com",
+      fullName: "Super Administrador Global",
+      role: "super_admin",
+      status: "active"
+    }).returning();
+
     const [admin] = await db.insert(users).values({
       username: "admin",
       password: "password",
