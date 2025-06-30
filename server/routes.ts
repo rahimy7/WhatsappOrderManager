@@ -3526,7 +3526,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     rawData: JSON.stringify({ value: change.value })
                   });
                   
-                  await processWhatsAppMessage(change.value);
+                  // Use simplified WhatsApp processor temporarily
+                  const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
+                  await processWhatsAppMessageSimple(change.value);
                   
                   await storage.addWhatsAppLog({
                     type: 'debug',
