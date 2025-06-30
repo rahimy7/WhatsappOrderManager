@@ -609,6 +609,8 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Dashboard principal restaurado para administradores regulares (separado de super admin)
   - Menú "Dashboard Principal" agregado a sidebar para administradores con exclusión de super admin y técnicos
   - Corrección de routing: administradores ahora van a dashboard en lugar de conversaciones directamente
+  - Tienda "PECADORES ANONIMOS" configurada completamente con número WhatsApp 5215579096161
+  - Configuración validada en virtual_stores y store_settings para recepción de mensajes WhatsApp
 - June 30, 2025. SISTEMA DE GENERACIÓN AUTOMÁTICA DE CREDENCIALES COMPLETAMENTE OPERACIONAL:
   - Generación automática de username único basado en email (maria.garcia@ejemplo.com → maria.garcia)
   - Contraseñas temporales seguras con algoritmo robusto usando caracteres alfanuméricos y símbolos
