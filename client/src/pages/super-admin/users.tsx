@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Users, 
   UserPlus, 
@@ -251,10 +251,10 @@ export default function SuperAdminUsers() {
 
   const filteredUsers = users?.filter(user => {
     const matchesSearch = 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.storeName && user.storeName.toLowerCase().includes(searchTerm.toLowerCase()));
+      (user.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.username || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.storeName || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === "all" || user.role === roleFilter;
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
     
@@ -293,9 +293,9 @@ export default function SuperAdminUsers() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Crear Nuevo Usuario</DialogTitle>
-              <p className="text-sm text-muted-foreground">
+              <DialogDescription>
                 Complete los datos para crear un nuevo propietario o administrador de tienda
-              </p>
+              </DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(handleCreateUser)} className="space-y-4">
@@ -652,7 +652,7 @@ export default function SuperAdminUsers() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Permisos:</span>
-                    <div className="font-medium">{user.permissions.length} asignados</div>
+                    <div className="font-medium">{(user.permissions || []).length} asignados</div>
                   </div>
                 </div>
 
@@ -702,6 +702,9 @@ export default function SuperAdminUsers() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Detalles del Usuario</DialogTitle>
+            <DialogDescription>
+              Información completa del usuario seleccionado
+            </DialogDescription>
           </DialogHeader>
           {selectedUser && (
             <div className="space-y-6">
