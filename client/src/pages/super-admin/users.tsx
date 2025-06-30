@@ -19,7 +19,8 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  UserCheck
+  UserCheck,
+  Key
 } from "lucide-react";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
@@ -798,6 +799,14 @@ export default function SuperAdminUsers() {
                     <Edit className="h-4 w-4 mr-2" />
                     Editar
                   </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleResetPassword(user)}
+                  >
+                    <Key className="h-4 w-4 mr-2" />
+                    Reset Contraseña
+                  </Button>
                   {user.status === 'active' ? (
                     <Button 
                       variant="outline" 
@@ -921,6 +930,152 @@ export default function SuperAdminUsers() {
                     </Badge>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de edición de usuario */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Usuario</DialogTitle>
+            <DialogDescription>
+              Modifica la información del usuario seleccionado
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(handleEditUserSubmit)} className="space-y-4">
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre completo</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej: María García López" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={editForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="email@ejemplo.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={editForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+52 555 123 4567" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={editForm.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rol</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona un rol" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="store_admin">Administrador de Tienda</SelectItem>
+                        <SelectItem value="store_owner">Propietario de Tienda</SelectItem>
+                        <SelectItem value="super_admin">Super Administrador</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={editForm.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Estado</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona un estado" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="active">Activo</SelectItem>
+                        <SelectItem value="inactive">Inactivo</SelectItem>
+                        <SelectItem value="suspended">Suspendido</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={editUserMutation.isPending}>
+                  {editUserMutation.isPending ? "Actualizando..." : "Actualizar Usuario"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación de reset de contraseña */}
+      <Dialog open={isResetPasswordDialogOpen} onOpenChange={setIsResetPasswordDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Resetear Contraseña</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que quieres resetear la contraseña de este usuario?
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <div className="font-medium">{selectedUser.name}</div>
+                <div className="text-sm text-muted-foreground">{selectedUser.email}</div>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Se generará una nueva contraseña temporal que deberás compartir con el usuario.
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsResetPasswordDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={confirmResetPassword}
+                  disabled={resetPasswordMutation.isPending}
+                >
+                  {resetPasswordMutation.isPending ? "Reseteando..." : "Resetear Contraseña"}
+                </Button>
               </div>
             </div>
           )}
