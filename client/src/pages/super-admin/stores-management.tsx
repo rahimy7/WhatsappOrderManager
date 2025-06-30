@@ -488,44 +488,48 @@ export default function StoresManagement() {
                 )}
               </div>
 
-              <div className="flex gap-2 pt-2">
-                {store.status === 'active' ? (
+              <div className="space-y-2 pt-2">
+                <div className="flex gap-2">
+                  {store.status === 'active' ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleStore(store.id, 'disable')}
+                      className="flex-1"
+                    >
+                      <PowerOff className="h-4 w-4 mr-2" />
+                      Desactivar
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleStore(store.id, 'enable')}
+                      className="flex-1"
+                    >
+                      <Power className="h-4 w-4 mr-2" />
+                      Activar
+                    </Button>
+                  )}
+                  
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleToggleStore(store.id, 'disable')}
-                    className="flex-1"
+                    onClick={() => setSelectedStore(store)}
                   >
-                    <PowerOff className="h-4 w-4 mr-2" />
-                    Desactivar
+                    <Settings className="h-4 w-4" />
                   </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleToggleStore(store.id, 'enable')}
-                    className="flex-1"
-                  >
-                    <Power className="h-4 w-4 mr-2" />
-                    Activar
-                  </Button>
-                )}
+                </div>
                 
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleValidateStore(store.id)}
                   title="Validar ecosistema de BD"
+                  className="w-full bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
                 >
-                  <Database className="h-4 w-4" />
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedStore(store)}
-                >
-                  <Settings className="h-4 w-4" />
+                  <Database className="h-4 w-4 mr-2" />
+                  Validar Ecosistema de BD
                 </Button>
               </div>
             </CardContent>
