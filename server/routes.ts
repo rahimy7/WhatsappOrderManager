@@ -5673,77 +5673,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Acceso denegado" });
       }
 
-      // Mock data para demonstración - en producción esto vendría de base de datos multi-tenant
-      const mockStores = [
-        {
-          id: 1,
-          name: "TechnoFix México",
-          description: "Reparación de aires acondicionados y electrodomésticos",
-          domain: "technofix.mx",
-          status: "active",
-          subscriptionStatus: "active",
-          planType: "premium",
-          contactEmail: "contacto@technofix.mx",
-          contactPhone: "+52 55 1234 5678",
-          address: "Av. Insurgentes Sur 123, CDMX",
-          createdAt: "2024-01-15",
-          lastActivity: "2025-06-29",
-          monthlyOrders: 145,
-          monthlyRevenue: 12500,
-          supportTickets: 1,
-          settings: {
-            whatsappEnabled: true,
-            notificationsEnabled: true,
-            analyticsEnabled: true
-          }
-        },
-        {
-          id: 2,
-          name: "Servicios Premium",
-          description: "Instalaciones y mantenimiento premium",
-          domain: "servicios-premium.com",
-          status: "active",
-          subscriptionStatus: "trial",
-          planType: "enterprise",
-          contactEmail: "info@servicios-premium.com",
-          contactPhone: "+52 55 9876 5432",
-          address: "Polanco, CDMX",
-          createdAt: "2024-06-01",
-          lastActivity: "2025-06-29",
-          monthlyOrders: 89,
-          monthlyRevenue: 8900,
-          supportTickets: 0,
-          settings: {
-            whatsappEnabled: true,
-            notificationsEnabled: false,
-            analyticsEnabled: true
-          }
-        },
-        {
-          id: 3,
-          name: "RepairCorp",
-          description: "Corporativo de reparaciones",
-          domain: "repaircorp.net",
-          status: "inactive",
-          subscriptionStatus: "expired",
-          planType: "basic",
-          contactEmail: "admin@repaircorp.net",
-          contactPhone: "+52 55 5555 1111",
-          address: "Santa Fe, CDMX",
-          createdAt: "2023-10-20",
-          lastActivity: "2025-05-15",
-          monthlyOrders: 0,
-          monthlyRevenue: 0,
-          supportTickets: 2,
-          settings: {
-            whatsappEnabled: false,
-            notificationsEnabled: false,
-            analyticsEnabled: false
-          }
+      // Obtener tiendas reales de la base de datos
+      const stores = await masterDb.select().from(schema.virtualStores);
+      
+      // Transformar datos para que coincidan con la interfaz esperada
+      const transformedStores = stores.map(store => ({
+        id: store.id,
+        name: store.name,
+        description: store.description,
+        domain: store.domain,
+        status: store.status,
+        subscriptionStatus: store.subscriptionStatus || 'trial',
+        planType: store.planType || 'basic',
+        contactEmail: store.contactEmail,
+        contactPhone: store.contactPhone,
+        address: store.address,
+        createdAt: store.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+        lastActivity: store.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+        monthlyOrders: 0, // Esto se calcularía desde la DB de la tienda específica
+        monthlyRevenue: 0, // Esto se calcularía desde la DB de la tienda específica
+        supportTickets: 0, // Esto se calcularía desde la DB de la tienda específica
+        settings: {
+          whatsappEnabled: true,
+          notificationsEnabled: true,
+          analyticsEnabled: true
         }
-      ];
+      }));
 
-      res.json(mockStores);
+      res.json(transformedStores);
     } catch (error) {
       console.error('Error fetching stores:', error);
       res.status(500).json({ message: 'Error interno del servidor' });
@@ -5765,20 +5722,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Todos los campos son requeridos" });
       }
 
-      // En producción, aquí se crearía la nueva tienda en la base de datos multi-tenant
-      const newStore = {
-        id: Date.now(), // Mock ID
+      // Crear nueva tienda en la base de datos real
+      const validatedData = {
         name,
         description,
         domain,
-        status: "active",
-        subscriptionStatus: "trial",
-        planType,
         contactEmail,
         contactPhone,
         address,
-        createdAt: new Date().toISOString(),
-        lastActivity: new Date().toISOString(),
+        planType,
+        status: 'active' as const,
+        subscriptionStatus: 'trial' as const,
+        slug: name.toLowerCase().replace(/\s+/g, '-'),
+        databaseUrl: process.env.DATABASE_URL + `?schema=store_${Date.now()}`
+      };
+      
+      const [store] = await masterDb
+        .insert(schema.virtualStores)
+        .values(validatedData)
+        .returning();
+
+      // Configurar la nueva tienda con ajustes predeterminados
+      await copyDefaultConfigurationsToTenant(store);
+      
+      console.log(`New store created: ${store.name} with default configurations`);
+      
+      // Transformar respuesta para que coincida con la interfaz esperada
+      const transformedStore = {
+        id: store.id,
+        name: store.name,
+        description: store.description,
+        domain: store.domain,
+        status: store.status,
+        subscriptionStatus: store.subscriptionStatus || 'trial',
+        planType: store.planType || 'basic',
+        contactEmail: store.contactEmail,
+        contactPhone: store.contactPhone,
+        address: store.address,
+        createdAt: store.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+        lastActivity: store.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
         monthlyOrders: 0,
         monthlyRevenue: 0,
         supportTickets: 0,
@@ -5789,7 +5771,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
 
-      res.status(201).json(newStore);
+      res.status(201).json(transformedStore);
     } catch (error) {
       console.error('Error creating store:', error);
       res.status(500).json({ message: 'Error interno del servidor' });
