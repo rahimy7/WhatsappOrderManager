@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList, ShoppingBag, Store, Shield } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList, ShoppingBag, Store, Shield, CreditCard, MessageSquare } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
@@ -142,32 +142,60 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       badge: null,
       permission: "view_reports",
     },
-    // Items solo para super admins
+    // Items solo para super admins - 8 ventanas principales
     {
       href: "/super-admin/dashboard",
       icon: Shield,
-      label: "Dashboard Global",
+      label: "1️⃣ Panel de Control General",
       badge: null,
       permission: "super_admin",
     },
     {
       href: "/super-admin/stores",
       icon: Store,
-      label: "Gestión de Tiendas",
+      label: "2️⃣ Tiendas Registradas",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/super-admin/subscriptions",
+      icon: CreditCard,
+      label: "3️⃣ Suscripciones y Facturación",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/super-admin/global-orders",
+      icon: ShoppingCart,
+      label: "4️⃣ Pedidos Globales",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/super-admin/users",
+      icon: Users,
+      label: "5️⃣ Usuarios (Propietarios)",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/super-admin/reports",
+      icon: BarChart3,
+      label: "6️⃣ Reportes / Estadísticas",
+      badge: null,
+      permission: "super_admin",
+    },
+    {
+      href: "/super-admin/support",
+      icon: MessageSquare,
+      label: "7️⃣ Soporte / Tickets",
       badge: null,
       permission: "super_admin",
     },
     {
       href: "/super-admin/settings",
       icon: Settings,
-      label: "Configuración Global",
-      badge: null,
-      permission: "super_admin",
-    },
-    {
-      href: "/global-users-management",
-      icon: Users,
-      label: "Usuarios Globales",
+      label: "8️⃣ Configuración Global",
       badge: null,
       permission: "super_admin",
     },
