@@ -4996,6 +4996,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Middleware para operaciones multi-tenant
   app.use('/api/admin', tenantMiddleware());
 
+  // ================================
+  // SUPER ADMIN ENDPOINTS - DASHBOARD GLOBAL Y MÉTRICAS
+  // ================================
+
+  // Métricas globales del sistema
+  app.get('/api/super-admin/metrics', async (req, res) => {
+    try {
+      // Obtener métricas de todas las tiendas
+      const stores = await masterDb.select().from(schema.virtualStores);
+      const users = await masterDb.select().from(schema.systemUsers);
+      
+      // Calcular métricas agregadas
+      const totalStores = stores.length;
+      const activeStores = stores.filter(store => store.isActive).length;
+      const totalUsers = users.length;
+      
+      // Simular otras métricas (en producción estas vendrían de monitoreo real)
+      const metrics = {
+        totalStores,
+        activeStores,
+        totalUsers,
+        totalMessages: 1247, // Total de mensajes WhatsApp en 24h
+        dbConnections: activeStores, // Una conexión por tienda activa
+        systemUptime: "72h 14m",
+        apiCalls: 8934, // Llamadas API en 24h
+        storageUsage: "2.1 GB", // Uso total de almacenamiento
+      };
+
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error fetching super admin metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch metrics' });
+    }
+  });
+
+  // Métricas específicas por tienda
+  app.get('/api/super-admin/store-metrics', async (req, res) => {
+    try {
+      const stores = await masterDb.select().from(schema.virtualStores);
+      
+      const storeMetrics = stores.map(store => ({
+        id: store.id,
+        name: store.name,
+        status: store.isActive ? 'active' : 'inactive',
+        lastActivity: new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000).toLocaleString(),
+        messageCount: Math.floor(Math.random() * 200) + 50, // Simular mensajes
+        userCount: Math.floor(Math.random() * 10) + 2, // Simular usuarios
+        dbSize: `${(Math.random() * 500 + 50).toFixed(1)} MB`, // Simular tamaño DB
+        subscription: store.subscription || 'free',
+      }));
+
+      res.json(storeMetrics);
+    } catch (error) {
+      console.error('Error fetching store metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch store metrics' });
+    }
+  });
+
+  // Gestión de usuarios globales del sistema
+  app.get('/api/super-admin/users', async (req, res) => {
+    try {
+      const users = await masterDb
+        .select({
+          id: schema.systemUsers.id,
+          username: schema.systemUsers.username,
+          email: schema.systemUsers.email,
+          role: schema.systemUsers.role,
+          storeId: schema.systemUsers.storeId,
+          storeName: schema.virtualStores.name,
+          isActive: schema.systemUsers.isActive,
+          lastLogin: schema.systemUsers.lastLogin,
+          createdAt: schema.systemUsers.createdAt,
+        })
+        .from(schema.systemUsers)
+        .leftJoin(schema.virtualStores, eq(schema.systemUsers.storeId, schema.virtualStores.id));
+
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching system users:', error);
+      res.status(500).json({ error: 'Failed to fetch users' });
+    }
+  });
+
+  // Crear usuario global
+  app.post('/api/super-admin/users', async (req, res) => {
+    try {
+      const validatedData = insertSystemUserSchema.parse(req.body);
+      
+      // Hash de la contraseña
+      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+      
+      const [user] = await masterDb
+        .insert(schema.systemUsers)
+        .values({
+          ...validatedData,
+          password: hashedPassword,
+        })
+        .returning();
+
+      // Remover password del response
+      const { password, ...userResponse } = user;
+      res.status(201).json(userResponse);
+    } catch (error) {
+      console.error('Error creating system user:', error);
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
+  // Actualizar usuario global
+  app.put('/api/super-admin/users/:id', async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const updates = req.body;
+      
+      // Si se incluye contraseña, hashearla
+      if (updates.password) {
+        updates.password = await bcrypt.hash(updates.password, 10);
+      }
+      
+      const [user] = await masterDb
+        .update(schema.systemUsers)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.systemUsers.id, userId))
+        .returning();
+        
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Remover password del response
+      const { password, ...userResponse } = user;
+      res.json(userResponse);
+    } catch (error) {
+      console.error('Error updating system user:', error);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Desactivar usuario global
+  app.delete('/api/super-admin/users/:id', async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      
+      const [user] = await masterDb
+        .update(schema.systemUsers)
+        .set({ 
+          isActive: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.systemUsers.id, userId))
+        .returning();
+        
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.json({ message: 'User deactivated successfully' });
+    } catch (error) {
+      console.error('Error deactivating system user:', error);
+      res.status(500).json({ error: 'Failed to deactivate user' });
+    }
+  });
+
   // Listar todas las tiendas virtuales (super admin)
   app.get('/api/admin/stores', async (req, res) => {
     try {

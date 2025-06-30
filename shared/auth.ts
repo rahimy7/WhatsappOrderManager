@@ -25,6 +25,24 @@ export interface AuthResponse {
 
 // Definición de permisos por rol
 export const rolePermissions = {
+  super_admin: [
+    'super_admin',
+    'view_dashboard',
+    'manage_users',
+    'manage_orders',
+    'manage_customers',
+    'manage_products',
+    'view_reports',
+    'manage_settings',
+    'view_conversations',
+    'send_messages',
+    'view_notifications',
+    'manage_assignments',
+    'manage_global_system',
+    'manage_virtual_stores',
+    'manage_global_users',
+    'view_global_metrics'
+  ],
   admin: [
     'view_dashboard',
     'manage_users',
