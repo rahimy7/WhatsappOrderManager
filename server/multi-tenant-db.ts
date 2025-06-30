@@ -66,36 +66,7 @@ export async function createTenantDatabase(store: VirtualStore): Promise<string>
     
     // IMPORTANTE: Actualmente usamos la misma BD para todas las tiendas
     // Esto es temporal hasta que implementemos verdaderas BDs separadas
-    const databaseUrl = store.databaseUrl || process.env.DATABASE_URL;
-    
-    // Verificar si la tienda ya tiene configuraciones
-    const existingSettings = await masterDb
-      .select()
-      .from(schema.storeSettings)
-      .where(eq(schema.storeSettings.storeId, store.id))
-      .limit(1);
-    
-    if (existingSettings.length === 0) {
-      console.log(`Creando configuraciones iniciales para tienda ${store.id}`);
-      
-      // Crear configuración inicial única para esta tienda
-      await masterDb.insert(schema.storeSettings).values({
-        storeId: store.id,
-        storeWhatsAppNumber: store.whatsappNumber || `+52 55 ${store.id}000 0000`,
-        storeName: store.name,
-        storeAddress: store.address || '',
-        storeEmail: 'contacto@tienda.com', // Valor por defecto
-        businessHours: '09:00-18:00',
-        deliveryRadius: '50',
-        baseSiteUrl: `https://${process.env.REPL_SLUG || 'localhost:5000'}.replit.dev`,
-        enableNotifications: true,
-        autoAssignOrders: true,
-      });
-      
-      console.log(`Configuraciones base creadas para tienda ${store.id}`);
-    } else {
-      console.log(`Tienda ${store.id} ya tiene configuraciones, saltando creación`);
-    }
+    const databaseUrl = store.databaseUrl || process.env.DATABASE_URL || '';
     
     // Copiar/crear configuraciones predeterminadas
     await copyDefaultConfigurationsToTenant(store.id);
@@ -127,10 +98,10 @@ export async function copyDefaultConfigurationsToTenant(storeId: number): Promis
         trigger: response.trigger,
         isActive: response.isActive,
         priority: response.priority,
-        messageText: response.messageText.replace(
+        messageText: response.messageText?.replace(
           /https:\/\/[^\/]*\.replit\.dev/g, 
           `https://${process.env.REPL_SLUG || 'localhost:5000'}.replit.dev`
-        ), // Actualizar URLs con el dominio correcto
+        ) || response.messageText, // Actualizar URLs con el dominio correcto
         requiresRegistration: response.requiresRegistration,
         menuOptions: response.menuOptions,
         nextAction: response.nextAction,
@@ -240,7 +211,8 @@ async function createLegacyStoreSettings(storeId: number) {
  * Cierra todas las conexiones de base de datos
  */
 export async function closeAllConnections(): Promise<void> {
-  for (const [storeId, db] of dbConnections.entries()) {
+  const connections = Array.from(dbConnections.entries());
+  for (const [storeId, db] of connections) {
     try {
       await db.$client.end();
       dbConnections.delete(storeId);
@@ -308,5 +280,5 @@ export async function getStoreInfo(storeId: number): Promise<VirtualStore | null
  */
 export async function validateStore(storeId: number): Promise<boolean> {
   const store = await getStoreInfo(storeId);
-  return store !== null && store.isActive && !!store.databaseUrl;
+  return store !== null && Boolean(store.isActive) && !!store.databaseUrl;
 }

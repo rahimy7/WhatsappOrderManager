@@ -98,7 +98,7 @@ app.get('/api/super-admin/stores/:id/validate', async (req, res) => {
         
         validationResults.databaseStructure.tenant.exists = true;
         validationResults.databaseStructure.tenant.tables = 
-          tenantTables.rows.map(row => row.table_name as string);
+          tenantTables.rows.map((row: any) => row.table_name as string);
         validationResults.databaseStructure.tenant.status = 'BD separada existe';
         
       } else {
