@@ -193,7 +193,7 @@ export default function StoresManagement() {
         description: "Iniciando reparación de base de datos...",
       });
 
-      const response = await apiRequest("POST", `/api/admin/stores/${storeId}/repair`);
+      const response = await apiRequest("POST", `/api/super-admin/stores/${storeId}/repair`);
       const result = await response.json();
       
       if (result.success) {
