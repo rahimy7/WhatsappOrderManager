@@ -37,6 +37,11 @@ function generateGoogleMapsLink(latitude: string | number, longitude: string | n
   return `${baseUrl}/@${lat},${lng},15z?q=${query}`;
 }
 
+// Utility function to format currency with thousands separators
+function formatCurrency(amount: number): string {
+  return amount.toLocaleString('es-MX');
+}
+
 // Function to process auto-response by trigger
 async function processAutoResponse(trigger: string, phoneNumber: string) {
   try {
@@ -3250,22 +3255,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete registration flow as process is complete
       await storage.deleteRegistrationFlow(phoneNumber);
 
-      // Send final confirmation message
-      let finalMessage = 
-        `🎉 *¡Pedido Confirmado!*\n\n` +
-        `📦 *Resumen del Pedido:*\n` +
-        `👤 Cliente: ${orderData.customerName || 'No registrado'}\n` +
-        `🆔 Orden: ${orderData.orderNumber}\n` +
-        `📱 Producto: ${orderData.productName}\n` +
-        `📊 Cantidad: ${orderData.quantity} unidad${orderData.quantity > 1 ? 'es' : ''}\n` +
-        `💰 Subtotal: $${orderData.basePrice.toLocaleString('es-MX')}\n`;
+      // Get order confirmation auto-response template
+      const orderConfirmationResponses = await storage.getAutoResponsesByTrigger('order_confirmation');
+      let finalMessage = '';
+      
+      if (orderConfirmationResponses.length > 0) {
+        const template = orderConfirmationResponses[0].messageText;
+        const estimatedTime = "2-4 horas"; // Default estimated time
+        
+        finalMessage = template
+          .replace('{customerName}', orderData.customerName || customer.name)
+          .replace('{orderNumber}', orderData.orderNumber)
+          .replace('{subtotal}', formatCurrency(orderData.basePrice || 0))
+          .replace('{deliveryCost}', formatCurrency(orderData.deliveryCost || 0))
+          .replace('{totalAmount}', formatCurrency(orderData.totalPrice || 0))
+          .replace('{estimatedTime}', estimatedTime);
+      } else {
+        // Fallback message if no template found
+        finalMessage = 
+          `🎉 *¡Pedido Confirmado!*\n\n` +
+          `📦 *Resumen del Pedido:*\n` +
+          `👤 Cliente: ${orderData.customerName || customer.name}\n` +
+          `🆔 Orden: ${orderData.orderNumber}\n` +
+          `📱 Producto: ${orderData.productName}\n` +
+          `📊 Cantidad: ${orderData.quantity} unidad${orderData.quantity > 1 ? 'es' : ''}\n` +
+          `💰 Subtotal: ${formatCurrency(orderData.basePrice || 0)}\n`;
 
-      if (orderData.deliveryCost > 0) {
-        finalMessage += `🚛 Entrega: $${orderData.deliveryCost.toLocaleString('es-MX')}\n`;
+        if (orderData.deliveryCost > 0) {
+          finalMessage += `🚛 Entrega: ${formatCurrency(orderData.deliveryCost)}\n`;
+        }
+
+        finalMessage += 
+          `*💳 Total: ${formatCurrency(orderData.totalPrice || 0)}*\n\n`;
       }
-
+      
+      // Add payment method and contact details
       finalMessage += 
-        `*💳 Total: $${orderData.totalPrice.toLocaleString('es-MX')}*\n\n` +
         `💵 *Método de Pago:* ${paymentText}\n` +
         `📍 *Dirección:* ${orderData.deliveryAddress}\n` +
         `📞 *Contacto:* ${orderData.contactNumber || phoneNumber}\n\n`;

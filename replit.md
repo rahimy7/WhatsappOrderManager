@@ -712,6 +712,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Configuración optimizada de cache con gcTime: 0 y refetchOnMount para datos siempre actualizados
   - Sistema de refetch manual agregado en callbacks de mutación para sincronización inmediata
   - Categorías ahora se muestran correctamente después de creación sin problemas de cache del navegador
+- July 01, 2025. RESPUESTAS AUTOMÁTICAS DE WHATSAPP MEJORADAS CON DATOS PERSONALIZADOS:
+  - Actualizadas respuestas automáticas para incluir nombre del cliente, separadores de miles en precios y costos de envío
+  - Respuesta "Pedido Confirmado" (IDs 4, 26) ahora incluye variables: {customerName}, {subtotal}, {deliveryCost}, {totalAmount}, {estimatedTime}
+  - Creada nueva respuesta "Pedido Recibido" (ID 31) con trigger "order_received" para confirmación inicial de pedidos
+  - Implementada función formatCurrency() con toLocaleString('es-MX') para formato correcto de números mexicanos
+  - Actualizado processWebCatalogOrder() para usar respuestas automáticas con variables dinámicas
+  - Modificado handlePaymentMethodSelection() para usar templates de confirmación con datos personalizados
+  - Sistema de WhatsApp ahora envía mensajes profesionales con información completa del cliente y formato monetario correcto
 
 ## User Preferences
 
