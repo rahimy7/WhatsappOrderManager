@@ -660,6 +660,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Página de facturación creada para consulta de datos fiscales y historial de facturas
   - Sistema de permisos reorganizado con excludeRoles para control granular de acceso
   - Navegación completamente separada entre niveles de usuario sin solapamiento de funciones
+- July 01, 2025. LIMPIEZA COMPLETA DE DATOS MOCK DEL SISTEMA:
+  - Eliminados todos los datos de prueba tanto del frontend como de la base de datos PostgreSQL
+  - Sistema limpio con solo 2 usuarios reales: Super Administrador (superadmin) y Administrador Pecadores (admin_pecadores)
+  - Eliminados clientes, órdenes, conversaciones, mensajes y notificaciones mock
+  - MemStorage simplificado sin datos de ejemplo para mejor rendimiento
+  - Base de datos PostgreSQL lista para datos reales de producción sin información de prueba
+  - Sistema operacional con solo datos auténticos de la tienda "Pecadores Anónimos"
 
 ## User Preferences
 
