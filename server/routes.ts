@@ -1936,15 +1936,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Send confirmation message
-      const confirmationMessage = 
-        `✅ *PEDIDO RECIBIDO*\n\n` +
-        `📋 Número: ${orderNumber}\n` +
-        `💰 Total: $${total}\n\n` +
-        `📝 *Productos:*\n` +
-        orderItems.map((item, index) => 
-          `${index + 1}. ${item.name}\n   Cantidad: ${item.quantity} - $${item.price * item.quantity}`
+      // Send confirmation message using auto-response template
+      const deliveryCost = 0; // TODO: Calculate based on location
+      const subtotal = total;
+      const totalWithDelivery = subtotal + deliveryCost;
+      
+      // Get order received auto-response template
+      const orderReceivedResponses = await storage.getAutoResponsesByTrigger('order_received');
+      let confirmationMessage = '';
+      
+      if (orderReceivedResponses.length > 0) {
+        const template = orderReceivedResponses[0].messageText;
+        const orderItemsText = orderItems.map((item, index) => 
+          `${index + 1}. ${item.name}\n   Cantidad: ${item.quantity} - $${formatCurrency(item.price * item.quantity)}`
         ).join('\n\n');
+        
+        confirmationMessage = template
+          .replace('{customerName}', customer.name)
+          .replace('{orderItems}', orderItemsText)
+          .replace('{subtotal}', formatCurrency(subtotal))
+          .replace('{deliveryCost}', formatCurrency(deliveryCost))
+          .replace('{totalAmount}', formatCurrency(totalWithDelivery));
+      } else {
+        // Fallback message if no template found
+        confirmationMessage = 
+          `✅ *PEDIDO RECIBIDO*\n\n` +
+          `¡Hola ${customer.name}! Número: ${orderNumber}\n` +
+          `💰 Total: ${formatCurrency(totalWithDelivery)}\n\n` +
+          `📝 *Productos:*\n` +
+          orderItems.map((item, index) => 
+            `${index + 1}. ${item.name}\n   Cantidad: ${item.quantity} - ${formatCurrency(item.price * item.quantity)}`
+          ).join('\n\n');
+      }
 
       await sendWhatsAppMessage(phoneNumber, confirmationMessage);
 
