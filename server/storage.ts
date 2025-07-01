@@ -276,311 +276,50 @@ export class MemStorage implements IStorage {
   }
 
   private seedData() {
-    // Seed users
-    const admin: User = {
+    // Solo usuarios reales: Super Admin y Admin de Pecadores
+    const superAdmin: User = {
       id: this.currentUserId++,
-      username: "admin",
+      username: "superadmin",
       password: "password",
-      name: "Ana Martínez",
+      name: "Super Administrador",
+      role: "super_admin",
+      status: "active",
+      phone: "+52 55 0000-0000",
+      email: "superadmin@sistema.com",
+      address: null,
+      avatar: null,
+      hireDate: new Date(),
+      isActive: true,
+      department: "Administración",
+      permissions: ["super_admin"],
+    };
+    this.users.set(superAdmin.id, superAdmin);
+
+    const adminPecadores: User = {
+      id: this.currentUserId++,
+      username: "admin_pecadores",
+      password: "password",
+      name: "Administrador Pecadores",
       role: "admin",
       status: "active",
-      phone: "+52 55 1111-1111",
+      phone: "+52 55 7909-6161",
+      email: "admin@pecadores.com",
+      address: null,
       avatar: null,
+      hireDate: new Date(),
+      isActive: true,
+      department: "Administración",
+      permissions: ["manage_settings", "manage_users", "manage_orders", "view_reports"],
     };
-    this.users.set(admin.id, admin);
+    this.users.set(adminPecadores.id, adminPecadores);
 
-    const technician1: User = {
-      id: this.currentUserId++,
-      username: "carlos",
-      password: "password",
-      name: "Carlos Ruiz",
-      role: "technician",
-      status: "active",
-      phone: "+52 55 2222-2222",
-      avatar: null,
-    };
-    this.users.set(technician1.id, technician1);
-
-    const seller1: User = {
-      id: this.currentUserId++,
-      username: "ana",
-      password: "password", 
-      name: "Ana Silva",
-      role: "seller",
-      status: "busy",
-      phone: "+52 55 3333-3333",
-      avatar: null,
-    };
-    this.users.set(seller1.id, seller1);
-
-    const technician2: User = {
-      id: this.currentUserId++,
-      username: "luis",
-      password: "password",
-      name: "Luis Vargas",
-      role: "technician", 
-      status: "break",
-      phone: "+52 55 4444-4444",
-      avatar: null,
-    };
-    this.users.set(technician2.id, technician2);
-
-    // Seed customers
-    const customer1: Customer = {
-      id: this.currentCustomerId++,
-      name: "Juan López",
-      phone: "+52 55 1234-5678",
-      whatsappId: "521551234567",
-      address: "Av. Reforma 123, Col. Centro, CDMX",
-      latitude: "19.4326",
-      longitude: "-99.1332",
-      lastContact: new Date(),
-    };
-    this.customers.set(customer1.id, customer1);
-
-    const customer2: Customer = {
-      id: this.currentCustomerId++,
-      name: "María García",
-      phone: "+52 55 8765-4321",
-      whatsappId: "521558765432",
-      address: "Calle 5 de Mayo 456, Col. Roma Norte, CDMX",
-      latitude: "19.4195",
-      longitude: "-99.1570",
-      lastContact: new Date(),
-    };
-    this.customers.set(customer2.id, customer2);
-
-    const customer3: Customer = {
-      id: this.currentCustomerId++,
-      name: "Pedro Ramírez",
-      phone: "+52 55 9876-5432",
-      whatsappId: "521559876543",
-      address: "Av. Insurgentes Sur 789, Col. Del Valle, CDMX",
-      latitude: "19.3889",
-      longitude: "-99.1677",
-      lastContact: new Date(),
-    };
-    this.customers.set(customer3.id, customer3);
-
-    // Seed products
-    const product1: Product = {
-      id: this.currentProductId++,
-      name: "Instalación de Aires Acondicionados",
-      description: "Servicio completo de instalación de equipos de aire acondicionado",
-      price: "1250.00",
-      category: "service",
-      status: "active",
-    };
-    this.products.set(product1.id, product1);
-
-    const product2: Product = {
-      id: this.currentProductId++,
-      name: "Mantenimiento de Sistemas",
-      description: "Servicio de mantenimiento preventivo y correctivo",
-      price: "890.00",
-      category: "service", 
-      status: "active",
-    };
-    this.products.set(product2.id, product2);
-
-    const product3: Product = {
-      id: this.currentProductId++,
-      name: "Equipo de Aire Split 12000 BTU",
-      description: "Aire acondicionado tipo split de 12000 BTU con instalación",
-      price: "2150.00",
-      category: "product",
-      status: "active",
-    };
-    this.products.set(product3.id, product3);
-
-    // Seed orders
-    const order1: Order = {
-      id: this.currentOrderId++,
-      orderNumber: `ORD-${this.currentOrderNumber++}`,
-      customerId: customer1.id,
-      assignedUserId: technician1.id,
-      status: "in_progress",
-      priority: "normal",
-      totalAmount: "1250.00",
-      description: "Instalación de aire acondicionado en oficina",
-      notes: "Cliente requiere instalación temprana",
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-      updatedAt: new Date(),
-    };
-    this.orders.set(order1.id, order1);
-
-    const order2: Order = {
-      id: this.currentOrderId++,
-      orderNumber: `ORD-${this.currentOrderNumber++}`,
-      customerId: customer2.id,
-      assignedUserId: null,
-      status: "pending",
-      priority: "normal",
-      totalAmount: "890.00",
-      description: "Mantenimiento de sistema HVAC",
-      notes: null,
-      createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 hours ago
-      updatedAt: new Date(),
-    };
-    this.orders.set(order2.id, order2);
-
-    const order3: Order = {
-      id: this.currentOrderId++,
-      orderNumber: `ORD-${this.currentOrderNumber++}`,
-      customerId: customer3.id,
-      assignedUserId: seller1.id,
-      status: "completed",
-      priority: "normal",
-      totalAmount: "2150.00",
-      description: "Venta e instalación de equipo nuevo",
-      notes: "Cliente muy satisfecho",
-      createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000), // 5 hours ago
-      updatedAt: new Date(),
-    };
-    this.orders.set(order3.id, order3);
-
-    // Seed order items with service pricing components
-    const item1: OrderItem = {
-      id: this.currentOrderItemId++,
-      orderId: order1.id,
-      productId: product1.id,
-      quantity: 1,
-      unitPrice: "1250.00",
-      totalPrice: "1250.00",
-      installationCost: "350.00",
-      partsCost: "150.00",
-      laborHours: "4.0",
-      laborRate: "200.00",
-      notes: "Instalación compleja en edificio antiguo",
-    };
-    this.orderItems.set(item1.id, item1);
-
-    const item2: OrderItem = {
-      id: this.currentOrderItemId++,
-      orderId: order2.id,
-      productId: product2.id,
-      quantity: 1,
-      unitPrice: "890.00",
-      totalPrice: "890.00",
-      installationCost: "200.00",
-      partsCost: "90.00",
-      laborHours: "2.5",
-      laborRate: "180.00",
-      notes: "Mantenimiento preventivo estándar",
-    };
-    this.orderItems.set(item2.id, item2);
-
-    const item3: OrderItem = {
-      id: this.currentOrderItemId++,
-      orderId: order3.id,
-      productId: product3.id,
-      quantity: 1,
-      unitPrice: "2150.00",
-      totalPrice: "2150.00",
-      installationCost: "500.00",
-      partsCost: "350.00",
-      laborHours: "6.0",
-      laborRate: "220.00",
-      notes: "Equipo premium con instalación especializada",
-    };
-    this.orderItems.set(item3.id, item3);
-
-    // Seed conversations
-    const conv1: Conversation = {
-      id: this.currentConversationId++,
-      customerId: customer1.id,
-      orderId: order1.id,
-      status: "active",
-      lastMessageAt: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago
-    };
-    this.conversations.set(conv1.id, conv1);
-
-    const conv2: Conversation = {
-      id: this.currentConversationId++,
-      customerId: customer2.id,
-      orderId: order2.id,
-      status: "active",
-      lastMessageAt: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-    };
-    this.conversations.set(conv2.id, conv2);
-
-    // Seed messages
-    const msg1: Message = {
-      id: this.currentMessageId++,
-      conversationId: conv1.id,
-      senderId: null,
-      senderType: "customer",
-      messageType: "text",
-      content: "¿A qué hora pueden venir para la instalación?",
-      whatsappMessageId: "msg_12345",
-      sentAt: new Date(Date.now() - 15 * 60 * 1000),
-      isRead: false,
-    };
-    this.messages.set(msg1.id, msg1);
-
-    const msg2: Message = {
-      id: this.currentMessageId++,
-      conversationId: conv2.id,
-      senderId: null,
-      senderType: "customer",
-      messageType: "text",
-      content: "Necesito una cotización para el mantenimiento",
-      whatsappMessageId: "msg_12346",
-      sentAt: new Date(Date.now() - 30 * 60 * 1000),
-      isRead: false,
-    };
-    this.messages.set(msg2.id, msg2);
+    // Sin datos mock - todos los datos vendrán de la base de datos real
+    // Solo se mantienen los 2 usuarios esenciales para el funcionamiento del sistema
   }
 
   private seedWhatsAppLogs() {
-    // Add some sample logs to demonstrate functionality
-    const sampleLogs = [
-      {
-        id: Date.now() - 300000,
-        timestamp: new Date(Date.now() - 300000).toISOString(),
-        type: 'incoming',
-        message: 'Mensaje recibido de cliente',
-        data: {
-          from: '+52 55 1234-5678',
-          message: 'Hola, necesito información sobre sus servicios',
-          webhook_id: 'wh_123456'
-        }
-      },
-      {
-        id: Date.now() - 240000,
-        timestamp: new Date(Date.now() - 240000).toISOString(),
-        type: 'outgoing',
-        message: 'Mensaje enviado a cliente',
-        data: {
-          to: '+52 55 1234-5678',
-          message: '¡Hola! Con gusto te ayudamos. ¿Qué tipo de servicio necesitas?',
-          message_id: 'msg_789012'
-        }
-      },
-      {
-        id: Date.now() - 180000,
-        timestamp: new Date(Date.now() - 180000).toISOString(),
-        type: 'info',
-        message: 'Webhook configurado correctamente',
-        data: {
-          webhook_url: 'https://whatsapp2-production-e205.up.railway.app/webhook',
-          status: 'active'
-        }
-      },
-      {
-        id: Date.now() - 120000,
-        timestamp: new Date(Date.now() - 120000).toISOString(),
-        type: 'incoming',
-        message: 'Nuevo mensaje de WhatsApp',
-        data: {
-          from: '+52 55 9876-5432',
-          message: 'Quiero solicitar una cotización para aire acondicionado',
-          webhook_id: 'wh_345678'
-        }
-      }
-    ];
-
-    this.whatsappLogs = sampleLogs;
+    // Sin logs mock - todos los logs vendrán de la integración real de WhatsApp
+    this.whatsappLogs = [];
   }
 
   async getUser(id: number): Promise<User | undefined> {
