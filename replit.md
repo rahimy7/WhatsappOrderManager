@@ -676,6 +676,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - MemStorage simplificado sin datos de ejemplo para mejor rendimiento
   - Base de datos PostgreSQL lista para datos reales de producción sin información de prueba
   - Sistema operacional con solo datos auténticos de la tienda "Pecadores Anónimos"
+- July 01, 2025. CORRECCIÓN CRÍTICA DEL SISTEMA DE GESTIÓN DE PRODUCTOS:
+  - Eliminadas conversiones parseFloat para campo weight en endpoints POST y PUT de productos
+  - Campo weight ahora se mantiene como string para compatibilidad con tipo decimal de PostgreSQL
+  - Corregido esquema de validación frontend con nullable().default("") para campos opcionales
+  - Eliminados todos los productos y categorías existentes para empezar con datos limpios
+  - Creadas 4 categorías base: Aires Acondicionados, Refrigeración, Servicios de Instalación, Accesorios
+  - Sistema de gestión de productos completamente operacional con validación corregida
 
 ## User Preferences
 
