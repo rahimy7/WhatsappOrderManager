@@ -957,6 +957,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         whatsappVerifyToken: z.string().optional(),
         webhookUrl: z.string().url().optional(),
         storeWhatsAppNumber: z.string().optional(),
+        storeName: z.string().optional(),
+        storeAddress: z.string().optional(),
+        storeEmail: z.string().optional(),
       }).parse(req.body);
 
       // Obtener la configuración actual
@@ -995,16 +998,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Solo actualizar la configuración de WhatsApp si hay campos de WhatsApp para actualizar
       let config = currentConfig;
-      if (Object.keys(updateData).length > 0 && currentConfig) {
-        // Actualizar solo los campos proporcionados manteniendo los existentes
-        const mergedData = { ...currentConfig, ...updateData };
-        config = await storage.updateWhatsAppConfig(mergedData);
+      if (Object.keys(updateData).length > 0) {
+        if (currentConfig) {
+          // Actualizar configuración existente
+          const mergedData = { ...currentConfig, ...updateData };
+          config = await storage.updateWhatsAppConfig(mergedData);
+        } else {
+          // Si no hay configuración, necesitamos todos los campos obligatorios
+          if (!updateData.whatsappToken || !updateData.phoneNumberId) {
+            throw new Error('Token y Phone Number ID son requeridos para crear nueva configuración');
+          }
+          config = await storage.updateWhatsAppConfig(updateData);
+        }
       }
 
       res.json({ 
         success: true, 
         message: `Se actualizaron ${Object.keys(configData).length} campos correctamente`,
-        updatedAt: config.updatedAt 
+        updatedAt: config?.updatedAt || new Date()
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
