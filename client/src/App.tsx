@@ -130,6 +130,7 @@ function Router() {
       <Route path="/super-admin/settings" component={() => <ProtectedRoute component={GlobalSettings} permission="super_admin" />} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/public-catalog" component={PublicCatalogClean} />
+      <Route path="/simple-catalog" component={SimpleCatalog} />
       <Route path="/cart" component={Cart} />
       <Route path="/user-settings" component={UserSettings} />
       <Route path="/login" component={MultiTenantLogin} />

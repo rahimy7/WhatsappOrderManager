@@ -129,6 +129,14 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
+      href: "/product-management",
+      icon: Package,
+      label: "Gestión de Productos",
+      badge: null,
+      permission: "manage_products",
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
+    },
+    {
       href: "/reports",
       icon: BarChart3,
       label: "Reportes",
