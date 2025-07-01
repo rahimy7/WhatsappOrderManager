@@ -647,6 +647,19 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - URLs de catálogo actualizadas con dominio correcto de Replit para respuestas automáticas
   - Sistema de WhatsApp completamente operacional sin duplicaciones ni conflictos de configuración
   - Token activo funcionando correctamente con phone_number_id 690329620832620
+- July 01, 2025. LÓGICA DE VACIADO AUTOMÁTICO DEL CARRITO IMPLEMENTADA:
+  - Sistema de control de estado: variable "enviado" marca cuando pedido se envía por WhatsApp
+  - Al abrir catálogo verifica si pedido fue enviado, entonces vacia carrito automáticamente
+  - Genera nuevo sessionId para evitar conflictos entre sesiones de compra
+  - Experiencia optimizada: carrito se limpia solo después de enviar pedido exitosamente
+- July 01, 2025. REORGANIZACIÓN COMPLETA DE DASHBOARDS PARA SEPARACIÓN TIENDAS/SUPER ADMIN:
+  - Dashboards de tiendas completamente independientes con 13 funciones específicas
+  - Menu tiendas: Dashboard Principal, Conversaciones, Notificaciones, Equipo, Clientes, Órdenes/Pedidos, Empleados, Administrar Productos, Reportes, Facturación, Configuración, Respuestas Automáticas, Asignación Automática
+  - Super admin mantiene sus 8 funciones globales separadas completamente
+  - Técnicos tienen acceso limitado solo a "Mi Trabajo" y funciones básicas
+  - Página de facturación creada para consulta de datos fiscales y historial de facturas
+  - Sistema de permisos reorganizado con excludeRoles para control granular de acceso
+  - Navegación completamente separada entre niveles de usuario sin solapamiento de funciones
 
 ## User Preferences
 

@@ -63,22 +63,14 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   // Configurar elementos del menú basado en el rol del usuario
   const allNavItems: NavItem[] = [
-    // Dashboard principal para administradores regulares
+    // === MENU PARA TIENDAS (admin, manager, technician) ===
     {
       href: "/",
       icon: ChartLine,
       label: "Dashboard Principal",
       badge: null,
       permission: "view_dashboard",
-      excludeRoles: ["super_admin", "technician"], // Excluir super admin y técnicos
-    },
-    // Items básicos para todos los roles
-    {
-      href: "/orders",
-      icon: ShoppingCart,
-      label: "Pedidos",
-      badge: pendingOrders > 0 ? pendingOrders : null,
-      permission: "view_orders",
+      excludeRoles: ["super_admin"], // Solo para tiendas, NO super admin
     },
     {
       href: "/conversations",
@@ -86,6 +78,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Conversaciones",
       badge: activeConversations > 0 ? activeConversations : null,
       permission: "view_conversations",
+      excludeRoles: ["super_admin"], // Solo para tiendas
     },
     {
       href: "/notifications",
@@ -93,25 +86,15 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Notificaciones",
       badge: unreadNotifications > 0 ? unreadNotifications : null,
       permission: "view_notifications",
+      excludeRoles: ["super_admin"], // Solo para tiendas
     },
-    // Items específicos para técnicos
-    {
-      href: "/technician-dashboard",
-      icon: Wrench,
-      label: "Mi Trabajo",
-      badge: null,
-      permission: "technician_work",
-      roles: ["technician"],
-    },
-
-    // Items para managers y admins de tiendas individuales (NO para super admin)
     {
       href: "/team",
       icon: Users,
       label: "Equipo",
       badge: null,
       permission: "manage_users",
-      excludeRoles: ["super_admin"], // Excluir del super admin
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
       href: "/customers",
@@ -119,15 +102,15 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Clientes",
       badge: null,
       permission: "manage_users",
-      excludeRoles: ["super_admin"], // Excluir del super admin
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
       href: "/orders",
       icon: ClipboardList,
       label: "Órdenes/Pedidos",
-      badge: null,
-      permission: "manage_orders",
-      excludeRoles: ["super_admin"], // Excluir del super admin
+      badge: pendingOrders > 0 ? pendingOrders : null,
+      permission: "view_orders",
+      excludeRoles: ["super_admin"], // Solo para tiendas
     },
     {
       href: "/employees",
@@ -135,7 +118,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Empleados",
       badge: null,
       permission: "manage_users",
-      excludeRoles: ["super_admin"], // Excluir del super admin
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
       href: "/products",
@@ -143,15 +126,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Administrar Productos",
       badge: null,
       permission: "manage_orders",
-      excludeRoles: ["super_admin"], // Excluir del super admin
-    },
-    {
-      href: "/catalog",
-      icon: ShoppingBag,
-      label: "Catálogo",
-      badge: null,
-      permission: "view_products",
-      excludeRoles: ["super_admin"], // Excluir del super admin
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
       href: "/reports",
@@ -159,79 +134,23 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Reportes",
       badge: null,
       permission: "view_reports",
-      excludeRoles: ["super_admin"], // Excluir del super admin
-    },
-    // Items solo para super admins - 8 ventanas principales
-    {
-      href: "/",
-      icon: Shield,
-      label: "1️⃣ Panel de Control General",
-      badge: null,
-      permission: "super_admin",
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
-      href: "/super-admin/stores",
-      icon: Store,
-      label: "2️⃣ Tiendas Registradas",
-      badge: null,
-      permission: "super_admin",
-    },
-    {
-      href: "/super-admin/subscriptions",
+      href: "/billing",
       icon: CreditCard,
-      label: "3️⃣ Suscripciones y Facturación",
+      label: "Facturación",
       badge: null,
-      permission: "super_admin",
+      permission: "view_reports",
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
-    {
-      href: "/super-admin/global-orders",
-      icon: ShoppingCart,
-      label: "4️⃣ Pedidos Globales",
-      badge: null,
-      permission: "super_admin",
-    },
-    {
-      href: "/super-admin/users",
-      icon: Users,
-      label: "5️⃣ Usuarios (Propietarios)",
-      badge: null,
-      permission: "super_admin",
-    },
-    {
-      href: "/super-admin/reports",
-      icon: BarChart3,
-      label: "6️⃣ Reportes / Estadísticas",
-      badge: null,
-      permission: "super_admin",
-    },
-    {
-      href: "/super-admin/support",
-      icon: MessageSquare,
-      label: "7️⃣ Soporte / Tickets",
-      badge: null,
-      permission: "super_admin",
-    },
-    {
-      href: "/super-admin/settings",
-      icon: Settings,
-      label: "8️⃣ Configuración Global",
-      badge: null,
-      permission: "super_admin",
-    },
-    // Items solo para admins
     {
       href: "/settings",
       icon: Settings,
       label: "Configuración",
       badge: null,
       permission: "manage_settings",
-    },
-    {
-      href: "/whatsapp-settings",
-      icon: Smartphone,
-      label: "WhatsApp API",
-      badge: null,
-      permission: "manage_settings",
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
       href: "/auto-responses",
@@ -239,6 +158,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Respuestas Automáticas",
       badge: null,
       permission: "manage_settings",
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
       href: "/assignment-rules",
@@ -246,13 +166,83 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Asignación Automática",
       badge: null,
       permission: "manage_assignments",
+      excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
+    },
+
+    // === MENU ESPECÍFICO PARA TÉCNICOS ===
+    {
+      href: "/technician-dashboard",
+      icon: Wrench,
+      label: "Mi Trabajo",
+      badge: null,
+      permission: "technician_work",
+      roles: ["technician"], // Solo técnicos
+    },
+
+    // === MENU PARA SUPER ADMIN ===
+    {
+      href: "/",
+      icon: Shield,
+      label: "Panel de Control General",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
     },
     {
-      href: "/store-management",
+      href: "/super-admin/stores",
       icon: Store,
-      label: "Gestión de Tiendas",
+      label: "Tiendas Registradas",
       badge: null,
-      permission: "manage_settings",
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/subscriptions",
+      icon: CreditCard,
+      label: "Suscripciones",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/global-orders",
+      icon: ShoppingCart,
+      label: "Pedidos Globales",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/users",
+      icon: Users,
+      label: "Usuarios/Propietarios",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/reports",
+      icon: BarChart3,
+      label: "Reportes/Estadísticas",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/support",
+      icon: MessageSquare,
+      label: "Soporte/Tickets",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/settings",
+      icon: Settings,
+      label: "Configuración Global",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
     },
   ];
 
