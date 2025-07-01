@@ -156,6 +156,10 @@ export default function ProductManagement() {
   // Asegurar que los datos sean arrays
   const productsList = Array.isArray(products) ? products : [];
   const categoriesList = Array.isArray(categories) ? categories : [];
+  
+  // Debug temporal
+  console.log('Categories data:', categories);
+  console.log('Categories list:', categoriesList);
 
   // Mutations para productos
   const createProductMutation = useMutation({
