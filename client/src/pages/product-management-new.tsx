@@ -189,8 +189,8 @@ export default function ProductManagement() {
   });
 
   const updateProductMutation = useMutation({
-    mutationFn: async (data: ProductFormData) => {
-      return apiRequest("PUT", `/api/products/${selectedProduct?.id}`, data);
+    mutationFn: async (data: ProductFormData & { id: number }) => {
+      return apiRequest("PUT", `/api/products/${data.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
@@ -364,7 +364,7 @@ export default function ProductManagement() {
 
   const onSubmit = (data: ProductFormData) => {
     if (selectedProduct) {
-      updateProductMutation.mutate(data);
+      updateProductMutation.mutate({ ...data, id: selectedProduct.id });
     } else {
       createProductMutation.mutate(data);
     }
