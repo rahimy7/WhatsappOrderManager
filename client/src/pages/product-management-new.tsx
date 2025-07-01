@@ -144,9 +144,13 @@ export default function ProductManagement() {
     queryFn: () => apiRequest("GET", "/api/products")
   });
 
-  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
+  const { data: categories = [], isLoading: isLoadingCategories, refetch: refetchCategories } = useQuery({
     queryKey: ["/api/categories"],
-    queryFn: () => apiRequest("GET", "/api/categories")
+    queryFn: () => apiRequest("GET", "/api/categories"),
+    staleTime: 0, // Siempre considerar datos como obsoletos
+    gcTime: 0,    // TanStack Query v5 usa gcTime en lugar de cacheTime
+    refetchOnMount: true,
+    refetchOnWindowFocus: true
   });
 
   // Asegurar que los datos sean arrays
@@ -226,6 +230,7 @@ export default function ProductManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      refetchCategories(); // Forzar recarga inmediata
       setIsCategoryDialogOpen(false);
       categoryForm.reset();
       toast({
