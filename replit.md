@@ -730,6 +730,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Funcionalidad de actualización de estado y eliminación de órdenes con confirmaciones
   - Sistema de permisos configurado para excluir super_admin y técnicos del acceso
   - Integración completa con sistema de routing y autenticación existente
+- July 01, 2025. TARJETAS DE ESTADÍSTICAS AGREGADAS A LA PÁGINA DE ÓRDENES PRINCIPAL:
+  - Agregadas 7 tarjetas de resumen con estadísticas por estado en la página /orders
+  - Tarjetas con colores distintivos: Total (azul), Pendientes (amarillo), Confirmados (púrpura), Asignados (naranja)
+  - Estados adicionales: En Progreso (índigo), Completados (verde), Cancelados (rojo)
+  - Cada tarjeta muestra contador dinámico y ícono representativo del estado
+  - Diseño responsivo con grid adaptativo: 2 columnas en móvil, 4 en tablet, 7 en desktop
+  - Eliminada opción duplicada "Órdenes/Pedidos" del sidebar para evitar confusión
+  - Integración con badge de órdenes pendientes en el menú "Gestión de Órdenes"
 
 ## User Preferences
 

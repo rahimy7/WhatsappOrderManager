@@ -255,6 +255,17 @@ export default function OrdersPage() {
     );
   }
 
+  // Calculate statistics by status
+  const orderStats = {
+    total: orders.length,
+    pending: orders.filter(order => order.status === 'pending').length,
+    confirmed: orders.filter(order => order.status === 'confirmed').length,
+    assigned: orders.filter(order => order.status === 'assigned').length,
+    in_progress: orders.filter(order => order.status === 'in_progress').length,
+    completed: orders.filter(order => order.status === 'completed').length,
+    cancelled: orders.filter(order => order.status === 'cancelled').length,
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -264,6 +275,93 @@ export default function OrdersPage() {
             Administra todas las órdenes y pedidos del sistema
           </p>
         </div>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-600">Total</p>
+                <p className="text-2xl font-bold text-blue-800">{orderStats.total}</p>
+              </div>
+              <Package className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-yellow-600">Pendientes</p>
+                <p className="text-2xl font-bold text-yellow-800">{orderStats.pending}</p>
+              </div>
+              <Clock className="h-8 w-8 text-yellow-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-purple-600">Confirmados</p>
+                <p className="text-2xl font-bold text-purple-800">{orderStats.confirmed}</p>
+              </div>
+              <CheckCircle className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-orange-600">Asignados</p>
+                <p className="text-2xl font-bold text-orange-800">{orderStats.assigned}</p>
+              </div>
+              <UserCheck className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-indigo-600">En Progreso</p>
+                <p className="text-2xl font-bold text-indigo-800">{orderStats.in_progress}</p>
+              </div>
+              <Clock className="h-8 w-8 text-indigo-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-green-600">Completados</p>
+                <p className="text-2xl font-bold text-green-800">{orderStats.completed}</p>
+              </div>
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-r from-red-50 to-red-100 border-red-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-red-600">Cancelados</p>
+                <p className="text-2xl font-bold text-red-800">{orderStats.cancelled}</p>
+              </div>
+              <XCircle className="h-8 w-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
