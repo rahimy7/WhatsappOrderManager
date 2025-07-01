@@ -944,6 +944,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // PATCH endpoint para actualizaciones parciales de configuración WhatsApp
+  app.patch("/api/settings/whatsapp", async (req, res) => {
+    try {
+      // Schema flexible que permite cualquier campo opcional
+      const configData = z.object({
+        metaAppId: z.string().optional(),
+        metaAppSecret: z.string().optional(),
+        whatsappBusinessAccountId: z.string().optional(),
+        whatsappPhoneNumberId: z.string().optional(),
+        whatsappToken: z.string().optional(),
+        whatsappVerifyToken: z.string().optional(),
+        webhookUrl: z.string().url().optional(),
+        storeWhatsAppNumber: z.string().optional(),
+      }).parse(req.body);
+
+      // Obtener la configuración actual
+      const currentConfig = await storage.getWhatsAppConfig();
+      
+      // Crear el objeto de actualización con solo los campos modificados
+      const updateData: any = {};
+      
+      // Mapear campos del frontend al formato de base de datos
+      if (configData.whatsappToken !== undefined) {
+        updateData.accessToken = configData.whatsappToken;
+      }
+      if (configData.whatsappPhoneNumberId !== undefined) {
+        updateData.phoneNumberId = configData.whatsappPhoneNumberId;
+      }
+      if (configData.whatsappVerifyToken !== undefined) {
+        updateData.webhookVerifyToken = configData.whatsappVerifyToken;
+      }
+      if (configData.whatsappBusinessAccountId !== undefined) {
+        updateData.businessAccountId = configData.whatsappBusinessAccountId;
+      }
+      if (configData.metaAppId !== undefined) {
+        updateData.appId = configData.metaAppId;
+      }
+
+      // Actualizar configuración de tienda si se proporciona storeWhatsAppNumber
+      if (configData.storeWhatsAppNumber !== undefined) {
+        await storage.updateStoreSettings({ storeWhatsAppNumber: configData.storeWhatsAppNumber });
+      }
+
+      // Solo actualizar la configuración de WhatsApp si hay campos para actualizar
+      let config = currentConfig;
+      if (Object.keys(updateData).length > 0) {
+        config = await storage.updateWhatsAppConfig(updateData);
+      }
+
+      res.json({ 
+        success: true, 
+        message: `Se actualizaron ${Object.keys(configData).length} campos correctamente`,
+        updatedAt: config.updatedAt 
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Datos inválidos", details: error.errors });
+      }
+      console.error("Error updating WhatsApp config:", error);
+      res.status(500).json({ error: "Error al actualizar la configuración de WhatsApp" });
+    }
+  });
+
   // Test WhatsApp Connection
   app.post("/api/whatsapp/test-connection", async (req, res) => {
     try {

@@ -237,12 +237,61 @@ export default function Settings() {
       whatsappToken: config.whatsappToken || "",
       whatsappVerifyToken: config.whatsappVerifyToken || "",
       webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
+      storeWhatsAppNumber: config.storeWhatsAppNumber || "",
     },
   });
 
+  // Actualizar formulario cuando cambian los datos de configuración
+  useEffect(() => {
+    if (config && !isLoading) {
+      const newValues = {
+        metaAppId: config.metaAppId || "",
+        metaAppSecret: config.metaAppSecret || "",
+        whatsappBusinessAccountId: config.whatsappBusinessAccountId || "",
+        whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
+        whatsappToken: config.whatsappToken || "",
+        whatsappVerifyToken: config.whatsappVerifyToken || "",
+        webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
+        storeWhatsAppNumber: config.storeWhatsAppNumber || "",
+      };
+      
+      // Solo actualizar si los valores son diferentes
+      const currentValues = form.getValues();
+      if (JSON.stringify(currentValues) !== JSON.stringify(newValues)) {
+        form.reset(newValues);
+      }
+    }
+  }, [config, isLoading, form]);
+
   const saveConfigMutation = useMutation({
     mutationFn: async (data: WhatsAppConfig) => {
-      return apiRequest("POST", "/api/settings/whatsapp", data);
+      // Detectar solo los campos que han cambiado
+      const changedFields: Partial<WhatsAppConfig> = {};
+      const originalData = {
+        metaAppId: config.metaAppId || "",
+        metaAppSecret: config.metaAppSecret || "",
+        whatsappBusinessAccountId: config.whatsappBusinessAccountId || "",
+        whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
+        whatsappToken: config.whatsappToken || "",
+        whatsappVerifyToken: config.whatsappVerifyToken || "",
+        webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
+        storeWhatsAppNumber: config.storeWhatsAppNumber || "",
+      };
+
+      // Comparar cada campo y solo incluir los que han cambiado
+      Object.keys(data).forEach((key) => {
+        const typedKey = key as keyof WhatsAppConfig;
+        if (data[typedKey] !== originalData[typedKey]) {
+          changedFields[typedKey] = data[typedKey];
+        }
+      });
+
+      // Si no hay cambios, no enviar nada
+      if (Object.keys(changedFields).length === 0) {
+        throw new Error("No se detectaron cambios para guardar");
+      }
+
+      return apiRequest("PATCH", "/api/settings/whatsapp", changedFields);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/whatsapp"] });
