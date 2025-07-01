@@ -863,10 +863,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WhatsApp Settings API
   app.get("/api/settings/whatsapp", async (req, res) => {
     try {
-      let config = await storage.getWhatsAppConfig();
+      let whatsappConfig = await storage.getWhatsAppConfig();
+      let storeConfig = await storage.getStoreConfig();
       
       // Initialize config with environment variables if not set
-      if (!config || !config.accessToken) {
+      if (!whatsappConfig || !whatsappConfig.accessToken) {
         const envConfig = {
           accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
           phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
@@ -875,17 +876,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           appId: ""
         };
         
-        config = await storage.updateWhatsAppConfig(envConfig);
+        whatsappConfig = await storage.updateWhatsAppConfig(envConfig);
       }
       
-      // Don't send sensitive data to frontend
+      // Combine both configurations and don't send sensitive data to frontend
       const safeConfig = {
-        accessToken: config.accessToken ? "****" + config.accessToken.slice(-8) : "",
-        phoneNumberId: config.phoneNumberId || "",
-        whatsappVerifyToken: config.webhookVerifyToken ? "****" + config.webhookVerifyToken.slice(-4) : "",
+        // WhatsApp API fields
+        metaAppId: whatsappConfig.appId || "",
+        metaAppSecret: "", // Never send secrets
+        whatsappBusinessAccountId: whatsappConfig.businessAccountId || "",
+        whatsappPhoneNumberId: whatsappConfig.phoneNumberId || "",
+        whatsappToken: whatsappConfig.accessToken ? "****" + whatsappConfig.accessToken.slice(-8) : "",
+        whatsappVerifyToken: whatsappConfig.webhookVerifyToken ? "****" + whatsappConfig.webhookVerifyToken.slice(-4) : "",
         webhookUrl: process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/webhook` : 'https://tu-dominio-replit.com/webhook',
-        isConfigured: !!(config.accessToken && config.phoneNumberId),
-        connectionStatus: config.accessToken && config.phoneNumberId ? 'connected' : 'not_configured'
+        
+        // Store settings fields
+        storeWhatsAppNumber: storeConfig?.storeWhatsAppNumber || "",
+        storeName: storeConfig?.storeName || "",
+        storeAddress: storeConfig?.storeAddress || "",
+        storeEmail: storeConfig?.storeEmail || "",
+        
+        // Status fields
+        isConfigured: !!(whatsappConfig.accessToken && whatsappConfig.phoneNumberId),
+        connectionStatus: whatsappConfig.accessToken && whatsappConfig.phoneNumberId ? 'connected' : 'not_configured'
       };
       res.json(safeConfig);
     } catch (error) {

@@ -262,16 +262,18 @@ export default function Settings() {
         metaAppSecret: config.metaAppSecret || "",
         whatsappBusinessAccountId: config.whatsappBusinessAccountId || "",
         whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
-        whatsappToken: config.whatsappToken || "",
-        whatsappVerifyToken: config.whatsappVerifyToken || "",
+        whatsappToken: config.whatsappToken && !config.whatsappToken.startsWith("****") ? config.whatsappToken : "",
+        whatsappVerifyToken: config.whatsappVerifyToken && !config.whatsappVerifyToken.startsWith("****") ? config.whatsappVerifyToken : "",
         webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
         storeWhatsAppNumber: config.storeWhatsAppNumber || "",
       };
       
-      // Solo actualizar si los valores son diferentes
+      // Solo actualizar si hay valores nuevos válidos
       const currentValues = form.getValues();
-      if (JSON.stringify(currentValues) !== JSON.stringify(newValues)) {
-        form.reset(newValues);
+      const hasValidValues = Object.values(newValues).some(value => value && value.length > 0);
+      
+      if (hasValidValues && JSON.stringify(currentValues) !== JSON.stringify(newValues)) {
+        form.reset(newValues, { keepDefaultValues: true });
       }
     }
   }, [config, isLoading, form]);
@@ -344,15 +346,31 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       toast({
         title: result.success ? "Conexión exitosa" : "Error de conexión",
-        description: result.message,
+        description: result.message || (result.success ? "La conexión con WhatsApp API es correcta" : "No se pudo establecer conexión"),
         variant: result.success ? "default" : "destructive",
       });
     },
     onError: (error: any) => {
       setIsTestingConnection(false);
+      let errorMessage = "No se pudo conectar con WhatsApp Business API.";
+      
+      if (error.message) {
+        if (error.message.includes("403")) {
+          errorMessage = "Token de acceso inválido o sin permisos suficientes.";
+        } else if (error.message.includes("401")) {
+          errorMessage = "Token de acceso expirado o no autorizado.";
+        } else if (error.message.includes("404")) {
+          errorMessage = "Phone Number ID no encontrado o inválido.";
+        } else if (error.message.includes("network")) {
+          errorMessage = "Error de red. Verifica tu conexión a internet.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Error de conexión",
-        description: error.message || "No se pudo conectar con WhatsApp Business API.",
+        description: errorMessage,
         variant: "destructive",
       });
     },
