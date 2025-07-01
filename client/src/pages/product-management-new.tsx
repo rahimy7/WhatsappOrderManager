@@ -146,7 +146,15 @@ export default function ProductManagement() {
 
   const { data: categories = [], isLoading: isLoadingCategories, refetch: refetchCategories } = useQuery({
     queryKey: ["/api/categories"],
-    queryFn: () => apiRequest("GET", "/api/categories"),
+    queryFn: async () => {
+      const response = await fetch("/api/categories", {
+        credentials: "include"
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    },
     staleTime: 0, // Siempre considerar datos como obsoletos
     gcTime: 0,    // TanStack Query v5 usa gcTime en lugar de cacheTime
     refetchOnMount: true,
@@ -156,10 +164,6 @@ export default function ProductManagement() {
   // Asegurar que los datos sean arrays
   const productsList = Array.isArray(products) ? products : [];
   const categoriesList = Array.isArray(categories) ? categories : [];
-  
-  // Debug temporal
-  console.log('Categories data:', categories);
-  console.log('Categories list:', categoriesList);
 
   // Mutations para productos
   const createProductMutation = useMutation({

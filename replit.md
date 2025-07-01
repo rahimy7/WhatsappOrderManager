@@ -692,6 +692,12 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Integración en catálogo público: muestra imagen principal + contador de imágenes adicionales
   - Manejo robusto de errores: fallback a ícono cuando imágenes no cargan
   - Campo images como array en esquema existente, compatible con base de datos PostgreSQL
+- July 01, 2025. CORRECCIÓN CRÍTICA: Sistema de consulta de categorías corregido y operacional:
+  - Resuelto problema donde apiRequest() devolvía objeto Response en lugar de datos JSON
+  - Eliminada queryFn personalizada que causaba conflicto con queryFn por defecto de React Query
+  - Configuración optimizada de cache con gcTime: 0 y refetchOnMount para datos siempre actualizados
+  - Sistema de refetch manual agregado en callbacks de mutación para sincronización inmediata
+  - Categorías ahora se muestran correctamente después de creación sin problemas de cache del navegador
 
 ## User Preferences
 
