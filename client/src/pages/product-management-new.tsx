@@ -149,6 +149,10 @@ export default function ProductManagement() {
     queryFn: () => apiRequest("GET", "/api/categories")
   });
 
+  // Asegurar que los datos sean arrays
+  const productsList = Array.isArray(products) ? products : [];
+  const categoriesList = Array.isArray(categories) ? categories : [];
+
   // Mutations para productos
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
@@ -337,7 +341,7 @@ export default function ProductManagement() {
   };
 
   // Filtros
-  const filteredProducts = products.filter((product: Product) => {
+  const filteredProducts = productsList.filter((product: Product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (product.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
     const matchesCategory = !selectedCategory || product.category === selectedCategory;
@@ -412,7 +416,7 @@ export default function ProductManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="">Todas las categorías</SelectItem>
-                {categories.map((category: Category) => (
+                {categoriesList.map((category: Category) => (
                   <SelectItem key={category.id} value={category.name}>
                     {category.name}
                   </SelectItem>
@@ -509,7 +513,7 @@ export default function ProductManagement() {
 
         <TabsContent value="categories" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {categories.map((category: Category) => (
+            {categoriesList.map((category: Category) => (
               <Card key={category.id} className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -547,7 +551,7 @@ export default function ProductManagement() {
             ))}
           </div>
 
-          {categories.length === 0 && (
+          {categoriesList.length === 0 && (
             <Card className="p-8 text-center">
               <Folder className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No hay categorías</h3>
@@ -612,7 +616,7 @@ export default function ProductManagement() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {categories.map((category: Category) => (
+                          {categoriesList.map((category: Category) => (
                             <SelectItem key={category.id} value={category.name}>
                               {category.name}
                             </SelectItem>

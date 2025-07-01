@@ -27,7 +27,7 @@ import PublicCatalogClean from "@/pages/public-catalog-clean";
 import SimpleCatalog from "@/pages/simple-catalog";
 import Cart from "@/pages/cart";
 import Billing from "@/pages/billing";
-import ProductManagement from "@/pages/product-management";
+import ProductManagement from "@/pages/product-management-new";
 import StoreManagement from "@/pages/store-management";
 import MultiTenantLogin from "@/pages/multi-tenant-login";
 import SuperAdminDashboard from "@/pages/super-admin-dashboard";
