@@ -911,6 +911,177 @@ export default function ProductManagement() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de vista del producto */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalles del Producto</DialogTitle>
+          </DialogHeader>
+          {selectedProduct && (
+            <div className="space-y-6">
+              {/* Galería de imágenes */}
+              {selectedProduct.images && selectedProduct.images.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Imágenes</h3>
+                  <div className="grid gap-4">
+                    {/* Imagen principal */}
+                    <div className="w-full h-64 rounded-lg overflow-hidden bg-gray-100 border">
+                      <img
+                        src={selectedProduct.images[0]}
+                        alt={selectedProduct.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    {/* Miniaturas */}
+                    {selectedProduct.images.length > 1 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {selectedProduct.images.slice(1).map((url: string, index: number) => (
+                          <div key={index} className="aspect-square rounded-md overflow-hidden bg-gray-100 border">
+                            <img
+                              src={url}
+                              alt={`${selectedProduct.name} ${index + 2}`}
+                              className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                              onClick={() => {
+                                // Intercambiar imagen principal con la seleccionada
+                                const newImages = [...selectedProduct.images!];
+                                [newImages[0], newImages[index + 1]] = [newImages[index + 1], newImages[0]];
+                                setSelectedProduct({ ...selectedProduct, images: newImages });
+                              }}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Información del producto */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-medium mb-2">Información General</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Nombre:</span>
+                        <span className="font-medium">{selectedProduct.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Categoría:</span>
+                        <span>{selectedProduct.category}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Precio:</span>
+                        <span className="font-medium text-green-600">${selectedProduct.price}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Estado:</span>
+                        <Badge variant={selectedProduct.status === "active" ? "default" : "secondary"}>
+                          {selectedProduct.status === "active" ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </div>
+                      {selectedProduct.sku && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">SKU:</span>
+                          <span>{selectedProduct.sku}</span>
+                        </div>
+                      )}
+                      {selectedProduct.brand && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Marca:</span>
+                          <span>{selectedProduct.brand}</span>
+                        </div>
+                      )}
+                      {selectedProduct.model && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Modelo:</span>
+                          <span>{selectedProduct.model}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-medium mb-2">Inventario</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Stock:</span>
+                        <span>{selectedProduct.stockQuantity}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Disponibilidad:</span>
+                        <span>{selectedProduct.availability}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Cantidad mínima:</span>
+                        <span>{selectedProduct.minQuantity}</span>
+                      </div>
+                      {selectedProduct.maxQuantity && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Cantidad máxima:</span>
+                          <span>{selectedProduct.maxQuantity}</span>
+                        </div>
+                      )}
+                      {selectedProduct.weight && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Peso:</span>
+                          <span>{selectedProduct.weight} kg</span>
+                        </div>
+                      )}
+                      {selectedProduct.warranty && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Garantía:</span>
+                          <span>{selectedProduct.warranty}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {selectedProduct.description && (
+                <div>
+                  <h3 className="text-lg font-medium mb-2">Descripción</h3>
+                  <p className="text-muted-foreground">{selectedProduct.description}</p>
+                </div>
+              )}
+
+              {selectedProduct.features && selectedProduct.features.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium mb-2">Características</h3>
+                  <ul className="list-disc list-inside space-y-1">
+                    {selectedProduct.features.map((feature: string, index: number) => (
+                      <li key={index} className="text-muted-foreground">{feature}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedProduct.tags && selectedProduct.tags.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium mb-2">Etiquetas</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedProduct.tags.map((tag: string, index: number) => (
+                      <Badge key={index} variant="outline">{tag}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

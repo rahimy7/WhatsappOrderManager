@@ -291,8 +291,34 @@ export default function SimpleCatalog() {
           {filteredProducts.map((product: any) => (
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
               <CardHeader className="pb-4">
-                <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center">
-                  <ShoppingBag className="w-16 h-16 text-blue-600" />
+                <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg overflow-hidden relative">
+                  {product.images && product.images.length > 0 ? (
+                    <>
+                      <img
+                        src={product.images[0]}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.nextElementSibling as HTMLDivElement;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                      <div className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center absolute inset-0" style={{ display: 'none' }}>
+                        <ShoppingBag className="w-16 h-16 text-blue-600" />
+                      </div>
+                      {product.images.length > 1 && (
+                        <div className="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-full">
+                          +{product.images.length - 1}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ShoppingBag className="w-16 h-16 text-blue-600" />
+                    </div>
+                  )}
                 </div>
                 <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
                 <CardDescription className="text-sm text-gray-600 line-clamp-3">
