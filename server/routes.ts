@@ -194,8 +194,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
       }
 
-      // Comparar contraseña (en producción deberían estar hasheadas)
-      if (user.password !== password) {
+      // Comparar contraseña hasheada usando bcrypt
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
         return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
       }
 
