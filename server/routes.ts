@@ -984,7 +984,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Actualizar configuración de tienda si se proporciona storeWhatsAppNumber
       if (configData.storeWhatsAppNumber !== undefined) {
-        await storage.updateStoreSettings({ storeWhatsAppNumber: configData.storeWhatsAppNumber });
+        const currentStoreConfig = await storage.getStoreConfig();
+        await storage.updateStoreConfig({ 
+          storeWhatsAppNumber: configData.storeWhatsAppNumber,
+          storeName: currentStoreConfig?.storeName || "Mi Tienda",
+          storeAddress: currentStoreConfig?.storeAddress || "",
+          storeEmail: currentStoreConfig?.storeEmail || ""
+        });
       }
 
       // Solo actualizar la configuración de WhatsApp si hay campos para actualizar
