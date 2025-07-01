@@ -38,9 +38,8 @@ const whatsappConfigSchema = z.object({
 
 type WhatsAppConfig = z.infer<typeof whatsappConfigSchema>;
 
-// Schema para configuración de tienda
+// Schema para configuración de tienda (sin WhatsApp)
 const storeConfigSchema = z.object({
-  storeWhatsAppNumber: z.string().min(10, "Número de WhatsApp debe tener al menos 10 dígitos"),
   storeName: z.string().min(1, "Nombre de la tienda es requerido"),
   storeAddress: z.string().optional(),
   storeEmail: z.string().email("Email inválido").optional().or(z.literal("")),
@@ -59,7 +58,6 @@ function StoreSettings() {
   const form = useForm<StoreConfig>({
     resolver: zodResolver(storeConfigSchema),
     defaultValues: {
-      storeWhatsAppNumber: "",
       storeName: "",
       storeAddress: "",
       storeEmail: "",
@@ -69,14 +67,19 @@ function StoreSettings() {
   // Actualizar formulario cuando cambian los datos
   useEffect(() => {
     if (storeConfig && !isLoading) {
-      form.reset({
-        storeWhatsAppNumber: storeConfig.storeWhatsAppNumber || "",
+      const newValues = {
         storeName: storeConfig.storeName || "",
         storeAddress: storeConfig.storeAddress || "",
         storeEmail: storeConfig.storeEmail || "",
-      });
+      };
+      
+      // Solo actualizar si los valores son diferentes
+      const currentValues = form.getValues();
+      if (JSON.stringify(currentValues) !== JSON.stringify(newValues)) {
+        form.reset(newValues);
+      }
     }
-  }, [storeConfig, isLoading]);
+  }, [storeConfig, isLoading, form]);
 
   const saveStoreConfigMutation = useMutation({
     mutationFn: async (data: StoreConfig) => {
@@ -140,25 +143,7 @@ function StoreSettings() {
               )}
             </div>
 
-            {/* Número de WhatsApp para pedidos */}
-            <div className="space-y-2">
-              <Label htmlFor="storeWhatsAppNumber" className="flex items-center space-x-2">
-                <Phone className="h-4 w-4 text-green-600" />
-                <span>WhatsApp para Pedidos</span>
-              </Label>
-              <Input
-                id="storeWhatsAppNumber"
-                {...form.register("storeWhatsAppNumber")}
-                placeholder="Ej: 5215512345678"
-                className="font-mono"
-              />
-              <p className="text-xs text-gray-500">
-                Número de WhatsApp donde se enviarán los pedidos del catálogo público (incluir código país: 52)
-              </p>
-              {form.formState.errors.storeWhatsAppNumber && (
-                <p className="text-sm text-red-600">{form.formState.errors.storeWhatsAppNumber.message}</p>
-              )}
-            </div>
+
 
             {/* Dirección de la tienda */}
             <div className="space-y-2">
