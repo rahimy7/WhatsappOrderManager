@@ -200,6 +200,21 @@ export default function OrdersPage() {
     }).format(numAmount);
   };
 
+  // Function to generate Google Maps link from address or coordinates
+  const generateGoogleMapsLink = (address: string, latitude?: string, longitude?: string): string => {
+    if (latitude && longitude) {
+      // Use coordinates for more precise location
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      const query = address ? encodeURIComponent(address) : `${lat},${lng}`;
+      return `https://www.google.com/maps/@${lat},${lng},15z?q=${query}`;
+    } else if (address) {
+      // Use address only
+      return `https://www.google.com/maps/search/${encodeURIComponent(address)}`;
+    }
+    return '';
+  };
+
   const handleEditOrder = (order: OrderWithDetails) => {
     setSelectedOrder(order);
     setIsEditDialogOpen(true);
@@ -623,7 +638,30 @@ export default function OrdersPage() {
                 </div>
                 <div className="col-span-2">
                   <Label className="text-sm font-medium text-muted-foreground">Dirección de Entrega</Label>
-                  <p className="text-sm">{selectedOrder.customer?.address || selectedOrder.description || "No especificada"}</p>
+                  {(() => {
+                    const address = selectedOrder.customer?.address || selectedOrder.description || "No especificada";
+                    const latitude = selectedOrder.customer?.latitude;
+                    const longitude = selectedOrder.customer?.longitude;
+                    const mapLink = generateGoogleMapsLink(address, latitude, longitude);
+                    
+                    if (mapLink && address !== "No especificada") {
+                      return (
+                        <div className="flex items-center gap-2">
+                          <a 
+                            href={mapLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                          >
+                            <MapPin className="h-4 w-4" />
+                            {address}
+                          </a>
+                        </div>
+                      );
+                    } else {
+                      return <p className="text-sm">{address}</p>;
+                    }
+                  })()}
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Asignado a</Label>

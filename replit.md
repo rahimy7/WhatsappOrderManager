@@ -739,6 +739,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Eliminada opción duplicada "Órdenes/Pedidos" del sidebar para evitar confusión
   - Integración con badge de órdenes pendientes en el menú "Gestión de Órdenes"
   - Configurado enlace "Gestión de Órdenes" del sidebar para apuntar a /orders con tarjetas de estadísticas
+- July 01, 2025. DIRECCIONES CONVERTIDAS A FORMATO GOOGLE MAPS CLICKEABLE:
+  - Implementada función generateGoogleMapsLink() para crear enlaces clickeables desde direcciones y coordenadas
+  - Direcciones de clientes en modales de órdenes ahora son enlaces directos a Google Maps
+  - Sistema inteligente usa coordenadas GPS cuando están disponibles para mayor precisión
+  - Enlaces se abren en nueva pestaña con ícono de ubicación para mejor UX
+  - Fallback a dirección de texto simple cuando no hay coordenadas disponibles
+  - Integración perfecta con sistema existente de mapLink en base de datos
 
 ## User Preferences
 
