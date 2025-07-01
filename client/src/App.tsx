@@ -28,6 +28,7 @@ import SimpleCatalog from "@/pages/simple-catalog";
 import Cart from "@/pages/cart";
 import Billing from "@/pages/billing";
 import ProductManagement from "@/pages/product-management-new";
+import OrderManagement from "@/pages/order-management";
 import StoreManagement from "@/pages/store-management";
 import MultiTenantLogin from "@/pages/multi-tenant-login";
 import SuperAdminDashboard from "@/pages/super-admin-dashboard";
@@ -104,6 +105,7 @@ function Router() {
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} permission="view_dashboard" />} />
       <Route path="/technician-dashboard" component={() => <ProtectedRoute component={TechnicianDashboard} permission="technician_work" />} />
       <Route path="/orders" component={() => <ProtectedRoute component={Orders} permission="manage_orders" />} />
+      <Route path="/order-management" component={() => <ProtectedRoute component={OrderManagement} permission="manage_orders" />} />
       <Route path="/conversations" component={() => <ProtectedRoute component={Conversations} permission="view_conversations" />} />
       <Route path="/team" component={() => <ProtectedRoute component={Team} permission="manage_users" />} />
       <Route path="/products" component={() => <ProtectedRoute component={Products} permission="manage_orders" />} />

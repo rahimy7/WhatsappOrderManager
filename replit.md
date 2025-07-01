@@ -720,6 +720,16 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Actualizado processWebCatalogOrder() para usar respuestas automáticas con variables dinámicas
   - Modificado handlePaymentMethodSelection() para usar templates de confirmación con datos personalizados
   - Sistema de WhatsApp ahora envía mensajes profesionales con información completa del cliente y formato monetario correcto
+- July 01, 2025. PÁGINA DE GESTIÓN DE ÓRDENES AGREGADA AL DASHBOARD DE TIENDA:
+  - Creada nueva página "Gestión de Órdenes" (/order-management) con interfaz administrativa completa
+  - Agregada opción "Gestión de Órdenes" al sidebar con ícono ShoppingBag para administradores de tienda
+  - Interfaz incluye búsqueda avanzada por número de orden, cliente y teléfono
+  - Filtros por estado de orden con tarjetas estadísticas para cada estado (pendiente, confirmado, asignado, etc.)
+  - Tabla detallada de órdenes con información de cliente, estado, total y fecha de creación
+  - Modal de detalles completo con información de orden, cliente, productos y notas
+  - Funcionalidad de actualización de estado y eliminación de órdenes con confirmaciones
+  - Sistema de permisos configurado para excluir super_admin y técnicos del acceso
+  - Integración completa con sistema de routing y autenticación existente
 
 ## User Preferences
 
