@@ -802,14 +802,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         productData = req.body;
       }
 
+      console.log("Creating product with data:", productData);
       const validatedData = insertProductSchema.parse(productData);
       const product = await storage.createProduct(validatedData);
       res.status(201).json(product);
     } catch (error) {
+      console.error("Error creating product:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid product data", details: error.errors });
       }
-      res.status(500).json({ error: "Failed to create product" });
+      res.status(500).json({ error: "Failed to create product", details: error.message });
     }
   });
 
