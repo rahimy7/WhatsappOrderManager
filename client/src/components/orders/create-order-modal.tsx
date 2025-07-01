@@ -182,7 +182,7 @@ export default function CreateOrderModal({ isOpen, onClose }: CreateOrderModalPr
 
   const calculateTotal = () => {
     return orderItems.reduce((sum, item) => {
-      const product = products?.find((p: Product) => p.id === item.productId);
+      const product = Array.isArray(products) ? products.find((p: Product) => p.id === item.productId) : null;
       return sum + (product ? parseFloat(product.price) * item.quantity : 0);
     }, 0);
   };
@@ -366,7 +366,7 @@ export default function CreateOrderModal({ isOpen, onClose }: CreateOrderModalPr
             <Label>Productos y Servicios</Label>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
-              {products?.map((product: Product) => {
+              {Array.isArray(products) && products.map((product: Product) => {
                 const orderItem = orderItems.find(item => item.productId === product.id);
                 return (
                   <Card key={product.id} className="cursor-pointer hover:shadow-md transition-shadow">

@@ -683,6 +683,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Eliminados todos los productos y categorías existentes para empezar con datos limpios
   - Creadas 4 categorías base: Aires Acondicionados, Refrigeración, Servicios de Instalación, Accesorios
   - Sistema de gestión de productos completamente operacional con validación corregida
+- July 01, 2025. ERROR 500 EN CREACIÓN DE PRODUCTOS RESUELTO COMPLETAMENTE:
+  - Identificado problema: campos opcionales enviaban strings vacíos ("") a campos numéricos de PostgreSQL
+  - Implementado sistema de transformación en esquema de validación Zod
+  - Strings vacíos se convierten automáticamente a null para compatibilidad con base de datos
+  - Agregados campos Marca, Modelo y SKU al formulario de productos con validación correcta
+  - Corregido error JavaScript en create-order-modal.tsx con verificaciones Array.isArray()
+  - Sistema de creación de productos completamente funcional sin errores de validación
+  - Primer producto creado exitosamente: "AIRE ACONDICIONADO CETRON MCI24CDBWCC32" con múltiples imágenes
 - July 01, 2025. SISTEMA DE MÚLTIPLES IMÁGENES PARA PRODUCTOS COMPLETAMENTE IMPLEMENTADO:
   - Soporte completo para hasta 3 imágenes por producto a través de URLs
   - Componente de gestión de múltiples imágenes con vista previa y validación
