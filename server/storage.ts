@@ -1931,16 +1931,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings> {
-    // Deactivate existing configs
-    await db.update(whatsappSettings).set({ isActive: false });
+    // Obtener la configuración activa existente
+    const existingConfig = await this.getWhatsAppConfig();
     
-    // Insert new config
-    const [newConfig] = await db.insert(whatsappSettings).values({
-      ...config,
-      isActive: true
-    }).returning();
-    
-    return newConfig;
+    if (existingConfig) {
+      // Actualizar la configuración existente
+      const [updatedConfig] = await db
+        .update(whatsappSettings)
+        .set({
+          ...config,
+          updatedAt: new Date()
+        })
+        .where(eq(whatsappSettings.id, existingConfig.id))
+        .returning();
+      
+      return updatedConfig;
+    } else {
+      // Si no hay configuración existente, crear una nueva
+      const [newConfig] = await db.insert(whatsappSettings).values({
+        ...config,
+        isActive: true
+      }).returning();
+      
+      return newConfig;
+    }
   }
 
   // WhatsApp Logs with PostgreSQL
@@ -2820,29 +2834,21 @@ export class DatabaseStorage implements IStorage {
     storeAddress?: string; 
     storeEmail?: string; 
   }, storeId?: number): Promise<StoreSettings> {
-    console.log('updateStoreConfig called with:', config);
     const existingConfig = await this.getStoreConfig();
-    console.log('existingConfig:', existingConfig);
     
     if (existingConfig) {
       // Update existing configuration
-      console.log('Updating existing config with ID:', existingConfig.id);
-      const updateData = {
-        ...config,
-        updatedAt: new Date()
-      };
-      console.log('Update data:', updateData);
-      
       const [updatedConfig] = await db
         .update(storeSettings)
-        .set(updateData)
+        .set({
+          ...config,
+          updatedAt: new Date()
+        })
         .where(eq(storeSettings.id, existingConfig.id))
         .returning();
-      console.log('Updated config result:', updatedConfig);
       return updatedConfig;
     } else {
       // Create new configuration
-      console.log('Creating new config');
       const [newConfig] = await db
         .insert(storeSettings)
         .values({
@@ -2852,7 +2858,6 @@ export class DatabaseStorage implements IStorage {
           storeEmail: config.storeEmail || null,
         })
         .returning();
-      console.log('New config created:', newConfig);
       return newConfig;
     }
   }
