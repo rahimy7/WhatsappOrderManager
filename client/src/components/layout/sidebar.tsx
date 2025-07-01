@@ -105,18 +105,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
-      href: "/orders",
-      icon: ClipboardList,
-      label: "Órdenes/Pedidos",
-      badge: pendingOrders > 0 ? pendingOrders : null,
-      permission: "view_orders",
-      excludeRoles: ["super_admin"], // Solo para tiendas
-    },
-    {
       href: "/order-management",
       icon: ShoppingBag,
       label: "Gestión de Órdenes",
-      badge: null,
+      badge: pendingOrders > 0 ? pendingOrders : null,
       permission: "manage_orders",
       excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
