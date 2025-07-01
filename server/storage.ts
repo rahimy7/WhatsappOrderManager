@@ -92,6 +92,7 @@ export interface IStorage {
   createProduct(product: InsertProduct): Promise<Product>;
   getAllProducts(): Promise<Product[]>;
   updateProduct(id: number, updates: Partial<InsertProduct>): Promise<Product | undefined>;
+  deleteProduct(id: number): Promise<boolean>;
 
   // Orders
   getOrder(id: number): Promise<OrderWithDetails | undefined>;
@@ -1415,6 +1416,16 @@ export class DatabaseStorage implements IStorage {
   async updateProduct(id: number, updates: Partial<InsertProduct>): Promise<Product | undefined> {
     const [product] = await db.update(products).set(updates).where(eq(products.id, id)).returning();
     return product || undefined;
+  }
+
+  async deleteProduct(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(products).where(eq(products.id, id));
+      return result.rowCount! > 0;
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      return false;
+    }
   }
 
   // Orders - Implementation with joins for OrderWithDetails

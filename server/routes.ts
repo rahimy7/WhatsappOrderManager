@@ -732,16 +732,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const product = await storage.getProduct(id);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      res.json(product);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch product" });
+    }
+  });
+
   app.post("/api/products", async (req, res) => {
     try {
-      const productData = insertProductSchema.parse(req.body);
-      const product = await storage.createProduct(productData);
+      // Handle both regular form data and FormData with images
+      let productData: any = {};
+      let imageUrls: string[] = [];
+
+      if (req.is('multipart/form-data')) {
+        // Process FormData with images
+        const fields = req.body;
+        
+        // Parse array fields
+        if (fields.features) {
+          try {
+            fields.features = JSON.parse(fields.features);
+          } catch (e) {
+            fields.features = [];
+          }
+        }
+        if (fields.tags) {
+          try {
+            fields.tags = JSON.parse(fields.tags);
+          } catch (e) {
+            fields.tags = [];
+          }
+        }
+        if (fields.images) {
+          try {
+            fields.images = JSON.parse(fields.images);
+          } catch (e) {
+            fields.images = [];
+          }
+        }
+
+        // Convert string numbers to actual numbers
+        if (fields.stockQuantity) fields.stockQuantity = parseInt(fields.stockQuantity);
+        if (fields.minQuantity) fields.minQuantity = parseInt(fields.minQuantity);
+        if (fields.maxQuantity) fields.maxQuantity = parseInt(fields.maxQuantity);
+        if (fields.weight) fields.weight = parseFloat(fields.weight);
+        if (fields.isPromoted) fields.isPromoted = fields.isPromoted === 'true';
+
+        productData = fields;
+
+        // For now, we'll store image URLs as placeholder URLs
+        // In a real application, you'd upload files to cloud storage
+        const imageFileCount = Object.keys(req.files || {}).filter(key => key.startsWith('image_')).length;
+        for (let i = 0; i < imageFileCount; i++) {
+          imageUrls.push(`/uploads/products/${Date.now()}_${i}.jpg`);
+        }
+        
+        if (imageUrls.length > 0) {
+          productData.images = [...(productData.images || []), ...imageUrls];
+        }
+      } else {
+        // Regular JSON data
+        productData = req.body;
+      }
+
+      const validatedData = insertProductSchema.parse(productData);
+      const product = await storage.createProduct(validatedData);
       res.status(201).json(product);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid product data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to create product" });
+    }
+  });
+
+  app.put("/api/products/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      let productData: any = {};
+      let imageUrls: string[] = [];
+
+      if (req.is('multipart/form-data')) {
+        // Process FormData with images
+        const fields = req.body;
+        
+        // Parse array fields
+        if (fields.features) {
+          try {
+            fields.features = JSON.parse(fields.features);
+          } catch (e) {
+            fields.features = [];
+          }
+        }
+        if (fields.tags) {
+          try {
+            fields.tags = JSON.parse(fields.tags);
+          } catch (e) {
+            fields.tags = [];
+          }
+        }
+        if (fields.images) {
+          try {
+            fields.images = JSON.parse(fields.images);
+          } catch (e) {
+            fields.images = [];
+          }
+        }
+
+        // Convert string numbers to actual numbers
+        if (fields.stockQuantity) fields.stockQuantity = parseInt(fields.stockQuantity);
+        if (fields.minQuantity) fields.minQuantity = parseInt(fields.minQuantity);
+        if (fields.maxQuantity) fields.maxQuantity = parseInt(fields.maxQuantity);
+        if (fields.weight) fields.weight = parseFloat(fields.weight);
+        if (fields.isPromoted) fields.isPromoted = fields.isPromoted === 'true';
+
+        productData = fields;
+
+        // Handle new images
+        const imageFileCount = Object.keys(req.files || {}).filter(key => key.startsWith('image_')).length;
+        for (let i = 0; i < imageFileCount; i++) {
+          imageUrls.push(`/uploads/products/${Date.now()}_${i}.jpg`);
+        }
+        
+        if (imageUrls.length > 0) {
+          productData.images = [...(productData.images || []), ...imageUrls];
+        }
+      } else {
+        // Regular JSON data
+        productData = req.body;
+      }
+
+      const validatedData = insertProductSchema.parse(productData);
+      const product = await storage.updateProduct(id, validatedData);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      res.json(product);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid product data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update product" });
+    }
+  });
+
+  app.delete("/api/products/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteProduct(id);
+      if (!success) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      res.json({ message: "Product deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete product" });
     }
   });
 
