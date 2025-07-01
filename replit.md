@@ -738,6 +738,7 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Diseño responsivo con grid adaptativo: 2 columnas en móvil, 4 en tablet, 7 en desktop
   - Eliminada opción duplicada "Órdenes/Pedidos" del sidebar para evitar confusión
   - Integración con badge de órdenes pendientes en el menú "Gestión de Órdenes"
+  - Configurado enlace "Gestión de Órdenes" del sidebar para apuntar a /orders con tarjetas de estadísticas
 
 ## User Preferences
 

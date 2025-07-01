@@ -105,7 +105,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {
-      href: "/order-management",
+      href: "/orders",
       icon: ShoppingBag,
       label: "Gestión de Órdenes",
       badge: pendingOrders > 0 ? pendingOrders : null,
