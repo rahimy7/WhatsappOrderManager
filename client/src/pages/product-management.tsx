@@ -16,7 +16,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, Eye, Package, Image, Upload, X, ShoppingCart } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, Package, Image, Upload, X, ShoppingCart, Folder, FolderPlus } from "lucide-react";
 import { z } from "zod";
 
 // Formulario de producto
@@ -44,6 +44,14 @@ const productFormSchema = z.object({
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
+
+// Formulario de categoría
+const categoryFormSchema = z.object({
+  name: z.string().min(1, "Nombre es requerido"),
+  description: z.string().nullable().default(""),
+});
+
+type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
 interface Product {
   id: number;
@@ -90,6 +98,11 @@ export default function ProductManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  
+  // Estados para categorías
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [activeTab, setActiveTab] = useState("products");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -207,6 +220,84 @@ export default function ProductManagement() {
     },
   });
 
+  // Formulario para categorías
+  const categoryForm = useForm<CategoryFormData>({
+    resolver: zodResolver(categoryFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+    },
+  });
+
+  // Crear categoría
+  const createCategoryMutation = useMutation({
+    mutationFn: async (data: CategoryFormData) => {
+      return apiRequest("POST", "/api/categories", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      toast({
+        title: "Categoría creada",
+        description: "La categoría se ha creado exitosamente.",
+      });
+      setIsCategoryDialogOpen(false);
+      categoryForm.reset();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo crear la categoría.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Actualizar categoría
+  const updateCategoryMutation = useMutation({
+    mutationFn: async (data: CategoryFormData) => {
+      if (!selectedCategory) throw new Error("No category selected");
+      return apiRequest("PUT", `/api/categories/${selectedCategory.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      toast({
+        title: "Categoría actualizada",
+        description: "La categoría se ha actualizado exitosamente.",
+      });
+      setIsCategoryDialogOpen(false);
+      setSelectedCategory(null);
+      categoryForm.reset();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar la categoría.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Eliminar categoría
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/categories/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      toast({
+        title: "Categoría eliminada",
+        description: "La categoría se ha eliminado exitosamente.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar la categoría.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Eliminar producto
   const deleteProductMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -313,6 +404,28 @@ export default function ProductManagement() {
   const openViewDialog = (product: Product) => {
     setSelectedProduct(product);
     setIsViewDialogOpen(true);
+  };
+
+  // Funciones para categorías
+  const openCategoryCreateDialog = () => {
+    setSelectedCategory(null);
+    categoryForm.reset();
+    setIsCategoryDialogOpen(true);
+  };
+
+  const openCategoryEditDialog = (category: Category) => {
+    setSelectedCategory(category);
+    categoryForm.reset({
+      name: category.name,
+      description: category.description || "",
+    });
+    setIsCategoryDialogOpen(true);
+  };
+
+  const resetCategoryForm = () => {
+    categoryForm.reset();
+    setSelectedCategory(null);
+    setIsCategoryDialogOpen(false);
   };
 
   // Filtrar productos
