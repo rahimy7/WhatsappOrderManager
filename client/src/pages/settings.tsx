@@ -34,6 +34,7 @@ const whatsappConfigSchema = z.object({
   whatsappToken: z.string().min(1, "WhatsApp Token es requerido"),
   whatsappVerifyToken: z.string().min(1, "WhatsApp Verify Token es requerido"),
   webhookUrl: z.string().url("URL del webhook debe ser válida"),
+  storeWhatsAppNumber: z.string().min(10, "Número de WhatsApp debe tener al menos 10 dígitos"),
 });
 
 type WhatsAppConfig = z.infer<typeof whatsappConfigSchema>;
@@ -327,27 +328,19 @@ export default function Settings() {
           {getConnectionStatusBadge()}
         </div>
 
-        <Tabs defaultValue="store" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="store" className="flex items-center space-x-2">
-              <SettingsIcon className="h-4 w-4" />
-              <span>Tienda</span>
-            </TabsTrigger>
+        <Tabs defaultValue="whatsapp" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="whatsapp" className="flex items-center space-x-2">
               <Phone className="h-4 w-4" />
-              <span>WhatsApp Business</span>
+              <span>WhatsApp API</span>
+            </TabsTrigger>
+            <TabsTrigger value="store" className="flex items-center space-x-2">
+              <SettingsIcon className="h-4 w-4" />
+              <span>Configuración</span>
             </TabsTrigger>
             <TabsTrigger value="logs" className="flex items-center space-x-2">
               <Activity className="h-4 w-4" />
               <span>Logs</span>
-            </TabsTrigger>
-            <TabsTrigger value="security" className="flex items-center space-x-2">
-              <Shield className="h-4 w-4" />
-              <span>Seguridad</span>
-            </TabsTrigger>
-            <TabsTrigger value="general" className="flex items-center space-x-2">
-              <SettingsIcon className="h-4 w-4" />
-              <span>General</span>
             </TabsTrigger>
           </TabsList>
 
@@ -562,6 +555,26 @@ export default function Settings() {
                         Esta URL recibirá las notificaciones de mensajes de WhatsApp
                       </p>
                     </div>
+
+                    {/* Número de WhatsApp para pedidos */}
+                    <div className="space-y-2 col-span-2">
+                      <Label htmlFor="storeWhatsAppNumber" className="flex items-center space-x-2">
+                        <Phone className="h-4 w-4 text-green-600" />
+                        <span>WhatsApp para Pedidos</span>
+                      </Label>
+                      <Input
+                        id="storeWhatsAppNumber"
+                        {...form.register("storeWhatsAppNumber")}
+                        placeholder="Ej: 5215512345678"
+                        className="font-mono"
+                      />
+                      {form.formState.errors.storeWhatsAppNumber && (
+                        <p className="text-sm text-red-600">{form.formState.errors.storeWhatsAppNumber.message}</p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        Número de WhatsApp donde se enviarán los pedidos del catálogo público (incluir código país: 52)
+                      </p>
+                    </div>
                   </div>
 
                   {/* Action Buttons */}
@@ -755,27 +768,7 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="security">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configuración de Seguridad</CardTitle>
-                <p className="text-sm text-gray-600">
-                  Próximamente: Configuraciones de autenticación y permisos
-                </p>
-              </CardHeader>
-            </Card>
-          </TabsContent>
 
-          <TabsContent value="general">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configuración General</CardTitle>
-                <p className="text-sm text-gray-600">
-                  Próximamente: Configuraciones generales del sistema
-                </p>
-              </CardHeader>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
   );
