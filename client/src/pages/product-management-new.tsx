@@ -38,7 +38,7 @@ const productFormSchema = z.object({
   features: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   images: z.array(z.string()).default([]),
-  imageUrl: z.string().transform(val => val === "" ? null : val).nullable(),
+  imageUrl: z.string().optional().transform(val => val === "" ? null : val).nullable(),
   salePrice: z.string().transform(val => val === "" ? null : val).nullable(),
   isPromoted: z.boolean().default(false),
   promotionText: z.string().transform(val => val === "" ? null : val).nullable()
@@ -190,13 +190,9 @@ export default function ProductManagement() {
 
   const updateProductMutation = useMutation({
     mutationFn: async (data: ProductFormData & { id: number }) => {
-      console.log('updateProductMutation called with data:', data);
-      const result = await apiRequest("PUT", `/api/products/${data.id}`, data);
-      console.log('updateProductMutation result:', result);
-      return result;
+      return apiRequest("PUT", `/api/products/${data.id}`, data);
     },
     onSuccess: () => {
-      console.log('updateProductMutation success');
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setIsEditDialogOpen(false);
       setSelectedProduct(null);
@@ -207,7 +203,6 @@ export default function ProductManagement() {
       });
     },
     onError: (error: any) => {
-      console.log('updateProductMutation error:', error);
       toast({
         title: "Error",
         description: error.message || "Error al actualizar el producto",
@@ -368,14 +363,9 @@ export default function ProductManagement() {
   });
 
   const onSubmit = (data: ProductFormData) => {
-    console.log('onSubmit called with data:', data);
-    console.log('selectedProduct:', selectedProduct);
-    
     if (selectedProduct) {
-      console.log('Updating product with ID:', selectedProduct.id);
       updateProductMutation.mutate({ ...data, id: selectedProduct.id });
     } else {
-      console.log('Creating new product');
       createProductMutation.mutate(data);
     }
   };
@@ -889,12 +879,6 @@ export default function ProductManagement() {
                 <Button
                   type="submit"
                   disabled={createProductMutation.isPending || updateProductMutation.isPending}
-                  onClick={() => {
-                    console.log('Button clicked!');
-                    console.log('Form errors:', form.formState.errors);
-                    console.log('Form values:', form.getValues());
-                    console.log('Selected product:', selectedProduct);
-                  }}
                 >
                   {selectedProduct
                     ? (updateProductMutation.isPending ? "Actualizando..." : "Actualizar Producto")
