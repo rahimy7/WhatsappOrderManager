@@ -35,6 +35,18 @@ export default function SimpleCatalog() {
   // Estado del carrito local
   const [cart, setCart] = useState<{items: any[], subtotal: number}>(() => {
     try {
+      // Verificar si el pedido fue enviado
+      const enviado = localStorage.getItem('pedido_enviado');
+      if (enviado === 'true') {
+        // Limpiar carrito y marcar como no enviado
+        localStorage.removeItem(`cart_${sessionId}`);
+        localStorage.setItem('pedido_enviado', 'false');
+        // Generar nuevo sessionId
+        const newSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('cart_session_id', newSessionId);
+        return { items: [], subtotal: 0 };
+      }
+
       const saved = localStorage.getItem(`cart_${sessionId}`);
       if (saved) {
         const parsedCart = JSON.parse(saved);
@@ -90,7 +102,7 @@ export default function SimpleCatalog() {
 
   // Función para agregar al carrito
   const addToCart = (productId: number, quantity: number = 1) => {
-    const product = products.find((p: any) => p.id === productId);
+    const product = (products as any[])?.find((p: any) => p.id === productId);
     if (!product) {
       toast({
         title: "Error",
@@ -181,17 +193,11 @@ export default function SimpleCatalog() {
       return;
     }
 
-    // Verificar que tenemos configuración de WhatsApp de la tienda
-    if (!storeConfig?.storeWhatsAppNumber) {
-      toast({
-        title: "Error de configuración",
-        description: "No se ha configurado el número de WhatsApp de la tienda",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Usar número de WhatsApp por defecto si no está configurado
+    const whatsappNumber = (storeConfig as any)?.storeWhatsAppNumber || "5215579096161";
+    const storeName = (storeConfig as any)?.storeName || 'Tienda';
 
-    let message = `🛍️ *NUEVO PEDIDO - ${storeConfig.storeName || 'Tienda'}*\n\n`;
+    let message = `🛍️ *NUEVO PEDIDO - ${storeName}*\n\n`;
     
     cart.items.forEach((item, index) => {
       message += `${index + 1}. ${item.product.name}\n`;
@@ -205,34 +211,24 @@ export default function SimpleCatalog() {
 
     const encodedMessage = encodeURIComponent(message);
     // Limpiar el número de WhatsApp (remover caracteres especiales)
-    const cleanWhatsAppNumber = storeConfig.storeWhatsAppNumber.replace(/\D/g, '');
+    const cleanWhatsAppNumber = whatsappNumber.replace(/\D/g, '');
     const whatsappUrl = `https://wa.me/${cleanWhatsAppNumber}?text=${encodedMessage}`;
     
     window.open(whatsappUrl, '_blank');
     
-    // Función para limpiar el carrito completamente
-    const clearCart = () => {
-      const emptyCart = { items: [], subtotal: 0 };
-      setCart(emptyCart);
-      localStorage.setItem(`cart_${sessionId}`, JSON.stringify(emptyCart));
-      // También limpiar el sessionId para generar uno nuevo en el próximo uso
-      localStorage.removeItem('cart_session_id');
-    };
+    // Marcar que el pedido fue enviado
+    localStorage.setItem('pedido_enviado', 'true');
     
-    // Usar setTimeout para asegurar que la limpieza ocurra después de abrir WhatsApp
-    setTimeout(() => {
-      clearCart();
-      setIsCartOpen(false);
-      
-      toast({
-        title: "¡Pedido enviado!",
-        description: "Tu carrito se ha vaciado y el pedido se envió por WhatsApp",
-      });
-    }, 500);
+    setIsCartOpen(false);
+    
+    toast({
+      title: "¡Pedido enviado!",
+      description: "El carrito se vaciará automáticamente la próxima vez que abras el catálogo",
+    });
   };
 
   // Filtrar productos
-  const filteredProducts = products.filter((product: any) => {
+  const filteredProducts = (products as any[])?.filter((product: any) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "all" || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -277,7 +273,7 @@ export default function SimpleCatalog() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las categorías</SelectItem>
-                  {categories.map((category: any) => (
+                  {(categories as any[])?.map((category: any) => (
                     <SelectItem key={category.id} value={category.name}>
                       {category.name}
                     </SelectItem>
