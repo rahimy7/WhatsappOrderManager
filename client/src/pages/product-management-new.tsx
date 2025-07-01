@@ -22,26 +22,26 @@ import { useForm } from "react-hook-form";
 // Esquemas de validación
 const productFormSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
-  description: z.string().nullable().default(""),
+  description: z.string().transform(val => val === "" ? null : val).nullable(),
   category: z.string().min(1, "La categoría es obligatoria"),
   price: z.string().min(1, "El precio es obligatorio"),
-  brand: z.string().nullable().default(""),
-  model: z.string().nullable().default(""),
-  sku: z.string().nullable().default(""),
+  brand: z.string().transform(val => val === "" ? null : val).nullable(),
+  model: z.string().transform(val => val === "" ? null : val).nullable(),
+  sku: z.string().transform(val => val === "" ? null : val).nullable(),
   status: z.string().default("active"),
   availability: z.string().default("available"),
   stockQuantity: z.number().min(0).default(0),
   minQuantity: z.number().min(0).default(0),
   maxQuantity: z.number().nullable().default(null),
-  weight: z.string().nullable().default(""),
-  warranty: z.string().nullable().default(""),
+  weight: z.string().transform(val => val === "" ? null : val).nullable(),
+  warranty: z.string().transform(val => val === "" ? null : val).nullable(),
   features: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   images: z.array(z.string()).default([]),
-  imageUrl: z.string().nullable().default(""),
-  salePrice: z.string().nullable().default(""),
+  imageUrl: z.string().transform(val => val === "" ? null : val).nullable(),
+  salePrice: z.string().transform(val => val === "" ? null : val).nullable(),
   isPromoted: z.boolean().default(false),
-  promotionText: z.string().nullable().default("")
+  promotionText: z.string().transform(val => val === "" ? null : val).nullable()
 });
 
 const categoryFormSchema = z.object({
