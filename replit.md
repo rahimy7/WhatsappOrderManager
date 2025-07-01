@@ -652,6 +652,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Al abrir catálogo verifica si pedido fue enviado, entonces vacia carrito automáticamente
   - Genera nuevo sessionId para evitar conflictos entre sesiones de compra
   - Experiencia optimizada: carrito se limpia solo después de enviar pedido exitosamente
+- July 01, 2025. SISTEMA DE ACTUALIZACIONES PARCIALES COMPLETAMENTE OPERACIONAL:
+  - Resuelto error crítico de violación de clave primaria en configuraciones WhatsApp duplicadas
+  - Implementado endpoint PATCH /api/settings/whatsapp para actualizaciones mixtas de WhatsApp y Store
+  - Lógica inteligente de detección de cambios: solo campos modificados se envían a la base de datos
+  - Separación automática entre campos de WhatsApp (whatsapp_settings) y campos de Store (store_settings)
+  - Manejo correcto de configuraciones existentes vs nuevas con validación de campos obligatorios
+  - Sistema de conteo de campos actualizados con mensajes de confirmación específicos
+  - Actualizaciones simultáneas funcionando: campos de ambas tablas se pueden actualizar en una sola petición
+  - Eliminado logging de debug y optimizado código para mejor rendimiento en producción
 - July 01, 2025. REORGANIZACIÓN COMPLETA DE DASHBOARDS PARA SEPARACIÓN TIENDAS/SUPER ADMIN:
   - Dashboards de tiendas completamente independientes con 13 funciones específicas
   - Menu tiendas: Dashboard Principal, Conversaciones, Notificaciones, Equipo, Clientes, Órdenes/Pedidos, Empleados, Administrar Productos, Reportes, Facturación, Configuración, Respuestas Automáticas, Asignación Automática
