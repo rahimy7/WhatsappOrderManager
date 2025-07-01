@@ -344,8 +344,8 @@ export default function ProductManagement() {
   const filteredProducts = productsList.filter((product: Product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (product.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
-    const matchesCategory = !selectedCategory || product.category === selectedCategory;
-    const matchesStatus = !selectedStatus || product.status === selectedStatus;
+    const matchesCategory = !selectedCategory || selectedCategory === "all" || product.category === selectedCategory;
+    const matchesStatus = !selectedStatus || selectedStatus === "all_status" || product.status === selectedStatus;
     
     return matchesSearch && matchesCategory && matchesStatus;
   });
@@ -415,7 +415,7 @@ export default function ProductManagement() {
                 <SelectValue placeholder="Filtrar por categoría" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas las categorías</SelectItem>
+                <SelectItem value="all">Todas las categorías</SelectItem>
                 {categoriesList.map((category: Category) => (
                   <SelectItem key={category.id} value={category.name}>
                     {category.name}
@@ -428,7 +428,7 @@ export default function ProductManagement() {
                 <SelectValue placeholder="Filtrar por estado" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos los estados</SelectItem>
+                <SelectItem value="all_status">Todos los estados</SelectItem>
                 <SelectItem value="active">Activo</SelectItem>
                 <SelectItem value="inactive">Inactivo</SelectItem>
               </SelectContent>
