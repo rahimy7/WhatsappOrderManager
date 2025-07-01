@@ -640,6 +640,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Confirmación de estados WhatsApp: sent → delivered → read funcionando correctamente
   - Eliminados mensajes estáticos "¡Hola! Recibimos tu mensaje..." reemplazados por respuestas personalizadas
   - Sistema completamente listo para interacciones de clientes reales con respuestas automáticas profesionales
+- July 01, 2025. LIMPIEZA DE CONFIGURACIONES DUPLICADAS PARA EMPRESA PECADORES ANONIMOS:
+  - Eliminadas configuraciones duplicadas de WhatsApp API: removidos 3 registros inactivos con tokens expirados
+  - Consolidada información de tienda: eliminada entrada duplicada en store_settings para "PECADORES ANONIMOS"
+  - Configuración unificada en virtual_stores con número WhatsApp 5215579096161 como fuente única de verdad
+  - URLs de catálogo actualizadas con dominio correcto de Replit para respuestas automáticas
+  - Sistema de WhatsApp completamente operacional sin duplicaciones ni conflictos de configuración
+  - Token activo funcionando correctamente con phone_number_id 690329620832620
 
 ## User Preferences
 
