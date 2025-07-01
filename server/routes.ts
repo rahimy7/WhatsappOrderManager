@@ -993,10 +993,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Solo actualizar la configuración de WhatsApp si hay campos para actualizar
+      // Solo actualizar la configuración de WhatsApp si hay campos de WhatsApp para actualizar
       let config = currentConfig;
-      if (Object.keys(updateData).length > 0) {
-        config = await storage.updateWhatsAppConfig(updateData);
+      if (Object.keys(updateData).length > 0 && currentConfig) {
+        // Actualizar solo los campos proporcionados manteniendo los existentes
+        const mergedData = { ...currentConfig, ...updateData };
+        config = await storage.updateWhatsAppConfig(mergedData);
       }
 
       res.json({ 
