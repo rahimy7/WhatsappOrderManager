@@ -2820,21 +2820,29 @@ export class DatabaseStorage implements IStorage {
     storeAddress?: string; 
     storeEmail?: string; 
   }, storeId?: number): Promise<StoreSettings> {
+    console.log('updateStoreConfig called with:', config);
     const existingConfig = await this.getStoreConfig();
+    console.log('existingConfig:', existingConfig);
     
     if (existingConfig) {
       // Update existing configuration
+      console.log('Updating existing config with ID:', existingConfig.id);
+      const updateData = {
+        ...config,
+        updatedAt: new Date()
+      };
+      console.log('Update data:', updateData);
+      
       const [updatedConfig] = await db
         .update(storeSettings)
-        .set({
-          ...config,
-          updatedAt: new Date()
-        })
+        .set(updateData)
         .where(eq(storeSettings.id, existingConfig.id))
         .returning();
+      console.log('Updated config result:', updatedConfig);
       return updatedConfig;
     } else {
       // Create new configuration
+      console.log('Creating new config');
       const [newConfig] = await db
         .insert(storeSettings)
         .values({
@@ -2844,6 +2852,7 @@ export class DatabaseStorage implements IStorage {
           storeEmail: config.storeEmail || null,
         })
         .returning();
+      console.log('New config created:', newConfig);
       return newConfig;
     }
   }

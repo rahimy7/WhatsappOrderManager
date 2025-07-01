@@ -985,15 +985,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.appId = configData.metaAppId;
       }
 
-      // Actualizar configuración de tienda si se proporciona storeWhatsAppNumber
-      if (configData.storeWhatsAppNumber !== undefined) {
+      // Actualizar configuración de tienda si se proporcionan campos de tienda
+      const storeConfigFields = ['storeWhatsAppNumber', 'storeName', 'storeAddress', 'storeEmail'];
+      const hasStoreFields = storeConfigFields.some(field => configData[field] !== undefined);
+      
+      if (hasStoreFields) {
         const currentStoreConfig = await storage.getStoreConfig();
-        await storage.updateStoreConfig({ 
-          storeWhatsAppNumber: configData.storeWhatsAppNumber,
-          storeName: currentStoreConfig?.storeName || "Mi Tienda",
-          storeAddress: currentStoreConfig?.storeAddress || "",
-          storeEmail: currentStoreConfig?.storeEmail || ""
-        });
+        const storeUpdateData = {
+          storeWhatsAppNumber: configData.storeWhatsAppNumber ?? currentStoreConfig?.storeWhatsAppNumber ?? "",
+          storeName: configData.storeName ?? currentStoreConfig?.storeName ?? "Mi Tienda",
+          storeAddress: configData.storeAddress ?? currentStoreConfig?.storeAddress ?? "",
+          storeEmail: configData.storeEmail ?? currentStoreConfig?.storeEmail ?? ""
+        };
+        await storage.updateStoreConfig(storeUpdateData);
       }
 
       // Solo actualizar la configuración de WhatsApp si hay campos de WhatsApp para actualizar
