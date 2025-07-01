@@ -1,0 +1,784 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Switch } from "@/components/ui/switch";
+import { apiRequest } from "@/lib/queryClient";
+import { Plus, Edit, Trash2, Eye, Package, Image, Upload, X, ShoppingCart, Folder, FolderPlus } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "wouter";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+
+// Esquemas de validación
+const productFormSchema = z.object({
+  name: z.string().min(1, "El nombre es obligatorio"),
+  description: z.string().nullable().default(""),
+  category: z.string().min(1, "La categoría es obligatoria"),
+  price: z.string().min(1, "El precio es obligatorio"),
+  brand: z.string().nullable().default(""),
+  model: z.string().nullable().default(""),
+  sku: z.string().nullable().default(""),
+  status: z.string().default("active"),
+  availability: z.string().default("available"),
+  stockQuantity: z.number().min(0).default(0),
+  minQuantity: z.number().min(0).default(0),
+  maxQuantity: z.number().nullable().default(null),
+  weight: z.string().nullable().default(""),
+  warranty: z.string().nullable().default(""),
+  features: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([]),
+  images: z.array(z.string()).default([]),
+  imageUrl: z.string().nullable().default(""),
+  salePrice: z.string().nullable().default(""),
+  isPromoted: z.boolean().default(false),
+  promotionText: z.string().nullable().default("")
+});
+
+const categoryFormSchema = z.object({
+  name: z.string().min(1, "El nombre de la categoría es obligatorio"),
+  description: z.string().nullable().default("")
+});
+
+type ProductFormData = z.infer<typeof productFormSchema>;
+type CategoryFormData = z.infer<typeof categoryFormSchema>;
+
+interface Product {
+  id: number;
+  name: string;
+  description: string | null;
+  category: string;
+  price: string;
+  brand: string | null;
+  model: string | null;
+  sku: string | null;
+  status: string;
+  availability: string;
+  stockQuantity: number;
+  minQuantity: number;
+  maxQuantity: number | null;
+  weight: string | null;
+  warranty: string | null;
+  features: string[] | null;
+  tags: string[] | null;
+  images: string[] | null;
+  imageUrl: string | null;
+  salePrice: string | null;
+  isPromoted: boolean;
+  promotionText: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  description: string | null;
+}
+
+export default function ProductManagement() {
+  const [activeTab, setActiveTab] = useState("products");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
+
+  // Estados para categorías
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [selectedCategoryEdit, setSelectedCategoryEdit] = useState<Category | null>(null);
+
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Formularios
+  const form = useForm<ProductFormData>({
+    resolver: zodResolver(productFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      category: "",
+      price: "",
+      brand: "",
+      model: "",
+      sku: "",
+      status: "active",
+      availability: "available",
+      stockQuantity: 0,
+      minQuantity: 0,
+      maxQuantity: null,
+      weight: "",
+      warranty: "",
+      features: [],
+      tags: [],
+      images: [],
+      imageUrl: "",
+      salePrice: "",
+      isPromoted: false,
+      promotionText: ""
+    }
+  });
+
+  const categoryForm = useForm<CategoryFormData>({
+    resolver: zodResolver(categoryFormSchema),
+    defaultValues: {
+      name: "",
+      description: ""
+    }
+  });
+
+  // Queries
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
+    queryKey: ["/api/products"],
+    queryFn: () => apiRequest("GET", "/api/products")
+  });
+
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
+    queryKey: ["/api/categories"],
+    queryFn: () => apiRequest("GET", "/api/categories")
+  });
+
+  // Mutations para productos
+  const createProductMutation = useMutation({
+    mutationFn: async (data: ProductFormData) => {
+      return apiRequest("POST", "/api/products", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setIsCreateDialogOpen(false);
+      form.reset();
+      toast({
+        title: "Producto creado",
+        description: "El producto se ha creado exitosamente."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al crear el producto",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const updateProductMutation = useMutation({
+    mutationFn: async (data: ProductFormData) => {
+      return apiRequest("PUT", `/api/products/${selectedProduct?.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      setIsEditDialogOpen(false);
+      setSelectedProduct(null);
+      form.reset();
+      toast({
+        title: "Producto actualizado",
+        description: "El producto se ha actualizado exitosamente."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al actualizar el producto",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/products/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: "Producto eliminado",
+        description: "El producto se ha eliminado exitosamente."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al eliminar el producto",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Mutations para categorías
+  const createCategoryMutation = useMutation({
+    mutationFn: async (data: CategoryFormData) => {
+      return apiRequest("POST", "/api/categories", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      setIsCategoryDialogOpen(false);
+      categoryForm.reset();
+      toast({
+        title: "Categoría creada",
+        description: "La categoría se ha creado exitosamente."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al crear la categoría",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: async (data: CategoryFormData) => {
+      return apiRequest("PUT", `/api/categories/${selectedCategoryEdit?.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      setIsCategoryDialogOpen(false);
+      setSelectedCategoryEdit(null);
+      categoryForm.reset();
+      toast({
+        title: "Categoría actualizada",
+        description: "La categoría se ha actualizado exitosamente."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al actualizar la categoría",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/categories/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      toast({
+        title: "Categoría eliminada",
+        description: "La categoría se ha eliminado exitosamente."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al eliminar la categoría",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Funciones auxiliares
+  const openEditDialog = (product: Product) => {
+    setSelectedProduct(product);
+    form.reset({
+      name: product.name,
+      description: product.description || "",
+      category: product.category,
+      price: product.price,
+      brand: product.brand || "",
+      model: product.model || "",
+      sku: product.sku || "",
+      status: product.status,
+      availability: product.availability,
+      stockQuantity: product.stockQuantity,
+      minQuantity: product.minQuantity,
+      maxQuantity: product.maxQuantity,
+      weight: product.weight || "",
+      warranty: product.warranty || "",
+      features: product.features || [],
+      tags: product.tags || [],
+      images: product.images || [],
+      imageUrl: product.imageUrl || "",
+      salePrice: product.salePrice || "",
+      isPromoted: product.isPromoted,
+      promotionText: product.promotionText || ""
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const openViewDialog = (product: Product) => {
+    setSelectedProduct(product);
+    setIsViewDialogOpen(true);
+  };
+
+  const openCategoryCreateDialog = () => {
+    setSelectedCategoryEdit(null);
+    categoryForm.reset();
+    setIsCategoryDialogOpen(true);
+  };
+
+  const openCategoryEditDialog = (category: Category) => {
+    setSelectedCategoryEdit(category);
+    categoryForm.reset({
+      name: category.name,
+      description: category.description || ""
+    });
+    setIsCategoryDialogOpen(true);
+  };
+
+  const resetCategoryForm = () => {
+    setIsCategoryDialogOpen(false);
+    setSelectedCategoryEdit(null);
+    categoryForm.reset();
+  };
+
+  // Filtros
+  const filteredProducts = products.filter((product: Product) => {
+    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (product.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
+    const matchesCategory = !selectedCategory || product.category === selectedCategory;
+    const matchesStatus = !selectedStatus || product.status === selectedStatus;
+    
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  const onSubmit = (data: ProductFormData) => {
+    if (selectedProduct) {
+      updateProductMutation.mutate(data);
+    } else {
+      createProductMutation.mutate(data);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Gestión de Productos</h1>
+          <p className="text-muted-foreground">
+            Gestiona tu catálogo de productos, servicios y categorías
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/simple-catalog" target="_blank">
+            <Button variant="outline">
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              Ver Catálogo
+            </Button>
+          </Link>
+          {activeTab === "products" && (
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Crear Producto
+            </Button>
+          )}
+          {activeTab === "categories" && (
+            <Button onClick={openCategoryCreateDialog}>
+              <FolderPlus className="w-4 h-4 mr-2" />
+              Crear Categoría
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="products" className="flex items-center gap-2">
+            <Package className="w-4 h-4" />
+            Productos
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="flex items-center gap-2">
+            <Folder className="w-4 h-4" />
+            Categorías
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products" className="space-y-6">
+          {/* Filtros */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Input
+              placeholder="Buscar productos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="max-w-sm"
+            />
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="max-w-sm">
+                <SelectValue placeholder="Filtrar por categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas las categorías</SelectItem>
+                {categories.map((category: Category) => (
+                  <SelectItem key={category.id} value={category.name}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="max-w-sm">
+                <SelectValue placeholder="Filtrar por estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos los estados</SelectItem>
+                <SelectItem value="active">Activo</SelectItem>
+                <SelectItem value="inactive">Inactivo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Lista de productos */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredProducts.map((product: Product) => (
+              <Card key={product.id} className="overflow-hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-lg">{product.name}</CardTitle>
+                      <CardDescription className="line-clamp-2">
+                        {product.description}
+                      </CardDescription>
+                    </div>
+                    <Badge variant={product.status === "active" ? "default" : "secondary"}>
+                      {product.status === "active" ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Categoría:</span>
+                      <span>{product.category}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Precio:</span>
+                      <span className="font-medium">${product.price}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Stock:</span>
+                      <span>{product.stockQuantity}</span>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openViewDialog(product)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditDialog(product)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteProductMutation.mutate(product.id)}
+                        disabled={deleteProductMutation.isPending}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {filteredProducts.length === 0 && (
+            <Card className="p-8 text-center">
+              <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No hay productos</h3>
+              <p className="text-muted-foreground mb-4">
+                Crea tu primer producto para empezar a gestionar tu catálogo
+              </p>
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Crear Primer Producto
+              </Button>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {categories.map((category: Category) => (
+              <Card key={category.id} className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Folder className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">{category.name}</h3>
+                      {category.description && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {category.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openCategoryEditDialog(category)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteCategoryMutation.mutate(category.id)}
+                      disabled={deleteCategoryMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {categories.length === 0 && (
+            <Card className="p-8 text-center">
+              <Folder className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No hay categorías</h3>
+              <p className="text-muted-foreground mb-4">
+                Crea tu primera categoría para organizar tus productos
+              </p>
+              <Button onClick={openCategoryCreateDialog}>
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Crear Primera Categoría
+              </Button>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Diálogo para crear/editar productos */}
+      <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsCreateDialogOpen(false);
+          setIsEditDialogOpen(false);
+          setSelectedProduct(null);
+          form.reset();
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedProduct ? "Editar Producto" : "Crear Nuevo Producto"}
+            </DialogTitle>
+            <DialogDescription>
+              Completa la información del producto. Los campos marcados con * son obligatorios.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre del Producto *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ej: Mini Split 12,000 BTU" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Categoría *</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona una categoría" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {categories.map((category: Category) => (
+                            <SelectItem key={category.id} value={category.name}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="price"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Precio *</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="stockQuantity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Inventario</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          {...field}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descripción</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Descripción del producto..."
+                        className="min-h-[80px]"
+                        {...field}
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsCreateDialogOpen(false);
+                    setIsEditDialogOpen(false);
+                    setSelectedProduct(null);
+                    form.reset();
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createProductMutation.isPending || updateProductMutation.isPending}
+                >
+                  {selectedProduct
+                    ? (updateProductMutation.isPending ? "Actualizando..." : "Actualizar Producto")
+                    : (createProductMutation.isPending ? "Creando..." : "Crear Producto")
+                  }
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo para gestionar categorías */}
+      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCategoryEdit ? "Editar Categoría" : "Crear Nueva Categoría"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedCategoryEdit
+                ? "Modifica la información de la categoría"
+                : "Completa la información de la nueva categoría"
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...categoryForm}>
+            <form
+              onSubmit={categoryForm.handleSubmit(
+                selectedCategoryEdit
+                  ? (data) => updateCategoryMutation.mutate(data)
+                  : (data) => createCategoryMutation.mutate(data)
+              )}
+              className="space-y-4"
+            >
+              <FormField
+                control={categoryForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre de la Categoría *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej: Aires Acondicionados" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={categoryForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descripción</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Descripción opcional de la categoría"
+                        className="min-h-[80px]"
+                        {...field}
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={resetCategoryForm}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
+                >
+                  {selectedCategoryEdit
+                    ? (updateCategoryMutation.isPending ? "Actualizando..." : "Actualizar")
+                    : (createCategoryMutation.isPending ? "Creando..." : "Crear")
+                  }
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

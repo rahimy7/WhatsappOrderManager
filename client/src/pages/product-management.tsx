@@ -17,6 +17,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Switch } from "@/components/ui/switch";
 import { apiRequest } from "@/lib/queryClient";
 import { Plus, Edit, Trash2, Eye, Package, Image, Upload, X, ShoppingCart, Folder, FolderPlus } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "wouter";
 import { z } from "zod";
 
 // Formulario de producto
@@ -453,11 +455,61 @@ export default function ProductManagement() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Administrar Productos</h1>
+          <h1 className="text-3xl font-bold">Gestión de Productos</h1>
           <p className="text-muted-foreground">
-            Gestiona tu catálogo de productos y servicios
+            Gestiona tu catálogo de productos, servicios y categorías
           </p>
         </div>
+        <div className="flex gap-2">
+          <Link href="/simple-catalog" target="_blank">
+            <Button variant="outline">
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              Ver Catálogo
+            </Button>
+          </Link>
+          {activeTab === "products" && (
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Crear Producto
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Crear Nuevo Producto</DialogTitle>
+                  <DialogDescription>
+                    Completa la información del producto. Los campos marcados con * son obligatorios.
+                  </DialogDescription>
+                </DialogHeader>
+                {/* Formulario de producto se moverá aquí */}
+              </DialogContent>
+            </Dialog>
+          )}
+          {activeTab === "categories" && (
+            <Button onClick={openCategoryCreateDialog}>
+              <FolderPlus className="w-4 h-4 mr-2" />
+              Crear Categoría
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="products" className="flex items-center gap-2">
+            <Package className="w-4 h-4" />
+            Productos
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="flex items-center gap-2">
+            <Folder className="w-4 h-4" />
+            Categorías
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products" className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div></div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -1268,6 +1320,141 @@ export default function ProductManagement() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo para gestionar categorías */}
+      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCategory ? "Editar Categoría" : "Crear Nueva Categoría"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedCategory 
+                ? "Modifica la información de la categoría" 
+                : "Completa la información de la nueva categoría"
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...categoryForm}>
+            <form 
+              onSubmit={categoryForm.handleSubmit(
+                selectedCategory 
+                  ? (data) => updateCategoryMutation.mutate(data)
+                  : (data) => createCategoryMutation.mutate(data)
+              )} 
+              className="space-y-4"
+            >
+              <FormField
+                control={categoryForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre de la Categoría *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej: Aires Acondicionados" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={categoryForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Descripción</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Descripción opcional de la categoría"
+                        className="min-h-[80px]"
+                        {...field}
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={resetCategoryForm}>
+                  Cancelar
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
+                >
+                  {selectedCategory 
+                    ? (updateCategoryMutation.isPending ? "Actualizando..." : "Actualizar")
+                    : (createCategoryMutation.isPending ? "Creando..." : "Crear")
+                  }
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+        </TabsContent>
+
+        <TabsContent value="categories" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {categories.map((category: Category) => (
+              <Card key={category.id} className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Folder className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">{category.name}</h3>
+                      {category.description && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {category.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openCategoryEditDialog(category)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteCategoryMutation.mutate(category.id)}
+                      disabled={deleteCategoryMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {categories.length === 0 && (
+            <Card className="p-8 text-center">
+              <Folder className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No hay categorías</h3>
+              <p className="text-muted-foreground mb-4">
+                Crea tu primera categoría para organizar tus productos
+              </p>
+              <Button onClick={openCategoryCreateDialog}>
+                <FolderPlus className="w-4 h-4 mr-2" />
+                Crear Primera Categoría
+              </Button>
+            </Card>
+          )}
+        </TabsContent>
+
+      </Tabs>
     </div>
   );
 }
