@@ -26,15 +26,28 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// Schema completo para validación inicial
 const whatsappConfigSchema = z.object({
-  metaAppId: z.string().min(1, "Meta App ID es requerido"),
-  metaAppSecret: z.string().min(1, "Meta App Secret es requerido"),
-  whatsappBusinessAccountId: z.string().min(1, "WhatsApp Business Account ID es requerido"),
-  whatsappPhoneNumberId: z.string().min(1, "WhatsApp Phone Number ID es requerido"),
-  whatsappToken: z.string().min(1, "WhatsApp Token es requerido"),
-  whatsappVerifyToken: z.string().min(1, "WhatsApp Verify Token es requerido"),
-  webhookUrl: z.string().url("URL del webhook debe ser válida"),
-  storeWhatsAppNumber: z.string().min(10, "Número de WhatsApp debe tener al menos 10 dígitos"),
+  metaAppId: z.string().optional(),
+  metaAppSecret: z.string().optional(),
+  whatsappBusinessAccountId: z.string().optional(),
+  whatsappPhoneNumberId: z.string().optional(),
+  whatsappToken: z.string().optional(),
+  whatsappVerifyToken: z.string().optional(),
+  webhookUrl: z.string().optional(),
+  storeWhatsAppNumber: z.string().optional(),
+});
+
+// Schema para validar solo campos específicos al enviar
+const whatsappPartialSchema = z.object({
+  metaAppId: z.string().min(1, "Meta App ID es requerido").optional(),
+  metaAppSecret: z.string().min(1, "Meta App Secret es requerido").optional(),
+  whatsappBusinessAccountId: z.string().min(1, "WhatsApp Business Account ID es requerido").optional(),
+  whatsappPhoneNumberId: z.string().min(1, "WhatsApp Phone Number ID es requerido").optional(),
+  whatsappToken: z.string().min(1, "WhatsApp Token es requerido").optional(),
+  whatsappVerifyToken: z.string().min(1, "WhatsApp Verify Token es requerido").optional(),
+  webhookUrl: z.string().url("URL del webhook debe ser válida").optional(),
+  storeWhatsAppNumber: z.string().min(10, "Número de WhatsApp debe tener al menos 10 dígitos").optional(),
 });
 
 type WhatsAppConfig = z.infer<typeof whatsappConfigSchema>;
@@ -265,7 +278,7 @@ export default function Settings() {
 
   const saveConfigMutation = useMutation({
     mutationFn: async (data: WhatsAppConfig) => {
-      // Detectar solo los campos que han cambiado
+      // Detectar solo los campos que han cambiado y no están vacíos
       const changedFields: Partial<WhatsAppConfig> = {};
       const originalData = {
         metaAppId: config.metaAppId || "",
@@ -278,11 +291,15 @@ export default function Settings() {
         storeWhatsAppNumber: config.storeWhatsAppNumber || "",
       };
 
-      // Comparar cada campo y solo incluir los que han cambiado
+      // Comparar cada campo y solo incluir los que han cambiado y tienen valor
       Object.keys(data).forEach((key) => {
         const typedKey = key as keyof WhatsAppConfig;
-        if (data[typedKey] !== originalData[typedKey]) {
-          changedFields[typedKey] = data[typedKey];
+        const newValue = data[typedKey];
+        const oldValue = originalData[typedKey];
+        
+        // Solo incluir si el campo tiene valor y es diferente al original
+        if (newValue && newValue.trim() !== "" && newValue !== oldValue) {
+          changedFields[typedKey] = newValue;
         }
       });
 
@@ -291,7 +308,14 @@ export default function Settings() {
         throw new Error("No se detectaron cambios para guardar");
       }
 
-      return apiRequest("PATCH", "/api/settings/whatsapp", changedFields);
+      // Validar solo los campos que se están enviando
+      const fieldsToValidate = Object.fromEntries(
+        Object.entries(changedFields).filter(([_, value]) => value !== undefined)
+      );
+      
+      const validatedFields = whatsappPartialSchema.parse(fieldsToValidate);
+
+      return apiRequest("PATCH", "/api/settings/whatsapp", validatedFields);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/whatsapp"] });
@@ -410,19 +434,6 @@ export default function Settings() {
                 </p>
               </CardHeader>
               <CardContent>
-                {/* Token Expired Alert */}
-                <Alert className="mb-6 border-red-200 bg-red-50">
-                  <XCircle className="h-4 w-4 text-red-600" />
-                  <AlertDescription className="text-red-800">
-                    <strong>Token de WhatsApp Expirado</strong> - El token actual expiró el 26 de junio de 2025.
-                    <br />
-                    <span className="text-sm mt-2 block">
-                      Para renovarlo: Ve a Meta Developer Console → Tu App → WhatsApp → API Setup → Genera un nuevo token.
-                      <br />
-                      El sistema está recibiendo mensajes correctamente pero no puede responder hasta renovar el token.
-                    </span>
-                  </AlertDescription>
-                </Alert>
 
                 {connectionStatus && !connectionStatus.connected && (
                   <Alert className="mb-6">
