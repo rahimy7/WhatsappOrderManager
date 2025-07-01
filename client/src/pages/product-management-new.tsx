@@ -306,7 +306,6 @@ export default function ProductManagement() {
       features: product.features || [],
       tags: product.tags || [],
       images: product.images || [],
-      imageUrl: product.imageUrl || "",
       salePrice: product.salePrice || "",
       isPromoted: product.isPromoted,
       promotionText: product.promotionText || ""
@@ -453,18 +452,59 @@ export default function ProductManagement() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Categoría:</span>
-                      <span>{product.category}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Precio:</span>
-                      <span className="font-medium">${product.price}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Stock:</span>
-                      <span>{product.stockQuantity}</span>
+                  <div className="space-y-3">
+                    {/* Galería de imágenes */}
+                    {product.images && product.images.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="w-full h-32 rounded-md overflow-hidden bg-gray-100">
+                          <img
+                            src={product.images[0]}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        {product.images.length > 1 && (
+                          <div className="flex gap-1">
+                            {product.images.slice(1).map((url: string, index: number) => (
+                              <div key={index} className="w-12 h-12 rounded-md overflow-hidden bg-gray-100 border">
+                                <img
+                                  src={url}
+                                  alt={`${product.name} ${index + 2}`}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            ))}
+                            {product.images.length > 3 && (
+                              <div className="w-12 h-12 rounded-md bg-gray-200 border flex items-center justify-center text-xs text-gray-600">
+                                +{product.images.length - 3}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Categoría:</span>
+                        <span>{product.category}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Precio:</span>
+                        <span className="font-medium">${product.price}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Stock:</span>
+                        <span>{product.stockQuantity}</span>
+                      </div>
                     </div>
                     <div className="flex gap-2 pt-2">
                       <Button
@@ -678,6 +718,94 @@ export default function ProductManagement() {
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+
+              <FormField
+                control={form.control}
+                name="images"
+                render={({ field }) => {
+                  const images = field.value || [];
+                  const addImage = (url: string) => {
+                    if (url && images.length < 3 && !images.includes(url)) {
+                      field.onChange([...images, url]);
+                    }
+                  };
+                  const removeImage = (index: number) => {
+                    const newImages = images.filter((_: string, i: number) => i !== index);
+                    field.onChange(newImages);
+                  };
+
+                  return (
+                    <FormItem>
+                      <FormLabel>Imágenes del Producto (máximo 3)</FormLabel>
+                      <div className="space-y-3">
+                        {/* Mostrar imágenes existentes */}
+                        {images.length > 0 && (
+                          <div className="grid grid-cols-3 gap-3">
+                            {images.map((url: string, index: number) => (
+                              <div key={index} className="relative">
+                                <div className="w-full h-24 rounded-md overflow-hidden bg-gray-100 border">
+                                  <img
+                                    src={url}
+                                    alt={`Imagen ${index + 1}`}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full p-0"
+                                  onClick={() => removeImage(index)}
+                                >
+                                  ×
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Campo para agregar nueva imagen */}
+                        {images.length < 3 && (
+                          <div className="flex gap-2">
+                            <Input
+                              type="url"
+                              placeholder="https://ejemplo.com/imagen.jpg"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const input = e.target as HTMLInputElement;
+                                  addImage(input.value);
+                                  input.value = '';
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={(e) => {
+                                const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                                addImage(input.value);
+                                input.value = '';
+                              }}
+                            >
+                              Agregar
+                            </Button>
+                          </div>
+                        )}
+                        
+                        <p className="text-sm text-muted-foreground">
+                          {images.length}/3 imágenes. Presiona Enter o haz clic en "Agregar" para añadir una imagen.
+                        </p>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
               <DialogFooter>
