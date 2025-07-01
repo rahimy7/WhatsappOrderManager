@@ -2809,9 +2809,8 @@ export class DatabaseStorage implements IStorage {
 
   // Store Configuration
   async getStoreConfig(storeId?: number): Promise<StoreSettings | undefined> {
-    // Usar storeId 4 por defecto para "Pecadores Anónimos" si no se especifica
-    const targetStoreId = storeId || 4;
-    const [config] = await db.select().from(storeSettings).where(eq(storeSettings.storeId, targetStoreId)).limit(1);
+    // Para la implementación actual, obtener la primera configuración disponible
+    const [config] = await db.select().from(storeSettings).limit(1);
     return config;
   }
 
@@ -2821,9 +2820,7 @@ export class DatabaseStorage implements IStorage {
     storeAddress?: string; 
     storeEmail?: string; 
   }, storeId?: number): Promise<StoreSettings> {
-    // Usar storeId 4 por defecto para "Pecadores Anónimos" si no se especifica
-    const targetStoreId = storeId || 4;
-    const existingConfig = await this.getStoreConfig(targetStoreId);
+    const existingConfig = await this.getStoreConfig();
     
     if (existingConfig) {
       // Update existing configuration
@@ -2841,7 +2838,6 @@ export class DatabaseStorage implements IStorage {
       const [newConfig] = await db
         .insert(storeSettings)
         .values({
-          storeId: targetStoreId,
           storeWhatsAppNumber: config.storeWhatsAppNumber,
           storeName: config.storeName,
           storeAddress: config.storeAddress || null,
