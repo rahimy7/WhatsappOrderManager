@@ -782,13 +782,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (fields.stockQuantity) fields.stockQuantity = parseInt(fields.stockQuantity);
         if (fields.minQuantity) fields.minQuantity = parseInt(fields.minQuantity);
         if (fields.maxQuantity) fields.maxQuantity = parseInt(fields.maxQuantity);
-        if (fields.weight) fields.weight = parseFloat(fields.weight);
+        // Keep weight as string for decimal database storage
         if (fields.isPromoted) fields.isPromoted = fields.isPromoted === 'true';
 
         productData = fields;
-
-        // Remove weight parseFloat conversion for POST endpoint
-        if (fields.weight) fields.weight = fields.weight; // Keep as string
 
         // For now, we'll store image URLs as placeholder URLs
         // In a real application, you'd upload files to cloud storage
@@ -853,13 +850,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (fields.stockQuantity) fields.stockQuantity = parseInt(fields.stockQuantity);
         if (fields.minQuantity) fields.minQuantity = parseInt(fields.minQuantity);
         if (fields.maxQuantity) fields.maxQuantity = parseInt(fields.maxQuantity);
-        if (fields.weight) fields.weight = parseFloat(fields.weight);
+        // Keep weight as string for decimal database storage
         if (fields.isPromoted) fields.isPromoted = fields.isPromoted === 'true';
 
         productData = fields;
-
-        // Remove weight parseFloat conversion for PUT endpoint  
-        if (fields.weight) fields.weight = fields.weight; // Keep as string
 
         // Handle new images
         const imageFileCount = Object.keys(req.files || {}).filter(key => key.startsWith('image_')).length;
