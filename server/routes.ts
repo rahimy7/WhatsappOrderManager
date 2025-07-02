@@ -6235,13 +6235,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Super Admin Stores List
   app.get('/api/super-admin/stores', authenticateToken, async (req: any, res) => {
     try {
+      console.log('=== DEBUG SUPER ADMIN STORES ===');
+      console.log('User from token:', req.user);
+      console.log('User role:', req.user?.role);
+      console.log('Is super admin?', req.user?.role === 'super_admin');
+      
       // Verificar que sea super admin
       if (req.user.role !== 'super_admin') {
+        console.log('Access denied - not super admin');
         return res.status(403).json({ message: "Acceso denegado" });
       }
 
+      console.log('Super admin verified, fetching stores...');
+      
       // Obtener tiendas reales de la base de datos
       const stores = await masterDb.select().from(schema.virtualStores);
+      
+      console.log('Raw stores from DB:', stores.length, 'stores found');
+      console.log('First store:', stores[0]);
       
       // Transformar datos para que coincidan con la interfaz esperada
       const transformedStores = stores.map(store => ({
@@ -6267,6 +6278,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }));
 
+      console.log('Transformed stores:', transformedStores.length, 'stores');
+      console.log('Sample transformed store:', transformedStores[0]);
+      console.log('Transformed store names:', transformedStores.map(s => s.name));
+      
       res.json(transformedStores);
     } catch (error) {
       console.error('Error fetching stores:', error);

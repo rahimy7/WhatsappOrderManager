@@ -3,20 +3,51 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Settings, Users, Package, BarChart3, Trash2, Edit3, Store, Database, CheckCircle, XCircle } from "lucide-react";
+import {
+  Plus,
+  Settings,
+  Users,
+  Package,
+  BarChart3,
+  Trash2,
+  Edit3,
+  Store,
+  Database,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 
 interface VirtualStore {
   id: number;
-  storeName: string;
+  name: string;
   domain: string;
   isActive: boolean;
   plan: string;
@@ -50,7 +81,11 @@ export default function StoreManagement() {
   // Create store mutation
   const createStoreMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest("POST", "/api/super-admin/stores", data);
+      const response = await apiRequest(
+        "POST",
+        "/api/super-admin/stores",
+        data,
+      );
       return await response.json();
     },
     onSuccess: () => {
@@ -73,7 +108,11 @@ export default function StoreManagement() {
   // Update store mutation
   const updateStoreMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
-      const response = await apiRequest("PUT", `/api/super-admin/stores/${id}`, data);
+      const response = await apiRequest(
+        "PUT",
+        `/api/super-admin/stores/${id}`,
+        data,
+      );
       return await response.json();
     },
     onSuccess: () => {
@@ -97,7 +136,11 @@ export default function StoreManagement() {
   // Toggle store status mutation
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/super-admin/stores/${id}/status`, { isActive });
+      const response = await apiRequest(
+        "PATCH",
+        `/api/super-admin/stores/${id}/status`,
+        { isActive },
+      );
       return await response.json();
     },
     onSuccess: () => {
@@ -119,7 +162,10 @@ export default function StoreManagement() {
   // Delete store mutation
   const deleteStoreMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiRequest("DELETE", `/api/super-admin/stores/${id}`);
+      const response = await apiRequest(
+        "DELETE",
+        `/api/super-admin/stores/${id}`,
+      );
       return await response.json();
     },
     onSuccess: () => {
@@ -141,19 +187,25 @@ export default function StoreManagement() {
   // Validate ecosystem mutation
   const validateMutation = useMutation({
     mutationFn: async (storeId: number) => {
-      const response = await apiRequest("GET", `/api/super-admin/stores/${storeId}/validate`);
+      const response = await apiRequest(
+        "GET",
+        `/api/super-admin/stores/${storeId}/validate`,
+      );
       return await response.json();
     },
     onSuccess: (data: any) => {
       toast({
         title: "Validación completada",
-        description: data.message || "El ecosistema de la tienda se ha validado exitosamente",
+        description:
+          data.message ||
+          "El ecosistema de la tienda se ha validado exitosamente",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error en validación",
-        description: error?.message || "No se pudo validar el ecosistema de la tienda",
+        description:
+          error?.message || "No se pudo validar el ecosistema de la tienda",
         variant: "destructive",
       });
     },
@@ -183,7 +235,7 @@ export default function StoreManagement() {
   const handleUpdateStore = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedStore) return;
-    
+
     const formData = new FormData(e.currentTarget);
     const data = {
       storeName: formData.get("storeName") as string,
@@ -214,8 +266,12 @@ export default function StoreManagement() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tiendas Registradas</h1>
-          <p className="text-gray-600 mt-2">Gestiona todas las tiendas virtuales del ecosistema</p>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Tiendas Registradas
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Gestiona todas las tiendas virtuales del ecosistema
+          </p>
         </div>
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
@@ -273,7 +329,12 @@ export default function StoreManagement() {
               </div>
               <div>
                 <Label htmlFor="ownerEmail">Email del Propietario</Label>
-                <Input id="ownerEmail" name="ownerEmail" type="email" required />
+                <Input
+                  id="ownerEmail"
+                  name="ownerEmail"
+                  type="email"
+                  required
+                />
               </div>
               <div>
                 <Label htmlFor="storeAddress">Dirección</Label>
@@ -284,11 +345,17 @@ export default function StoreManagement() {
                 <Textarea id="description" name="description" />
               </div>
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowCreateDialog(false)}
+                >
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={createStoreMutation.isPending}>
-                  {createStoreMutation.isPending ? "Creando..." : "Crear Tienda"}
+                  {createStoreMutation.isPending
+                    ? "Creando..."
+                    : "Crear Tienda"}
                 </Button>
               </div>
             </form>
@@ -309,7 +376,9 @@ export default function StoreManagement() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tiendas Activas</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Tiendas Activas
+            </CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -320,7 +389,9 @@ export default function StoreManagement() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tiendas Inactivas</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Tiendas Inactivas
+            </CardTitle>
             <XCircle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
@@ -331,12 +402,18 @@ export default function StoreManagement() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Plan Empresarial</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Plan Empresarial
+            </CardTitle>
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stores.filter((store: VirtualStore) => store.plan === "enterprise").length}
+              {
+                stores.filter(
+                  (store: VirtualStore) => store.plan === "enterprise",
+                ).length
+              }
             </div>
           </CardContent>
         </Card>
@@ -350,17 +427,20 @@ export default function StoreManagement() {
               <div className="flex justify-between items-start">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    {store.storeName}
+                    {store.name}
                     <Badge variant={store.isActive ? "default" : "secondary"}>
                       {store.isActive ? "Activa" : "Inactiva"}
                     </Badge>
                     <Badge variant="outline">{store.plan}</Badge>
                   </CardTitle>
                   <CardDescription>
-                    {store.domain} • Creada el {new Date(store.createdAt).toLocaleDateString()}
+                    {store.domain} • Creada el{" "}
+                    {new Date(store.createdAt).toLocaleDateString()}
                   </CardDescription>
                   {store.description && (
-                    <p className="text-sm text-gray-600 mt-2">{store.description}</p>
+                    <p className="text-sm text-gray-600 mt-2">
+                      {store.description}
+                    </p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -370,9 +450,12 @@ export default function StoreManagement() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      console.log('Click en botón configuración - Store ID:', store.id);
+                      console.log(
+                        "Click en botón configuración - Store ID:",
+                        store.id,
+                      );
                       const targetUrl = `/super-admin/store-settings?store=${store.id}`;
-                      console.log('Navegando a:', targetUrl);
+                      console.log("Navegando a:", targetUrl);
                       setLocation(targetUrl);
                     }}
                     className="p-2 h-8 w-8 hover:bg-gray-100 z-10 cursor-pointer"
@@ -383,8 +466,11 @@ export default function StoreManagement() {
                   </Button>
                   <Switch
                     checked={store.isActive}
-                    onCheckedChange={(checked) => 
-                      toggleStatusMutation.mutate({ id: store.id, isActive: checked })
+                    onCheckedChange={(checked) =>
+                      toggleStatusMutation.mutate({
+                        id: store.id,
+                        isActive: checked,
+                      })
                     }
                     disabled={toggleStatusMutation.isPending}
                   />
@@ -401,13 +487,17 @@ export default function StoreManagement() {
                 )}
                 {store.storePhone && (
                   <div>
-                    <p className="text-sm font-medium text-gray-700">Teléfono</p>
+                    <p className="text-sm font-medium text-gray-700">
+                      Teléfono
+                    </p>
                     <p className="text-sm text-gray-600">{store.storePhone}</p>
                   </div>
                 )}
                 {store.ownerName && (
                   <div>
-                    <p className="text-sm font-medium text-gray-700">Propietario</p>
+                    <p className="text-sm font-medium text-gray-700">
+                      Propietario
+                    </p>
                     <p className="text-sm text-gray-600">{store.ownerName}</p>
                   </div>
                 )}
@@ -429,7 +519,9 @@ export default function StoreManagement() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setLocation(`/super-admin/store-settings?store=${store.id}`);
+                    setLocation(
+                      `/super-admin/store-settings?store=${store.id}`,
+                    );
                   }}
                   className="flex items-center gap-1"
                 >
@@ -440,7 +532,9 @@ export default function StoreManagement() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setLocation(`/super-admin/store-products?store=${store.id}`);
+                    setLocation(
+                      `/super-admin/store-products?store=${store.id}`,
+                    );
                   }}
                   className="flex items-center gap-1"
                 >
@@ -455,13 +549,19 @@ export default function StoreManagement() {
                   disabled={validateMutation.isPending}
                 >
                   <Database className="h-3 w-3" />
-                  {validateMutation.isPending ? "Validando..." : "Validar Ecosistema"}
+                  {validateMutation.isPending
+                    ? "Validando..."
+                    : "Validar Ecosistema"}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (confirm("¿Estás seguro de que quieres eliminar esta tienda?")) {
+                    if (
+                      confirm(
+                        "¿Estás seguro de que quieres eliminar esta tienda?",
+                      )
+                    ) {
                       deleteStoreMutation.mutate(store.id);
                     }
                   }}
@@ -491,20 +591,20 @@ export default function StoreManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="edit-storeName">Nombre de la Tienda</Label>
-                  <Input 
-                    id="edit-storeName" 
-                    name="storeName" 
+                  <Input
+                    id="edit-storeName"
+                    name="storeName"
                     defaultValue={selectedStore.storeName}
-                    required 
+                    required
                   />
                 </div>
                 <div>
                   <Label htmlFor="edit-domain">Dominio</Label>
-                  <Input 
-                    id="edit-domain" 
-                    name="domain" 
+                  <Input
+                    id="edit-domain"
+                    name="domain"
                     defaultValue={selectedStore.domain}
-                    required 
+                    required
                   />
                 </div>
               </div>
@@ -524,9 +624,9 @@ export default function StoreManagement() {
                 </div>
                 <div>
                   <Label htmlFor="edit-storeEmail">Email de la Tienda</Label>
-                  <Input 
-                    id="edit-storeEmail" 
-                    name="storeEmail" 
+                  <Input
+                    id="edit-storeEmail"
+                    name="storeEmail"
                     type="email"
                     defaultValue={selectedStore.storeEmail || ""}
                   />
@@ -534,38 +634,40 @@ export default function StoreManagement() {
               </div>
               <div>
                 <Label htmlFor="edit-storePhone">Teléfono</Label>
-                <Input 
-                  id="edit-storePhone" 
+                <Input
+                  id="edit-storePhone"
                   name="storePhone"
                   defaultValue={selectedStore.storePhone || ""}
                 />
               </div>
               <div>
                 <Label htmlFor="edit-storeAddress">Dirección</Label>
-                <Textarea 
-                  id="edit-storeAddress" 
+                <Textarea
+                  id="edit-storeAddress"
                   name="storeAddress"
                   defaultValue={selectedStore.storeAddress || ""}
                 />
               </div>
               <div>
                 <Label htmlFor="edit-description">Descripción</Label>
-                <Textarea 
-                  id="edit-description" 
+                <Textarea
+                  id="edit-description"
                   name="description"
                   defaultValue={selectedStore.description || ""}
                 />
               </div>
               <div className="flex justify-end gap-2">
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => setShowEditDialog(false)}
                 >
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={updateStoreMutation.isPending}>
-                  {updateStoreMutation.isPending ? "Guardando..." : "Guardar Cambios"}
+                  {updateStoreMutation.isPending
+                    ? "Guardando..."
+                    : "Guardar Cambios"}
                 </Button>
               </div>
             </form>
