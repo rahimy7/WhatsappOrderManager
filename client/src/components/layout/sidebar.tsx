@@ -236,14 +236,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       permission: "super_admin",
       roles: ["super_admin"], // Solo super admin
     },
-    {
-      href: "/super-admin/store-management",
-      icon: Cog,
-      label: "Administración de Tiendas",
-      badge: null,
-      permission: "super_admin",
-      roles: ["super_admin"], // Solo super admin
-    },
+
     {
       href: "/super-admin/store-settings",
       icon: Database,
