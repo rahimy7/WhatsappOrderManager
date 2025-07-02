@@ -143,7 +143,9 @@ export default function StoresManagement() {
     },
   });
 
-  const storesList: VirtualStore[] = stores || [];
+  const storesList: VirtualStore[] = Array.isArray(stores) ? stores : [];
+  console.log('StoresList after processing:', storesList);
+  console.log('Original stores data type:', typeof stores, stores);
 
   const filteredStores = storesList.filter(store => {
     const matchesSearch = store.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
