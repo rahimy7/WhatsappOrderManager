@@ -5509,7 +5509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalUsers,
         totalOrders: totalOrdersResult?.count || 0,
         ordersToday: todayOrdersResult?.count || 0,
-        totalRevenue: (revenueResult?.total || 0).toFixed(2),
+        totalRevenue: Number(revenueResult?.total || 0).toFixed(2),
         totalMessages: totalMessagesResult?.count || 0,
         storageUsed: "N/A", // Requiere monitoreo del sistema
         systemStatus: "healthy" as const

@@ -564,7 +564,8 @@ export default function StoresManagement() {
               </div>
             </CardContent>
           </Card>
-        ))}
+          )
+        })}
       </div>
 
       {filteredStores.length === 0 && (
