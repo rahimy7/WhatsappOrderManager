@@ -87,7 +87,7 @@ export default function StoreSettings() {
     const data: any = {};
     
     // Convert FormData to object based on section
-    for (const [key, value] of formData.entries()) {
+    Array.from(formData.entries()).forEach(([key, value]) => {
       if (key.includes('enable') || key.includes('accept')) {
         data[key] = value === 'on';
       } else if (key.includes('radius') || key.includes('fee') || key.includes('threshold') || key.includes('rate')) {
@@ -95,7 +95,7 @@ export default function StoreSettings() {
       } else {
         data[key] = value || null;
       }
-    }
+    });
 
     updateSettingsMutation.mutate(data);
   };
@@ -132,7 +132,7 @@ export default function StoreSettings() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Configuración de Tienda</h1>
           <p className="text-gray-600 mt-2">
-            {store?.storeName || "Tienda"} • Gestiona la configuración específica de esta tienda
+            {store?.name || "Tienda"} • Gestiona la configuración específica de esta tienda
           </p>
         </div>
         <Button onClick={() => window.history.back()} variant="outline">
@@ -141,12 +141,9 @@ export default function StoreSettings() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-          <TabsTrigger value="notifications">Notificaciones</TabsTrigger>
-          <TabsTrigger value="payments">Pagos</TabsTrigger>
-          <TabsTrigger value="delivery">Entrega</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="general">Información General</TabsTrigger>
+          <TabsTrigger value="status">Estado y Plan</TabsTrigger>
         </TabsList>
 
         {/* General Settings */}
@@ -175,7 +172,7 @@ export default function StoreSettings() {
                     <Input 
                       id="storeName" 
                       name="storeName" 
-                      defaultValue={settings?.storeName || store?.storeName || ""}
+                      defaultValue={store?.name || ""}
                     />
                   </div>
                   <div>
