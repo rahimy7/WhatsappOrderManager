@@ -6,41 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Database, Shield, Bell, Smartphone, MapPin, Clock, DollarSign, Settings2 } from "lucide-react";
-
-interface StoreSettings {
-  id: number;
-  storeId: number;
-  // General Settings
-  storeName?: string;
-  storeAddress?: string;
-  storeEmail?: string;
-  storePhone?: string;
-  businessHours?: string;
-  deliveryRadius?: number;
-  // WhatsApp Settings
-  storeWhatsAppNumber?: string;
-  whatsappBusinessName?: string;
-  enableWhatsappNotifications?: boolean;
-  // Notification Settings
-  enableEmailNotifications?: boolean;
-  enableSmsNotifications?: boolean;
-  notificationEmail?: string;
-  // Payment Settings
-  acceptCash?: boolean;
-  acceptCard?: boolean;
-  acceptTransfer?: boolean;
-  defaultCurrency?: string;
-  taxRate?: number;
-  // Delivery Settings
-  freeDeliveryThreshold?: number;
-  deliveryFee?: number;
-  estimatedDeliveryTime?: string;
-}
+import { ArrowLeft, Store, Settings } from "lucide-react";
 
 export default function StoreSettings() {
   const { toast } = useToast();
@@ -56,19 +25,19 @@ export default function StoreSettings() {
     }
   }, []);
 
-  // Fetch store settings and info
+  // Fetch store info
   const { data: store, isLoading } = useQuery({
     queryKey: [`/api/super-admin/stores`],
     enabled: !!storeId,
     select: (data: any[]) => data?.find((s: any) => s.id === storeId)
   });
 
-  // Update settings mutation
-  const updateSettingsMutation = useMutation({
+  // Update store mutation
+  const updateStoreMutation = useMutation({
     mutationFn: (data: any) => 
-      apiRequest("PUT", `/api/super-admin/store-settings/${storeId}`, data),
+      apiRequest("PUT", `/api/super-admin/stores/${storeId}`, data).then(res => res.json()),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/store-settings", storeId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/super-admin/stores`] });
       toast({
         title: "Configuración actualizada",
         description: "Los cambios se han guardado exitosamente",
@@ -83,21 +52,16 @@ export default function StoreSettings() {
     },
   });
 
-  const handleSaveSettings = (formData: FormData, section: string) => {
-    const data: any = {};
-    
-    // Convert FormData to object based on section
-    Array.from(formData.entries()).forEach(([key, value]) => {
-      if (key.includes('enable') || key.includes('accept')) {
-        data[key] = value === 'on';
-      } else if (key.includes('radius') || key.includes('fee') || key.includes('threshold') || key.includes('rate')) {
-        data[key] = value ? parseFloat(value as string) : null;
-      } else {
-        data[key] = value || null;
-      }
-    });
-
-    updateSettingsMutation.mutate(data);
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const data = {
+      name: formData.get('name') as string,
+      domain: formData.get('domain') as string,
+      description: formData.get('description') as string,
+      plan: formData.get('plan') as string,
+    };
+    updateStoreMutation.mutate(data);
   };
 
   if (!storeId) {
@@ -117,9 +81,9 @@ export default function StoreSettings() {
   if (isLoading) {
     return (
       <div className="p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Cargando...</h1>
+          <p className="text-gray-600">Obteniendo información de la tienda</p>
         </div>
       </div>
     );
@@ -136,360 +100,125 @@ export default function StoreSettings() {
           </p>
         </div>
         <Button onClick={() => window.history.back()} variant="outline">
+          <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="general">Información General</TabsTrigger>
-          <TabsTrigger value="status">Estado y Plan</TabsTrigger>
-        </TabsList>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Store className="h-5 w-5" />
+            Información General
+          </CardTitle>
+          <CardDescription>
+            Configura la información básica de la tienda
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name">Nombre de la Tienda</Label>
+                <Input 
+                  id="name" 
+                  name="name" 
+                  defaultValue={store?.name || ""}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="domain">Dominio</Label>
+                <Input 
+                  id="domain" 
+                  name="domain" 
+                  defaultValue={store?.domain || ""}
+                  placeholder="mi-tienda.com"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="description">Descripción</Label>
+              <Textarea 
+                id="description" 
+                name="description" 
+                defaultValue={store?.description || ""}
+                placeholder="Descripción de la tienda"
+                rows={3}
+              />
+            </div>
 
-        {/* General Settings */}
-        <TabsContent value="general">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings2 className="h-5 w-5" />
-                Configuración General
-              </CardTitle>
-              <CardDescription>
-                Información básica y configuración general de la tienda
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings(new FormData(e.currentTarget), 'general');
-                }}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="storeName">Nombre de la Tienda</Label>
-                    <Input 
-                      id="storeName" 
-                      name="storeName" 
-                      defaultValue={store?.name || ""}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="storeEmail">Email de Contacto</Label>
-                    <Input 
-                      id="storeEmail" 
-                      name="storeEmail" 
-                      type="email"
-                      defaultValue={settings?.storeEmail || ""}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="storePhone">Teléfono</Label>
-                    <Input 
-                      id="storePhone" 
-                      name="storePhone"
-                      defaultValue={settings?.storePhone || ""}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="deliveryRadius">Radio de Entrega (km)</Label>
-                    <Input 
-                      id="deliveryRadius" 
-                      name="deliveryRadius"
-                      type="number"
-                      step="0.1"
-                      defaultValue={settings?.deliveryRadius || ""}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="storeAddress">Dirección</Label>
-                  <Textarea 
-                    id="storeAddress" 
-                    name="storeAddress"
-                    defaultValue={settings?.storeAddress || ""}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="businessHours">Horarios de Atención</Label>
-                  <Textarea 
-                    id="businessHours" 
-                    name="businessHours"
-                    placeholder="Lunes a Viernes: 9:00 AM - 6:00 PM"
-                    defaultValue={settings?.businessHours || ""}
-                  />
-                </div>
-                <Button type="submit" disabled={updateSettingsMutation.isPending}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {updateSettingsMutation.isPending ? "Guardando..." : "Guardar Cambios"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <div>
+              <Label htmlFor="plan">Plan</Label>
+              <Select name="plan" defaultValue={store?.plan || "basic"}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="basic">Básico</SelectItem>
+                  <SelectItem value="premium">Premium</SelectItem>
+                  <SelectItem value="enterprise">Empresarial</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        {/* WhatsApp Settings */}
-        <TabsContent value="whatsapp">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Smartphone className="h-5 w-5" />
-                Configuración de WhatsApp
-              </CardTitle>
-              <CardDescription>
-                Configuración de WhatsApp Business para pedidos y comunicación
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings(new FormData(e.currentTarget), 'whatsapp');
-                }}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="storeWhatsAppNumber">Número de WhatsApp</Label>
-                    <Input 
-                      id="storeWhatsAppNumber" 
-                      name="storeWhatsAppNumber"
-                      placeholder="5215512345678"
-                      defaultValue={settings?.storeWhatsAppNumber || ""}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="whatsappBusinessName">Nombre del Negocio en WhatsApp</Label>
-                    <Input 
-                      id="whatsappBusinessName" 
-                      name="whatsappBusinessName"
-                      defaultValue={settings?.whatsappBusinessName || ""}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch 
-                    id="enableWhatsappNotifications" 
-                    name="enableWhatsappNotifications"
-                    defaultChecked={settings?.enableWhatsappNotifications || false}
-                  />
-                  <Label htmlFor="enableWhatsappNotifications">
-                    Habilitar notificaciones por WhatsApp
-                  </Label>
-                </div>
-                <Button type="submit" disabled={updateSettingsMutation.isPending}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {updateSettingsMutation.isPending ? "Guardando..." : "Guardar Cambios"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <div className="flex items-center space-x-2">
+              <Switch 
+                id="isActive" 
+                defaultChecked={store?.isActive || false}
+                name="isActive"
+              />
+              <Label htmlFor="isActive">Tienda Activa</Label>
+            </div>
 
-        {/* Notifications Settings */}
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Configuración de Notificaciones
-              </CardTitle>
-              <CardDescription>
-                Gestiona cómo y cuándo recibir notificaciones
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings(new FormData(e.currentTarget), 'notifications');
-                }}
-                className="space-y-4"
+            <div className="flex justify-end">
+              <Button 
+                type="submit" 
+                disabled={updateStoreMutation.isPending}
               >
-                <div>
-                  <Label htmlFor="notificationEmail">Email para Notificaciones</Label>
-                  <Input 
-                    id="notificationEmail" 
-                    name="notificationEmail"
-                    type="email"
-                    defaultValue={settings?.notificationEmail || ""}
-                  />
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <Switch 
-                      id="enableEmailNotifications" 
-                      name="enableEmailNotifications"
-                      defaultChecked={settings?.enableEmailNotifications || false}
-                    />
-                    <Label htmlFor="enableEmailNotifications">
-                      Habilitar notificaciones por email
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch 
-                      id="enableSmsNotifications" 
-                      name="enableSmsNotifications"
-                      defaultChecked={settings?.enableSmsNotifications || false}
-                    />
-                    <Label htmlFor="enableSmsNotifications">
-                      Habilitar notificaciones por SMS
-                    </Label>
-                  </div>
-                </div>
-                <Button type="submit" disabled={updateSettingsMutation.isPending}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {updateSettingsMutation.isPending ? "Guardando..." : "Guardar Cambios"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                {updateStoreMutation.isPending ? "Guardando..." : "Guardar Cambios"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
-        {/* Payment Settings */}
-        <TabsContent value="payments">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Configuración de Pagos
-              </CardTitle>
-              <CardDescription>
-                Métodos de pago aceptados y configuración fiscal
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings(new FormData(e.currentTarget), 'payments');
-                }}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="defaultCurrency">Moneda</Label>
-                    <Select name="defaultCurrency" defaultValue={settings?.defaultCurrency || "MXN"}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MXN">Peso Mexicano (MXN)</SelectItem>
-                        <SelectItem value="USD">Dólar (USD)</SelectItem>
-                        <SelectItem value="EUR">Euro (EUR)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="taxRate">Tasa de Impuesto (%)</Label>
-                    <Input 
-                      id="taxRate" 
-                      name="taxRate"
-                      type="number"
-                      step="0.01"
-                      defaultValue={settings?.taxRate || ""}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <Label>Métodos de Pago Aceptados</Label>
-                  <div className="flex items-center space-x-2">
-                    <Switch 
-                      id="acceptCash" 
-                      name="acceptCash"
-                      defaultChecked={settings?.acceptCash || false}
-                    />
-                    <Label htmlFor="acceptCash">Efectivo</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch 
-                      id="acceptCard" 
-                      name="acceptCard"
-                      defaultChecked={settings?.acceptCard || false}
-                    />
-                    <Label htmlFor="acceptCard">Tarjeta de crédito/débito</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch 
-                      id="acceptTransfer" 
-                      name="acceptTransfer"
-                      defaultChecked={settings?.acceptTransfer || false}
-                    />
-                    <Label htmlFor="acceptTransfer">Transferencia bancaria</Label>
-                  </div>
-                </div>
-                <Button type="submit" disabled={updateSettingsMutation.isPending}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {updateSettingsMutation.isPending ? "Guardando..." : "Guardar Cambios"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Delivery Settings */}
-        <TabsContent value="delivery">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Configuración de Entrega
-              </CardTitle>
-              <CardDescription>
-                Costos y tiempos de entrega
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveSettings(new FormData(e.currentTarget), 'delivery');
-                }}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="deliveryFee">Costo de Entrega</Label>
-                    <Input 
-                      id="deliveryFee" 
-                      name="deliveryFee"
-                      type="number"
-                      step="0.01"
-                      defaultValue={settings?.deliveryFee || ""}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="freeDeliveryThreshold">Entrega Gratis desde</Label>
-                    <Input 
-                      id="freeDeliveryThreshold" 
-                      name="freeDeliveryThreshold"
-                      type="number"
-                      step="0.01"
-                      defaultValue={settings?.freeDeliveryThreshold || ""}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="estimatedDeliveryTime">Tiempo Estimado</Label>
-                    <Input 
-                      id="estimatedDeliveryTime" 
-                      name="estimatedDeliveryTime"
-                      placeholder="24-48 horas"
-                      defaultValue={settings?.estimatedDeliveryTime || ""}
-                    />
-                  </div>
-                </div>
-                <Button type="submit" disabled={updateSettingsMutation.isPending}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {updateSettingsMutation.isPending ? "Guardando..." : "Guardar Cambios"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Store Information Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Información de la Tienda
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="font-medium">ID:</span> {store?.id}
+            </div>
+            <div>
+              <span className="font-medium">Estado:</span>{" "}
+              <span className={store?.isActive ? "text-green-600" : "text-red-600"}>
+                {store?.isActive ? "Activa" : "Inactiva"}
+              </span>
+            </div>
+            <div>
+              <span className="font-medium">Plan:</span> {store?.plan}
+            </div>
+            <div>
+              <span className="font-medium">Fecha de creación:</span>{" "}
+              {store?.createdAt ? new Date(store.createdAt).toLocaleDateString() : "No disponible"}
+            </div>
+            <div>
+              <span className="font-medium">Propietario:</span> {store?.ownerName || "No asignado"}
+            </div>
+            <div>
+              <span className="font-medium">Email del propietario:</span> {store?.ownerEmail || "No disponible"}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

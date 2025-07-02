@@ -58,22 +58,20 @@ export default function StoreProducts() {
 
   // Fetch store info
   const { data: store } = useQuery({
-    queryKey: ["/api/super-admin/stores", storeId],
-    queryFn: () => apiRequest("GET", `/api/super-admin/stores/${storeId}`),
+    queryKey: [`/api/super-admin/stores`],
     enabled: !!storeId,
+    select: (data: any[]) => data?.find((s: any) => s.id === storeId)
   });
 
   // Fetch products for specific store
   const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: ["/api/super-admin/store-products", storeId],
-    queryFn: () => apiRequest("GET", `/api/super-admin/store-products/${storeId}`),
+    queryKey: ["/api/products"],
     enabled: !!storeId,
   });
 
   // Fetch categories for specific store
   const { data: categories = [], isLoading: categoriesLoading } = useQuery({
-    queryKey: ["/api/super-admin/store-categories", storeId],
-    queryFn: () => apiRequest("GET", `/api/super-admin/store-categories/${storeId}`),
+    queryKey: ["/api/categories"],
     enabled: !!storeId,
   });
 
@@ -254,7 +252,7 @@ export default function StoreProducts() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Productos de Tienda</h1>
           <p className="text-gray-600 mt-2">
-            {store?.storeName || "Tienda"} • Gestiona el catálogo de productos
+            {store?.name || "Tienda"} • Gestiona el catálogo de productos
           </p>
         </div>
         <div className="flex gap-2">
