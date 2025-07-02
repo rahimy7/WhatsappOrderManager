@@ -276,7 +276,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         />
       )}
       
-      <aside className={`w-72 bg-white shadow-lg border-r border-gray-200 flex flex-col ${
+      <aside className={`w-72 bg-gradient-to-b from-emerald-500 to-teal-600 shadow-xl border-r border-emerald-400 flex flex-col ${
         isMobile 
           ? 'fixed left-0 top-0 h-full z-50 transform transition-transform duration-300' 
           : 'relative'
@@ -290,7 +290,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               variant="ghost" 
               size="sm" 
               onClick={onClose}
-              className="p-2"
+              className="p-2 text-white hover:bg-white/20"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -298,29 +298,29 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         )}
 
         {/* Logo Header */}
-        <div className="p-4 md:p-6 border-b border-gray-200">
+        <div className="p-4 md:p-6 border-b border-white/20">
           <div className="flex items-center space-x-3">
-            <div className="w-8 md:w-10 h-8 md:h-10 whatsapp-bg rounded-lg flex items-center justify-center">
+            <div className="w-8 md:w-10 h-8 md:h-10 bg-white/20 backdrop-blur rounded-lg flex items-center justify-center">
               <MessageCircle className="text-white h-5 md:h-6 w-5 md:w-6" />
             </div>
             <div>
-              <h1 className="font-bold text-gray-900 text-base md:text-lg">OrderManager</h1>
-              <p className="text-xs md:text-sm text-gray-500">WhatsApp Business</p>
+              <h1 className="font-bold text-white text-base md:text-lg">🏪 OrderManager</h1>
+              <p className="text-xs md:text-sm text-emerald-100">WhatsApp Business</p>
             </div>
           </div>
         </div>
 
       {/* User Profile */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-white/20">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-medium">AD</span>
+          <div className="w-8 h-8 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
+            <span className="text-white text-sm font-medium">👤</span>
           </div>
           <div className="flex-1">
-            <p className="font-medium text-gray-900 text-sm">Administrador</p>
-            <p className="text-xs text-gray-500">Sistema</p>
+            <p className="font-medium text-white text-sm">Administrador</p>
+            <p className="text-xs text-emerald-100">Sistema</p>
           </div>
-          <button className="text-gray-400 hover:text-gray-600">
+          <button className="text-emerald-100 hover:text-white">
             <ChartLine className="h-4 w-4" />
           </button>
         </div>
@@ -338,8 +338,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               href={item.href}
               className={`flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors ${
                 isActive
-                  ? "bg-primary text-white"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-white/25 backdrop-blur text-white shadow-lg"
+                  : "text-emerald-100 hover:bg-white/15 hover:text-white"
               }`}
             >
               <Icon className="h-5 w-5" />
