@@ -5473,16 +5473,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeStores = stores.filter(store => store.isActive).length;
       const totalUsers = users.length;
       
-      // Simular otras métricas (en producción estas vendrían de monitoreo real)
+      // Calcular métricas reales desde la base de datos
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Contar órdenes totales y del día
+      const [totalOrdersResult] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.orders);
+      
+      const [todayOrdersResult] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.orders)
+        .where(sql`DATE(${schema.orders.createdAt}) = DATE(${new Date().toISOString()})`);
+      
+      // Contar mensajes WhatsApp totales
+      const [totalMessagesResult] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.messages);
+      
+      // Calcular ingresos totales
+      const [revenueResult] = await masterDb
+        .select({ total: sql<number>`COALESCE(SUM(CAST(${schema.orders.totalAmount} AS DECIMAL)), 0)` })
+        .from(schema.orders)
+        .where(eq(schema.orders.status, 'completed'));
+      
       const metrics = {
         totalStores,
         activeStores,
         totalUsers,
-        totalMessages: 1247, // Total de mensajes WhatsApp en 24h
-        dbConnections: activeStores, // Una conexión por tienda activa
-        systemUptime: "72h 14m",
-        apiCalls: 8934, // Llamadas API en 24h
-        storageUsage: "2.1 GB", // Uso total de almacenamiento
+        totalOrders: totalOrdersResult?.count || 0,
+        ordersToday: todayOrdersResult?.count || 0,
+        totalRevenue: (revenueResult?.total || 0).toFixed(2),
+        totalMessages: totalMessagesResult?.count || 0,
+        storageUsed: "N/A", // Requiere monitoreo del sistema
+        systemStatus: "healthy" as const
       };
 
       res.json(metrics);
@@ -5956,49 +5981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
-  // Obtener métricas del sistema
-  app.get('/api/super-admin/metrics', requireSuperAdmin, async (req, res) => {
-    try {
-      // Total de tiendas
-      const [storesCount] = await masterDb
-        .select({ count: sql<number>`count(*)` })
-        .from(schema.virtualStores)
-        .where(eq(schema.virtualStores.isActive, true));
 
-      // Total de usuarios
-      const [usersCount] = await masterDb
-        .select({ count: sql<number>`count(*)` })
-        .from(schema.systemUsers);
-
-      // Usuarios activos (con último login en los últimos 30 días)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const [activeUsersCount] = await masterDb
-        .select({ count: sql<number>`count(*)` })
-        .from(schema.systemUsers)
-        .where(and(
-          eq(schema.systemUsers.isActive, true),
-          gte(schema.systemUsers.lastLogin, thirtyDaysAgo)
-        ));
-
-      const metrics = {
-        totalStores: storesCount?.count || 0,
-        totalUsers: usersCount?.count || 0,
-        activeUsers: activeUsersCount?.count || 0,
-        totalOrders: 0, // Se calculará agregando todas las tiendas
-        ordersToday: 0,
-        totalRevenue: "0",
-        storageUsed: "45.2 MB",
-        systemStatus: "healthy" as const
-      };
-
-      res.json(metrics);
-    } catch (error) {
-      console.error('Error fetching super admin metrics:', error);
-      res.status(500).json({ error: 'Failed to fetch metrics' });
-    }
-  });
 
   // Obtener usuarios globales
   app.get('/api/super-admin/users', requireSuperAdmin, async (req, res) => {
@@ -6242,45 +6225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ====== SUPER ADMIN ENDPOINTS ======
   
-  // Super Admin Dashboard Metrics
-  app.get('/api/super-admin/metrics', authenticateToken, async (req: any, res) => {
-    try {
-      // Verificar que sea super admin
-      if (req.user.role !== 'super_admin') {
-        return res.status(403).json({ message: "Acceso denegado" });
-      }
 
-      const timeRange = req.query.timeRange || '30d';
-      let dateFilter = new Date();
-      
-      switch (timeRange) {
-        case '7d':
-          dateFilter.setDate(dateFilter.getDate() - 7);
-          break;
-        case '90d':
-          dateFilter.setDate(dateFilter.getDate() - 90);
-          break;
-        default: // 30d
-          dateFilter.setDate(dateFilter.getDate() - 30);
-      }
-
-      // Mock data para demonstración - en producción esto vendría de base de datos real
-      const mockMetrics = {
-        totalStores: 25,
-        activeStores: 18,
-        inactiveStores: 7,
-        totalOrders: 1250,
-        monthlyRevenue: 89500,
-        averageRetention: 85,
-        pendingSupport: 3
-      };
-
-      res.json(mockMetrics);
-    } catch (error) {
-      console.error('Error fetching super admin metrics:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
-    }
-  });
 
   // Super Admin Stores List
   app.get('/api/super-admin/stores', authenticateToken, async (req: any, res) => {
