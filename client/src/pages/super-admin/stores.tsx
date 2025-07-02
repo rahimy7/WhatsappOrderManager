@@ -136,10 +136,11 @@ export default function StoreManagement() {
   // Toggle store status mutation
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      const action = isActive ? 'enable' : 'disable';
       const response = await apiRequest(
         "PATCH",
         `/api/super-admin/stores/${id}/status`,
-        { isActive },
+        { action },
       );
       return await response.json();
     },

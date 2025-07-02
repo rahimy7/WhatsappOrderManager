@@ -6456,7 +6456,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Acción inválida" });
       }
 
-      // En producción, aquí se actualizaría el estado de la tienda
+      // Actualizar estado en la base de datos
+      const isActive = action === 'enable';
+      
+      const [updatedStore] = await masterDb
+        .update(schema.virtualStores)
+        .set({ 
+          isActive,
+          updatedAt: new Date()
+        })
+        .where(eq(schema.virtualStores.id, parseInt(id)))
+        .returning();
+
+      if (!updatedStore) {
+        return res.status(404).json({ message: "Tienda no encontrada" });
+      }
+
       const statusMap = {
         enable: 'active',
         disable: 'inactive',
@@ -6464,6 +6479,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const newStatus = statusMap[action as keyof typeof statusMap];
+
+      console.log(`Store ${id} status updated to ${newStatus} (isActive: ${isActive})`);
 
       res.json({ 
         success: true, 
