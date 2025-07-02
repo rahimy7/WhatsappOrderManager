@@ -3749,35 +3749,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // sendWhatsAppInteractiveMessage function is defined above (line 713)
 
   // WhatsApp Business API Webhook
-  app.get("/webhook", (req, res) => {
-    const mode = req.query["hub.mode"];
-    const token = req.query["hub.verify_token"];
-    const challenge = req.query["hub.challenge"];
+  app.get("/webhook", async (req, res) => {
+    try {
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
 
-    // Check the mode and token sent by WhatsApp
-    if (mode === "subscribe") {
-      // Verify the verify token matches the one set in webhook configuration
-      storage.getWhatsAppConfig().then(config => {
+      console.log(`Webhook verification request - Mode: ${mode}, Token: ${token ? '***' + token.slice(-4) : 'none'}, Challenge: ${challenge}`);
+
+      // Check the mode and token sent by WhatsApp
+      if (mode === "subscribe") {
+        // Verify the verify token matches the one set in webhook configuration
+        const config = await storage.getWhatsAppConfig();
+        console.log(`Stored verify token: ${config.whatsappVerifyToken ? '***' + config.whatsappVerifyToken.slice(-4) : 'none'}`);
+        
         if (token === config.whatsappVerifyToken) {
           console.log("Webhook verified successfully!");
-          storage.addWhatsAppLog({
+          await storage.addWhatsAppLog({
             type: 'info',
-            message: 'Webhook verificado correctamente',
-            data: { mode, token: '***', challenge }
+            messageContent: 'Webhook verificado correctamente',
+            status: 'success',
+            rawData: JSON.stringify({ mode, token: '***', challenge })
           });
           res.status(200).send(challenge);
         } else {
           console.log("Webhook verification failed - invalid token");
-          storage.addWhatsAppLog({
+          await storage.addWhatsAppLog({
             type: 'error',
-            message: 'Verificación de webhook fallida - token inválido',
-            data: { mode, token: '***' }
+            messageContent: 'Verificación de webhook fallida - token inválido',
+            status: 'failed',
+            rawData: JSON.stringify({ mode, receivedToken: token ? '***' + token.slice(-4) : 'none', expectedToken: '***' + config.whatsappVerifyToken.slice(-4) })
           });
           res.status(403).send("Forbidden");
         }
-      });
-    } else {
-      res.status(400).send("Bad Request");
+      } else {
+        console.log("Invalid webhook mode:", mode);
+        res.status(400).send("Bad Request");
+      }
+    } catch (error) {
+      console.error("Error in webhook verification:", error);
+      res.status(500).send("Internal Server Error");
     }
   });
 
