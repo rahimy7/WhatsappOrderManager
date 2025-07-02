@@ -6360,6 +6360,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update Store 
+  app.put('/api/super-admin/stores/:id', authenticateToken, async (req: any, res) => {
+    try {
+      console.log('=== UPDATE STORE REQUEST ===');
+      console.log('Store ID:', req.params.id);
+      console.log('Request body:', req.body);
+      console.log('User:', req.user);
+
+      // Verificar que sea super admin
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const storeId = parseInt(req.params.id);
+      const updateData = req.body;
+
+      // Mapear propiedades del frontend al esquema de base de datos
+      const dbData: any = {};
+      if (updateData.storeName) dbData.name = updateData.storeName;
+      if (updateData.name) dbData.name = updateData.name;
+      if (updateData.description) dbData.description = updateData.description;
+      if (updateData.domain) dbData.domain = updateData.domain;
+      if (updateData.storeAddress) dbData.address = updateData.storeAddress;
+      if (updateData.address) dbData.address = updateData.address;
+      if (updateData.storePhone) dbData.whatsappNumber = updateData.storePhone;
+      if (updateData.contactPhone) dbData.whatsappNumber = updateData.contactPhone;
+      if (updateData.plan) dbData.subscription = updateData.plan;
+      if (updateData.planType) dbData.subscription = updateData.planType;
+
+      // Agregar timestamp de actualización
+      dbData.updatedAt = new Date();
+
+      console.log('Mapped DB data:', dbData);
+
+      // Actualizar en la base de datos
+      const [updatedStore] = await masterDb
+        .update(schema.virtualStores)
+        .set(dbData)
+        .where(eq(schema.virtualStores.id, storeId))
+        .returning();
+
+      if (!updatedStore) {
+        return res.status(404).json({ message: "Tienda no encontrada" });
+      }
+
+      console.log('Store updated successfully:', updatedStore);
+
+      // Transformar respuesta para coincidir con la interfaz del frontend
+      const transformedStore = {
+        id: updatedStore.id,
+        name: updatedStore.name,
+        description: updatedStore.description || '',
+        domain: updatedStore.domain || '',
+        status: updatedStore.isActive ? 'active' : 'inactive',
+        subscriptionStatus: updatedStore.subscription || 'trial',
+        planType: updatedStore.subscription || 'basic',
+        contactEmail: '', 
+        contactPhone: updatedStore.whatsappNumber || '',
+        address: updatedStore.address || '',
+        createdAt: updatedStore.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+        lastActivity: updatedStore.updatedAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+        monthlyOrders: 0,
+        monthlyRevenue: 0,
+        supportTickets: 0,
+        settings: {
+          whatsappEnabled: !!updatedStore.whatsappNumber,
+          notificationsEnabled: true,
+          analyticsEnabled: true
+        }
+      };
+
+      res.json(transformedStore);
+    } catch (error) {
+      console.error('Error updating store:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
   // Update Store Status
   app.patch('/api/super-admin/stores/:id/status', authenticateToken, async (req: any, res) => {
     try {
