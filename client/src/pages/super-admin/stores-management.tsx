@@ -84,6 +84,9 @@ export default function StoresManagement() {
     queryKey: ['/api/super-admin/stores'],
   });
 
+  // Debug log para verificar datos
+  console.log('Stores data received:', stores);
+
   const createStoreMutation = useMutation({
     mutationFn: async (data: StoreFormData) => {
       const response = await apiRequest("POST", "/api/super-admin/stores", data);
