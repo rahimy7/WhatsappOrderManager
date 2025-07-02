@@ -534,6 +534,171 @@ export default function SimpleCatalog() {
           </div>
         </div>
       )}
+
+      {/* Modal de detalles del producto */}
+      <Dialog open={!!selectedProduct} onOpenChange={closeProductModal}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">{selectedProduct?.name}</DialogTitle>
+          </DialogHeader>
+          
+          {selectedProduct && (
+            <div className="grid gap-6">
+              {/* Galería de imágenes */}
+              <div className="relative">
+                <div className="w-full h-80 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg overflow-hidden relative">
+                  {selectedProduct.images && selectedProduct.images.length > 0 ? (
+                    <>
+                      <img
+                        src={selectedProduct.images[currentImageIndex]}
+                        alt={selectedProduct.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.nextElementSibling as HTMLDivElement;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                      <div className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center absolute inset-0" style={{ display: 'none' }}>
+                        <ShoppingBag className="w-20 h-20 text-blue-600" />
+                      </div>
+                      
+                      {/* Navegación de imágenes */}
+                      {selectedProduct.images.length > 1 && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={prevImage}
+                            className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white hover:bg-opacity-70 h-10 w-10 p-0"
+                          >
+                            <ChevronLeft className="w-5 h-5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={nextImage}
+                            className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white hover:bg-opacity-70 h-10 w-10 p-0"
+                          >
+                            <ChevronRight className="w-5 h-5" />
+                          </Button>
+                          
+                          {/* Indicadores de imagen */}
+                          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
+                            {selectedProduct.images.map((_: any, index: number) => (
+                              <button
+                                key={index}
+                                onClick={() => setCurrentImageIndex(index)}
+                                className={`w-2 h-2 rounded-full transition-all ${
+                                  index === currentImageIndex ? 'bg-white' : 'bg-white bg-opacity-50'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ShoppingBag className="w-20 h-20 text-blue-600" />
+                    </div>
+                  )}
+                </div>
+                
+                {/* Miniaturas */}
+                {selectedProduct.images && selectedProduct.images.length > 1 && (
+                  <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
+                    {selectedProduct.images.map((image: string, index: number) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                          index === currentImageIndex ? 'border-blue-500' : 'border-gray-200'
+                        }`}
+                      >
+                        <img
+                          src={image}
+                          alt={`${selectedProduct.name} ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Información del producto */}
+              <div className="grid gap-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-3xl font-bold text-green-600">
+                    ${selectedProduct.price}
+                  </div>
+                  <Badge variant="secondary" className="text-sm">
+                    {selectedProduct.category}
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`w-5 h-5 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+                    />
+                  ))}
+                  <span className="text-sm text-gray-600 ml-2">4.5 (128 reseñas)</span>
+                </div>
+                
+                {selectedProduct.description && (
+                  <div>
+                    <h3 className="font-semibold mb-2">Descripción</h3>
+                    <p className="text-gray-700 leading-relaxed">{selectedProduct.description}</p>
+                  </div>
+                )}
+                
+                {selectedProduct.brand && (
+                  <div>
+                    <h3 className="font-semibold mb-1">Marca</h3>
+                    <p className="text-gray-700">{selectedProduct.brand}</p>
+                  </div>
+                )}
+                
+                {selectedProduct.sku && (
+                  <div>
+                    <h3 className="font-semibold mb-1">SKU</h3>
+                    <p className="text-gray-500 text-sm">{selectedProduct.sku}</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Botones de acción */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  onClick={() => {
+                    addToCart(selectedProduct.id);
+                    closeProductModal();
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-12 text-lg"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Agregar al Carrito
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={closeProductModal}
+                  className="px-6 h-12"
+                >
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
