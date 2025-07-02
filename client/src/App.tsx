@@ -34,7 +34,7 @@ import MultiTenantLogin from "@/pages/multi-tenant-login";
 import SuperAdminDashboard from "@/pages/super-admin-dashboard";
 import GlobalUsersManagement from "@/pages/global-users-management";
 import GlobalDashboard from "@/pages/super-admin/global-dashboard";
-import StoresManagement from "@/pages/super-admin/stores-management";
+
 import GlobalSettings from "@/pages/super-admin/global-settings";
 import Subscriptions from "@/pages/super-admin/subscriptions";
 import GlobalOrders from "@/pages/super-admin/global-orders";
@@ -127,7 +127,7 @@ function Router() {
       <Route path="/super-admin-dashboard" component={() => <ProtectedRoute component={SuperAdminDashboard} permission="super_admin" />} />
       <Route path="/global-users-management" component={() => <ProtectedRoute component={GlobalUsersManagement} permission="super_admin" />} />
       <Route path="/super-admin/dashboard" component={() => <ProtectedRoute component={GlobalDashboard} permission="super_admin" />} />
-      <Route path="/super-admin/stores" component={() => <ProtectedRoute component={StoresManagement} permission="super_admin" />} />
+
       <Route path="/super-admin/subscriptions" component={() => <ProtectedRoute component={Subscriptions} permission="super_admin" />} />
       <Route path="/super-admin/global-orders" component={() => <ProtectedRoute component={GlobalOrders} permission="super_admin" />} />
       <Route path="/super-admin/users" component={() => <ProtectedRoute component={SuperAdminUsers} permission="super_admin" />} />
