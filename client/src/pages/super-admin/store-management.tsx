@@ -94,8 +94,10 @@ export default function StoreManagement() {
 
   // Toggle store status mutation
   const toggleStatusMutation = useMutation({
-    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => 
-      apiRequest("PATCH", `/api/super-admin/stores/${id}/status`, { isActive }),
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/super-admin/stores/${id}/status`, { isActive });
+      return await response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/stores"] });
       toast({
