@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList, ShoppingBag, Store, Shield, CreditCard, MessageSquare } from "lucide-react";
+import { ChartLine, ShoppingCart, MessageCircle, Users, Package, BarChart3, Settings, Menu, X, Smartphone, Bot, UserPlus, Zap, Bell, Wrench, ClipboardList, ShoppingBag, Store, Shield, CreditCard, MessageSquare, Cog, Database, Palette } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
@@ -232,6 +232,38 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       href: "/super-admin/support",
       icon: MessageSquare,
       label: "Soporte/Tickets",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/store-management",
+      icon: Cog,
+      label: "Administración de Tiendas",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/store-settings",
+      icon: Database,
+      label: "Configuración de Tiendas",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/store-products",
+      icon: Package,
+      label: "Productos de Tiendas",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
+      href: "/super-admin/store-themes",
+      icon: Palette,
+      label: "Temas y Personalización",
       badge: null,
       permission: "super_admin",
       roles: ["super_admin"], // Solo super admin

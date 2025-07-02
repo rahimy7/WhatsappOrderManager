@@ -41,6 +41,10 @@ import GlobalOrders from "@/pages/super-admin/global-orders";
 import SuperAdminUsers from "@/pages/super-admin/users";
 import SuperAdminReports from "@/pages/super-admin/reports";
 import Support from "@/pages/super-admin/support";
+import StoreManagementPage from "@/pages/super-admin/store-management";
+import StoreSettings from "@/pages/super-admin/store-settings";
+import StoreProducts from "@/pages/super-admin/store-products";
+import StoreThemes from "@/pages/super-admin/store-themes";
 import AppLayout from "@/components/layout/app-layout";
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -129,6 +133,10 @@ function Router() {
       <Route path="/super-admin/users" component={() => <ProtectedRoute component={SuperAdminUsers} permission="super_admin" />} />
       <Route path="/super-admin/reports" component={() => <ProtectedRoute component={SuperAdminReports} permission="super_admin" />} />
       <Route path="/super-admin/support" component={() => <ProtectedRoute component={Support} permission="super_admin" />} />
+      <Route path="/super-admin/store-management" component={() => <ProtectedRoute component={StoreManagementPage} permission="super_admin" />} />
+      <Route path="/super-admin/store-settings" component={() => <ProtectedRoute component={StoreSettings} permission="super_admin" />} />
+      <Route path="/super-admin/store-products" component={() => <ProtectedRoute component={StoreProducts} permission="super_admin" />} />
+      <Route path="/super-admin/store-themes" component={() => <ProtectedRoute component={StoreThemes} permission="super_admin" />} />
       <Route path="/super-admin/settings" component={() => <ProtectedRoute component={GlobalSettings} permission="super_admin" />} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/public-catalog" component={PublicCatalogClean} />
