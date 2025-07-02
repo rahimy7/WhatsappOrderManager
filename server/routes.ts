@@ -3755,15 +3755,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const token = req.query["hub.verify_token"];
       const challenge = req.query["hub.challenge"];
 
-      console.log(`Webhook verification request - Mode: ${mode}, Token: ${token ? '***' + token.slice(-4) : 'none'}, Challenge: ${challenge}`);
+      console.log(`Webhook verification request - Mode: ${mode}, Token: ${typeof token === 'string' && token ? '***' + token.slice(-4) : 'none'}, Challenge: ${challenge}`);
 
       // Check the mode and token sent by WhatsApp
       if (mode === "subscribe") {
         // Verify the verify token matches the one set in webhook configuration
         const config = await storage.getWhatsAppConfig();
-        console.log(`Stored verify token: ${config.whatsappVerifyToken ? '***' + config.whatsappVerifyToken.slice(-4) : 'none'}`);
         
-        if (token === config.whatsappVerifyToken) {
+        if (!config) {
+          console.log("No WhatsApp config found");
+          res.status(403).send("Forbidden");
+          return;
+        }
+        
+        console.log('Config object keys:', Object.keys(config));
+        console.log('Config object values:', Object.values(config));
+        
+        const storedToken = (config as any).whatsappVerifyToken || (config as any).webhookVerifyToken || (config as any).webhook_verify_token;
+        console.log(`Stored verify token: ${storedToken ? '***' + storedToken.slice(-4) : 'none'}`);
+        
+        if (token === storedToken) {
           console.log("Webhook verified successfully!");
           await storage.addWhatsAppLog({
             type: 'info',
@@ -3778,7 +3789,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'error',
             messageContent: 'Verificación de webhook fallida - token inválido',
             status: 'failed',
-            rawData: JSON.stringify({ mode, receivedToken: token ? '***' + token.slice(-4) : 'none', expectedToken: '***' + config.whatsappVerifyToken.slice(-4) })
+            rawData: JSON.stringify({ 
+              mode, 
+              receivedToken: typeof token === 'string' && token ? '***' + token.slice(-4) : 'none', 
+              expectedToken: storedToken ? '***' + storedToken.slice(-4) : 'none'
+            })
           });
           res.status(403).send("Forbidden");
         }
