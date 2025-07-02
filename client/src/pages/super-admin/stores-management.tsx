@@ -17,7 +17,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { 
   Building2, 
   Plus, 
@@ -163,6 +162,12 @@ export default function StoresManagement() {
     const matchesStatus = statusFilter === "all" || store.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  console.log('Filtered stores to render:', filteredStores);
+  console.log('First store details:', filteredStores[0]);
+
+  console.log('Filtered stores to render:', filteredStores);
+  console.log('First store details:', filteredStores[0]);
 
   const onSubmit = (data: StoreFormData) => {
     createStoreMutation.mutate(data);
