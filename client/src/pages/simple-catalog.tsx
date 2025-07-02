@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, MessageCircle, Phone, X, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, MessageCircle, Phone, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -31,6 +32,8 @@ export default function SimpleCatalog() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   
   // Estado del carrito local
   const [cart, setCart] = useState<{items: any[], subtotal: number}>(() => {
@@ -182,6 +185,33 @@ export default function SimpleCatalog() {
     return cart.items.reduce((total, item) => total + item.quantity, 0);
   };
 
+  // Funciones para el modal de detalles
+  const openProductModal = (product: any) => {
+    setSelectedProduct(product);
+    setCurrentImageIndex(0);
+  };
+
+  const closeProductModal = () => {
+    setSelectedProduct(null);
+    setCurrentImageIndex(0);
+  };
+
+  const nextImage = () => {
+    if (selectedProduct?.images?.length > 1) {
+      setCurrentImageIndex((prev) => 
+        prev === selectedProduct.images.length - 1 ? 0 : prev + 1
+      );
+    }
+  };
+
+  const prevImage = () => {
+    if (selectedProduct?.images?.length > 1) {
+      setCurrentImageIndex((prev) => 
+        prev === 0 ? selectedProduct.images.length - 1 : prev - 1
+      );
+    }
+  };
+
   // Función para enviar por WhatsApp
   const sendToWhatsApp = () => {
     if (cart.items.length === 0) {
@@ -290,64 +320,71 @@ export default function SimpleCatalog() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProducts.map((product: any) => (
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-4">
-                <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg overflow-hidden relative">
-                  {product.images && product.images.length > 0 ? (
-                    <>
-                      <img
-                        src={product.images[0]}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallback = target.nextElementSibling as HTMLDivElement;
-                          if (fallback) fallback.style.display = 'flex';
-                        }}
-                      />
-                      <div className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center absolute inset-0" style={{ display: 'none' }}>
+              <div onClick={() => openProductModal(product)} className="cursor-pointer">
+                <CardHeader className="pb-4">
+                  <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg overflow-hidden relative">
+                    {product.images && product.images.length > 0 ? (
+                      <>
+                        <img
+                          src={product.images[0]}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const fallback = target.nextElementSibling as HTMLDivElement;
+                            if (fallback) fallback.style.display = 'flex';
+                          }}
+                        />
+                        <div className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center absolute inset-0" style={{ display: 'none' }}>
+                          <ShoppingBag className="w-16 h-16 text-blue-600" />
+                        </div>
+                        {product.images.length > 1 && (
+                          <div className="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-full">
+                            +{product.images.length - 1}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
                         <ShoppingBag className="w-16 h-16 text-blue-600" />
                       </div>
-                      {product.images.length > 1 && (
-                        <div className="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-full">
-                          +{product.images.length - 1}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ShoppingBag className="w-16 h-16 text-blue-600" />
-                    </div>
-                  )}
-                </div>
-                <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
-                <CardDescription className="text-sm text-gray-600 line-clamp-3">
-                  {product.description || "Producto de alta calidad"}
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-2xl font-bold text-green-600">
-                    ${product.price}
+                    )}
                   </div>
-                  <Badge variant="secondary">
-                    {product.category}
-                  </Badge>
-                </div>
+                  <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
+                  <CardDescription className="text-sm text-gray-600 line-clamp-3">
+                    {product.description || "Producto de alta calidad"}
+                  </CardDescription>
+                </CardHeader>
                 
-                <div className="flex items-center gap-1 mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-4 h-4 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
-                    />
-                  ))}
-                  <span className="text-sm text-gray-600 ml-1">4.5</span>
-                </div>
-                
+                <CardContent className="pt-0">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-2xl font-bold text-green-600">
+                      ${product.price}
+                    </div>
+                    <Badge variant="secondary">
+                      {product.category}
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center gap-1 mb-4">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-4 h-4 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+                      />
+                    ))}
+                    <span className="text-sm text-gray-600 ml-1">4.5</span>
+                  </div>
+                </CardContent>
+              </div>
+              
+              <CardContent className="pt-0 pb-4">
                 <Button
-                  onClick={() => addToCart(product.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addToCart(product.id);
+                  }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Plus className="w-4 h-4 mr-2" />
