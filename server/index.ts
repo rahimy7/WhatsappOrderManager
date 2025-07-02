@@ -223,6 +223,90 @@ app.post('/api/super-admin/stores/:id/repair', async (req, res) => {
   }
 });
 
+// MEJORADO: Endpoint de validación completa con nuevo sistema
+app.get('/api/super-admin/stores/:id/validate-enhanced', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.id);
+    
+    // Importar sistema de reparación dinámicamente para evitar problemas de import
+    const { validateStoreEcosystem } = await import('./ecosystem-repair.js');
+    
+    // Ejecutar validación completa
+    const validation = await validateStoreEcosystem(storeId);
+    
+    res.json({
+      valid: validation.isValid,
+      message: validation.isValid 
+        ? `✅ Ecosistema de ${validation.storeName} funcionando correctamente`
+        : `⚠️ Problemas detectados en ecosistema de ${validation.storeName}`,
+      details: validation
+    });
+
+  } catch (error) {
+    console.error('Error en validación mejorada:', error);
+    res.status(500).json({ 
+      valid: false, 
+      message: 'Error interno durante la validación mejorada',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// MEJORADO: Endpoint de reparación automática completa
+app.post('/api/super-admin/stores/:id/repair-enhanced', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.id);
+    
+    // Importar sistema de reparación dinámicamente
+    const { repairStoreEcosystem } = await import('./ecosystem-repair.js');
+    
+    // Ejecutar reparación automática completa
+    const repairResult = await repairStoreEcosystem(storeId);
+    
+    res.json(repairResult);
+
+  } catch (error) {
+    console.error('Error en reparación mejorada:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor durante la reparación mejorada',
+      actions: [],
+      errors: [error instanceof Error ? error.message : 'Unknown error']
+    });
+  }
+});
+
+// NUEVO: Endpoint de validación masiva de todas las tiendas
+app.get('/api/super-admin/stores/validate-all', async (req, res) => {
+  try {
+    // Importar sistema de reparación dinámicamente
+    const { validateAllStoreEcosystems } = await import('./ecosystem-repair.js');
+    
+    // Ejecutar validación masiva
+    const validations = await validateAllStoreEcosystems();
+    
+    const summary = {
+      total: validations.length,
+      valid: validations.filter(v => v.isValid).length,
+      invalid: validations.filter(v => !v.isValid).length,
+      validations: validations
+    };
+    
+    res.json({
+      message: `Validación masiva completada: ${summary.valid}/${summary.total} tiendas válidas`,
+      summary,
+      details: validations
+    });
+
+  } catch (error) {
+    console.error('Error en validación masiva:', error);
+    res.status(500).json({
+      message: 'Error interno durante la validación masiva',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

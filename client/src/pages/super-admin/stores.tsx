@@ -61,7 +61,7 @@ interface VirtualStore {
   ownerEmail?: string;
 }
 
-export default function StoreManagement() {
+function StoreManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [location, setLocation] = useLocation();
@@ -213,8 +213,130 @@ export default function StoreManagement() {
     },
   });
 
+  // Enhanced validation mutation
+  const validateEnhancedMutation = useMutation({
+    mutationFn: async (storeId: number) => {
+      const response = await apiRequest(
+        "GET",
+        `/api/super-admin/stores/${storeId}/validate-enhanced`,
+      );
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      const details = data.details || {};
+      const issuesCount = details.issues?.length || 0;
+      const recommendationsCount = details.recommendations?.length || 0;
+      
+      toast({
+        title: data.valid ? "✅ Ecosistema Saludable" : "⚠️ Problemas Detectados",
+        description: data.valid 
+          ? `${details.storeName}: Arquitectura multi-tenant correcta`
+          : `${details.storeName}: ${issuesCount} problemas, ${recommendationsCount} recomendaciones`,
+        variant: data.valid ? "default" : "destructive",
+      });
+
+      if (!data.valid && details.issues) {
+        console.log("Problemas detectados:", details.issues);
+        console.log("Recomendaciones:", details.recommendations);
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error en análisis",
+        description: "No se pudo realizar el análisis completo",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Enhanced repair mutation
+  const repairEnhancedMutation = useMutation({
+    mutationFn: async (storeId: number) => {
+      const response = await apiRequest(
+        "POST",
+        `/api/super-admin/stores/${storeId}/repair-enhanced`,
+      );
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      const actionsCount = data.actions?.length || 0;
+      const errorsCount = data.errors?.length || 0;
+      
+      toast({
+        title: data.success ? "🔧 Reparación Exitosa" : "⚠️ Reparación Parcial",
+        description: data.success 
+          ? `${actionsCount} acciones completadas`
+          : `${actionsCount} acciones completadas, ${errorsCount} errores`,
+        variant: data.success ? "default" : "destructive",
+      });
+
+      if (data.actions) {
+        console.log("Acciones realizadas:", data.actions);
+      }
+      if (data.errors) {
+        console.log("Errores durante reparación:", data.errors);
+      }
+
+      // Refrescar lista de tiendas después de reparación
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/stores"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error en reparación",
+        description: "No se pudo reparar el ecosistema",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleValidateEcosystem = (storeId: number) => {
     validateMutation.mutate(storeId);
+  };
+
+  const handleValidateEnhanced = (storeId: number) => {
+    validateEnhancedMutation.mutate(storeId);
+  };
+
+  const handleRepairEnhanced = (storeId: number) => {
+    repairEnhancedMutation.mutate(storeId);
+  };
+
+  // Validate all stores mutation
+  const validateAllMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest(
+        "GET",
+        `/api/super-admin/stores/validate-all`,
+      );
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      const summary = data.summary || {};
+      const validCount = summary.valid || 0;
+      const totalCount = summary.total || 0;
+      const invalidCount = summary.invalid || 0;
+      
+      toast({
+        title: invalidCount === 0 ? "✅ Todas las Tiendas Saludables" : `⚠️ ${invalidCount} Tiendas con Problemas`,
+        description: `Validación masiva: ${validCount}/${totalCount} tiendas válidas`,
+        variant: invalidCount === 0 ? "default" : "destructive",
+      });
+
+      if (data.details && invalidCount > 0) {
+        console.log("Resultados de validación masiva:", data.details);
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error en validación masiva",
+        description: "No se pudo validar todas las tiendas",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleValidateAllStores = () => {
+    validateAllMutation.mutate();
   };
 
   const handleCreateStore = (e: React.FormEvent<HTMLFormElement>) => {
@@ -275,20 +397,30 @@ export default function StoreManagement() {
             Gestiona todas las tiendas virtuales del ecosistema
           </p>
         </div>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogTrigger asChild>
-            <Button className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Nueva Tienda
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Crear Nueva Tienda</DialogTitle>
-              <DialogDescription>
-                Completa la información para crear una nueva tienda virtual
-              </DialogDescription>
-            </DialogHeader>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => handleValidateAllStores()}
+            variant="outline"
+            className="flex items-center gap-2 text-blue-600 hover:text-blue-700"
+            disabled={validateAllMutation.isPending}
+          >
+            <Database className="h-4 w-4" />
+            {validateAllMutation.isPending ? "Analizando..." : "🔍 Validar Todas las Tiendas"}
+          </Button>
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Nueva Tienda
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Crear Nueva Tienda</DialogTitle>
+                <DialogDescription>
+                  Completa la información para crear una nueva tienda virtual
+                </DialogDescription>
+              </DialogHeader>
             <form onSubmit={handleCreateStore} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -361,8 +493,9 @@ export default function StoreManagement() {
                 </Button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -556,6 +689,30 @@ export default function StoreManagement() {
                     : "Validar Ecosistema"}
                 </Button>
                 <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleValidateEnhanced(store.id)}
+                  className="flex items-center gap-1 text-green-600 hover:text-green-700"
+                  disabled={validateEnhancedMutation.isPending}
+                >
+                  <Database className="h-3 w-3" />
+                  {validateEnhancedMutation.isPending
+                    ? "Analizando..."
+                    : "🔍 Análisis Completo"}
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleRepairEnhanced(store.id)}
+                  className="flex items-center gap-1 text-orange-600 hover:text-orange-700"
+                  disabled={repairEnhancedMutation.isPending}
+                >
+                  <Database className="h-3 w-3" />
+                  {repairEnhancedMutation.isPending
+                    ? "Reparando..."
+                    : "🔧 Reparar Auto"}
+                </Button>
+                <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
@@ -596,7 +753,7 @@ export default function StoreManagement() {
                   <Input
                     id="edit-storeName"
                     name="storeName"
-                    defaultValue={selectedStore.storeName}
+                    defaultValue={selectedStore.name}
                     required
                   />
                 </div>
@@ -679,3 +836,5 @@ export default function StoreManagement() {
     </div>
   );
 }
+
+export default StoreManagement;
