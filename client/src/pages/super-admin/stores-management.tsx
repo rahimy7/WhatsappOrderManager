@@ -78,6 +78,7 @@ export default function StoresManagement() {
   const [selectedStore, setSelectedStore] = useState<VirtualStore | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location, setLocation] = useLocation();
 
   const { data: stores, isLoading } = useQuery({
     queryKey: ['/api/super-admin/stores'],
@@ -516,7 +517,13 @@ export default function StoresManagement() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setSelectedStore(store)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Navegando a configuración de tienda:', store.id);
+                      setLocation(`/super-admin/store-settings?store=${store.id}`);
+                    }}
+                    title="Configurar tienda"
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
