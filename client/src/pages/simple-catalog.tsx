@@ -237,8 +237,8 @@ export default function SimpleCatalog() {
     cart.items.forEach((item, index) => {
       message += `${index + 1}. ${item.product.name}\n`;
       message += `   Cantidad: ${item.quantity}\n`;
-      message += `   Precio unitario: $${item.product.price}\n`;
-      message += `   Subtotal: $${item.product.price * item.quantity}\n\n`;
+      message += `   Precio unitario: $${formatCurrency(item.product.price)}\n`;
+      message += `   Subtotal: $${formatCurrency(item.product.price * item.quantity)}\n\n`;
     });
     
     message += `💰 *TOTAL: $${cart.subtotal}*\n\n`;
@@ -691,6 +691,21 @@ export default function SimpleCatalog() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Botón flotante del carrito */}
+      {cart.items.length > 0 && (
+        <Button
+          onClick={() => setIsCartOpen(true)}
+          className="fixed bottom-4 right-4 h-14 w-14 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg z-50"
+        >
+          <div className="relative">
+            <ShoppingCart className="w-6 h-6" />
+            <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+              {cart.items.length}
+            </div>
+          </div>
+        </Button>
+      )}
     </div>
   );
 }
