@@ -214,8 +214,8 @@ export default function StoreManagement() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Administración de Tiendas</h1>
-          <p className="text-gray-600 mt-2">Gestiona todas las tiendas virtuales del sistema</p>
+          <h1 className="text-3xl font-bold text-gray-900">Tiendas Registradas</h1>
+          <p className="text-gray-600 mt-2">Gestiona todas las tiendas virtuales del ecosistema</p>
         </div>
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
