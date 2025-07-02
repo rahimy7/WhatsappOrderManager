@@ -360,10 +360,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-white/20">
         <div className="flex items-center space-x-3">
-          <div className="w-3 h-3 success-bg rounded-full"></div>
-          <span className="text-sm text-gray-600">WhatsApp API Conectado</span>
+          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+          <span className="text-sm text-emerald-100">✅ WhatsApp API Conectado</span>
         </div>
       </div>
     </aside>

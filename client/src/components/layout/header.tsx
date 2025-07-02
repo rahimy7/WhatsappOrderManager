@@ -53,7 +53,7 @@ export default function Header({
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 px-3 md:px-6 py-3 md:py-4">
+    <header className="bg-gradient-to-r from-emerald-500 to-teal-500 border-b border-emerald-400 px-3 md:px-6 py-3 md:py-4 shadow-lg">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
           {showMenuButton && (
@@ -61,27 +61,27 @@ export default function Header({
               variant="ghost" 
               size="icon" 
               onClick={onMenuClick}
-              className="md:hidden"
+              className="md:hidden text-white hover:bg-white/20"
             >
               <Menu className="h-5 w-5" />
             </Button>
           )}
           <div>
-            <h2 className="text-lg md:text-2xl font-bold text-gray-900">{title}</h2>
-            <p className="text-sm md:text-base text-gray-600 hidden sm:block">{subtitle}</p>
+            <h2 className="text-lg md:text-2xl font-bold text-white">{title}</h2>
+            <p className="text-sm md:text-base text-emerald-100 hidden sm:block">{subtitle}</p>
           </div>
         </div>
         <div className="flex items-center space-x-2 md:space-x-4">
           <Button 
-            className="whatsapp-bg hover:bg-green-600 text-white text-sm md:text-base px-3 md:px-4"
+            className="bg-white/20 backdrop-blur hover:bg-white/30 text-white text-sm md:text-base px-3 md:px-4 border border-white/30"
             onClick={() => setIsCreateOrderModalOpen(true)}
           >
             <Plus className="h-4 w-4 mr-0 md:mr-2" />
-            <span className="hidden sm:inline">Nuevo Pedido</span>
+            <span className="hidden sm:inline">🛍️ Nuevo Pedido</span>
             <span className="sm:hidden">Nuevo</span>
           </Button>
           <div className="flex items-center space-x-1 md:space-x-2">
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon" className="relative text-white hover:bg-white/20">
               <Bell className="h-4 md:h-5 w-4 md:w-5" />
               <Badge className="absolute -top-1 -right-1 bg-red-500 text-white text-xs h-4 md:h-5 w-4 md:w-5 rounded-full flex items-center justify-center p-0">
                 3
@@ -89,7 +89,7 @@ export default function Header({
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hidden md:flex">
+                <Button variant="ghost" size="icon" className="hidden md:flex text-white hover:bg-white/20">
                   <Settings className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
