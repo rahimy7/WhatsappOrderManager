@@ -10,6 +10,11 @@ import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, Me
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
+const formatCurrency = (amount: string | number) => {
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return numAmount.toLocaleString('es-MX');
+};
+
 export default function SimpleCatalog() {
   const { toast } = useToast();
   
@@ -360,7 +365,7 @@ export default function SimpleCatalog() {
                 <CardContent className="pt-0">
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-2xl font-bold text-green-600">
-                      ${product.price}
+                      ${formatCurrency(product.price)}
                     </div>
                     <Badge variant="secondary">
                       {product.category}
@@ -438,7 +443,7 @@ export default function SimpleCatalog() {
                           {item.product.name}
                         </h4>
                         <p className="text-sm text-gray-600">
-                          ${item.product.price} c/u
+                          ${formatCurrency(item.product.price)} c/u
                         </p>
                       </div>
                       
@@ -491,7 +496,7 @@ export default function SimpleCatalog() {
                 <div className="border-t bg-white p-6 space-y-4">
                   <div className="flex justify-between items-center text-lg font-semibold">
                     <span>Total:</span>
-                    <span className="text-green-600">${cart.subtotal}</span>
+                    <span className="text-green-600">${formatCurrency(cart.subtotal)}</span>
                   </div>
                   
                   <div className="space-y-3">
@@ -631,7 +636,7 @@ export default function SimpleCatalog() {
               <div className="grid gap-4">
                 <div className="flex items-center justify-between">
                   <div className="text-3xl font-bold text-green-600">
-                    ${selectedProduct.price}
+                    ${formatCurrency(selectedProduct.price)}
                   </div>
                   <Badge variant="secondary" className="text-sm">
                     {selectedProduct.category}
