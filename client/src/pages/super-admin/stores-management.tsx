@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,12 +81,21 @@ export default function StoresManagement() {
   const queryClient = useQueryClient();
   const [location, setLocation] = useLocation();
 
-  const { data: stores, isLoading } = useQuery({
+  const { data: stores, isLoading, error } = useQuery({
     queryKey: ['/api/super-admin/stores'],
+    queryFn: async () => {
+      console.log('Executing query for stores...');
+      const response = await apiRequest('GET', '/api/super-admin/stores');
+      const data = await response.json();
+      console.log('Raw response data:', data);
+      return data;
+    }
   });
 
   // Debug log para verificar datos
   console.log('Stores data received:', stores);
+  console.log('Query error:', error);
+  console.log('Is loading:', isLoading);
 
   const createStoreMutation = useMutation({
     mutationFn: async (data: StoreFormData) => {
