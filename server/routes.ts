@@ -1694,34 +1694,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         responseFound = true;
       }
       
-      // If still no response found, use configured help auto-response
+      // If still no response found, ALWAYS use welcome message as default
       if (!responseFound) {
         await storage.addWhatsAppLog({
           type: 'debug',
           phoneNumber: from,
-          messageContent: 'Enviando mensaje de ayuda usando respuesta automática configurada',
+          messageContent: 'Comando no reconocido - enviando mensaje de bienvenida por defecto',
           status: 'processing'
         });
         
-        const helpResponses = await storage.getAutoResponsesByTrigger('help');
-        if (helpResponses.length > 0) {
-          const helpResponse = helpResponses[0];
-          await sendWhatsAppMessage(from, helpResponse.messageText);
+        const welcomeResponses = await storage.getAutoResponsesByTrigger('welcome');
+        if (welcomeResponses.length > 0) {
+          const welcomeResponse = welcomeResponses[0];
+          await sendWhatsAppMessage(from, welcomeResponse.messageText);
           
           await storage.addWhatsAppLog({
             type: 'info',
             phoneNumber: from,
-            messageContent: `Mensaje enviado desde auto-response: ${helpResponse.name}`,
+            messageContent: `Mensaje de bienvenida enviado por comando no reconocido: ${welcomeResponse.name}`,
             status: 'sent'
           });
         } else {
           await storage.addWhatsAppLog({
             type: 'warning',
             phoneNumber: from,
-            messageContent: 'No hay respuesta automática de ayuda configurada, usando función fallback',
+            messageContent: 'No hay respuesta automática de bienvenida configurada, usando función fallback',
             status: 'fallback'
           });
-          await sendHelpMenu(from);
+          await sendWelcomeMessage(from);
         }
       }
 

@@ -7,13 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AutoResponse, InsertAutoResponse } from "@shared/schema";
-import { Plus, Edit, Trash2, MessageSquare, Bot, RotateCcw, Zap } from "lucide-react";
+import { Plus, Edit, Trash2, MessageSquare, Settings, Bot, RotateCcw, HelpCircle, Zap, Clock, Shield } from "lucide-react";
 
 interface MenuOption {
   label: string;
@@ -40,9 +40,7 @@ const triggerLabels: Record<string, string> = {
   collect_contact: "Recopilar Contacto",
   collect_payment: "Recopilar Pago",
   order_received: "Pedido Recibido",
-  order_confirmed: "Pedido Confirmado",
-  help: "Ayuda",
-  ayuda: "Centro de Ayuda"
+  order_confirmed: "Pedido Confirmado"
 };
 
 // Component for editing menu options visually
@@ -195,7 +193,7 @@ export default function AutoResponsesPage() {
       resetForm();
       toast({
         title: "Respuesta actualizada",
-        description: "La respuesta automática se ha actualizada correctamente.",
+        description: "La respuesta automática se ha actualizado correctamente.",
       });
     },
   });
@@ -293,13 +291,6 @@ export default function AutoResponsesPage() {
   const triggerOptions = [
     { value: "welcome", label: "Mensaje de Bienvenida" },
     { value: "menu", label: "Menú Principal" },
-    { value: "ayuda", label: "Centro de Ayuda" },
-    { value: "help", label: "Ayuda en Inglés" },
-    { value: "productos", label: "Ver Productos" },
-    { value: "servicios", label: "Ver Servicios" },
-    { value: "pedido", label: "Estado de Pedido" },
-    { value: "ubicacion", label: "Actualizar Ubicación" },
-    { value: "tecnico", label: "Contactar Técnico" },
     { value: "product_inquiry", label: "Consulta de Productos" },
     { value: "service_inquiry", label: "Consulta de Servicios" },
     { value: "contact_request", label: "Solicitud de Contacto" },
@@ -359,9 +350,6 @@ export default function AutoResponsesPage() {
                   <DialogTitle>
                     {editingResponse ? "Editar Respuesta Automática" : "Nueva Respuesta Automática"}
                   </DialogTitle>
-                  <DialogDescription>
-                    Configure respuestas automáticas para WhatsApp con comandos personalizados
-                  </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
@@ -369,7 +357,7 @@ export default function AutoResponsesPage() {
                       <Label htmlFor="name">Nombre</Label>
                       <Input
                         id="name"
-                        value={formData.name || ""}
+                        value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         placeholder="Ej: Menú Principal"
                         required
@@ -379,7 +367,7 @@ export default function AutoResponsesPage() {
                       <Label htmlFor="trigger">Comando de Activación</Label>
                       <Input
                         id="trigger"
-                        value={formData.trigger || ""}
+                        value={formData.trigger}
                         onChange={(e) => setFormData({ ...formData, trigger: e.target.value })}
                         placeholder="Ej: menu, ayuda, productos"
                         required
@@ -415,7 +403,7 @@ export default function AutoResponsesPage() {
                     <Label htmlFor="content">Contenido del Mensaje</Label>
                     <Textarea
                       id="content"
-                      value={formData.messageText || ""}
+                      value={formData.messageText}
                       onChange={(e) => setFormData({ ...formData, messageText: e.target.value })}
                       placeholder="Mensaje que se enviará automáticamente..."
                       rows={4}
@@ -426,7 +414,7 @@ export default function AutoResponsesPage() {
                   <div className="space-y-2">
                     <Label>Opciones de Menú Interactivo</Label>
                     <MenuOptionsEditor
-                      value={formData.menuOptions || ""}
+                      value={formData.menuOptions}
                       onChange={(menuOptions) => setFormData({ ...formData, menuOptions })}
                     />
                   </div>

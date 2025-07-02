@@ -787,6 +787,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Badges distintivos para estados (Activa/Inactiva) y tipos de disparador con códigos de comando resaltados
   - Switch de activación/desactivación integrado en cada tarjeta para control inmediato
   - Interfaz optimizada para gestión eficiente de múltiples respuestas automáticas en una sola vista
+- July 02, 2025. SISTEMA DE RESPUESTA POR DEFECTO CONFIGURADO PARA WHATSAPP:
+  - Configurado sistema para enviar mensaje de bienvenida cuando clientes escriben comandos no reconocidos
+  - Modificada función processCustomerMessage para usar respuesta automática "welcome" como fallback
+  - Agregado campo "Comando de Activación" editable en formulario de respuestas automáticas
+  - Campo trigger ahora es completamente personalizable por los administradores
+  - Selector de triggers predefinidos disponible como opción adicional para facilitar configuración
+  - Sistema garantiza que cualquier texto no reconocido active automáticamente el mensaje de bienvenida configurado
 
 ## User Preferences
 
