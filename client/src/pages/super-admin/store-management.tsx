@@ -398,8 +398,7 @@ export default function StoreManagement() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    // Navigate to store settings
-                    window.location.href = `/super-admin/store-settings?store=${store.id}`;
+                    setLocation(`/super-admin/store-settings?store=${store.id}`);
                   }}
                   className="flex items-center gap-1"
                 >
@@ -410,8 +409,7 @@ export default function StoreManagement() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    // Navigate to store products
-                    window.location.href = `/super-admin/store-products?store=${store.id}`;
+                    setLocation(`/super-admin/store-products?store=${store.id}`);
                   }}
                   className="flex items-center gap-1"
                 >

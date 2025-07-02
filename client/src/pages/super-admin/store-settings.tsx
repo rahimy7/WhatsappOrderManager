@@ -56,18 +56,11 @@ export default function StoreSettings() {
     }
   }, []);
 
-  // Fetch store settings
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ["/api/super-admin/store-settings", storeId],
-    queryFn: () => apiRequest("GET", `/api/super-admin/store-settings/${storeId}`),
+  // Fetch store settings and info
+  const { data: store, isLoading } = useQuery({
+    queryKey: [`/api/super-admin/stores`],
     enabled: !!storeId,
-  });
-
-  // Fetch store info
-  const { data: store } = useQuery({
-    queryKey: ["/api/super-admin/stores", storeId],
-    queryFn: () => apiRequest("GET", `/api/super-admin/stores/${storeId}`),
-    enabled: !!storeId,
+    select: (data: any[]) => data?.find((s: any) => s.id === storeId)
   });
 
   // Update settings mutation
