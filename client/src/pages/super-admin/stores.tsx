@@ -146,6 +146,7 @@ export default function StoreManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/stores"] });
+      queryClient.refetchQueries({ queryKey: ["/api/super-admin/stores"] });
       toast({
         title: "Estado actualizado",
         description: "El estado de la tienda se ha actualizado",

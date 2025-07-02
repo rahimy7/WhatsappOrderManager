@@ -6261,6 +6261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: store.description || '',
         domain: store.domain || '',
         status: store.isActive ? 'active' : 'inactive',
+        isActive: store.isActive, // Agregar propiedad isActive para el frontend
         subscriptionStatus: store.subscription || 'trial',
         planType: store.subscription || 'basic',
         contactEmail: '', // No existe en el schema actual, usar valor por defecto
