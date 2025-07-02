@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,7 @@ interface VirtualStore {
 export default function StoreManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location, setLocation] = useLocation();
   const [selectedStore, setSelectedStore] = useState<VirtualStore | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -337,6 +339,17 @@ export default function StoreManagement() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setLocation(`/super-admin/store-settings?store=${store.id}`);
+                    }}
+                    className="p-2 h-8 w-8"
+                    title="Configurar tienda"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
                   <Switch
                     checked={store.isActive}
                     onCheckedChange={(checked) => 
