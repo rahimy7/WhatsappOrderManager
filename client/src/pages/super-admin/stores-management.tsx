@@ -84,10 +84,27 @@ export default function StoresManagement() {
     queryKey: ['/api/super-admin/stores'],
     queryFn: async () => {
       console.log('Executing query for stores...');
-      const response = await apiRequest('GET', '/api/super-admin/stores');
-      const data = await response.json();
-      console.log('Raw response data:', data);
-      return data;
+      try {
+        const response = await apiRequest('GET', '/api/super-admin/stores');
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        const contentType = response.headers.get('content-type');
+        console.log('Content-Type:', contentType);
+        
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('Expected JSON but received:', text);
+          throw new Error('Server returned non-JSON response');
+        }
+        
+        const data = await response.json();
+        console.log('Raw response data:', data);
+        return data;
+      } catch (err) {
+        console.error('Query error:', err);
+        throw err;
+      }
     }
   });
 
