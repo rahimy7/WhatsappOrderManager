@@ -39,12 +39,18 @@ export default function StoreManagement() {
   // Fetch stores
   const { data: stores = [], isLoading } = useQuery({
     queryKey: ["/api/super-admin/stores"],
-    queryFn: () => apiRequest("GET", "/api/super-admin/stores"),
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/super-admin/stores");
+      return await response.json();
+    },
   });
 
   // Create store mutation
   const createStoreMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/super-admin/stores", data),
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("POST", "/api/super-admin/stores", data);
+      return await response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/stores"] });
       setShowCreateDialog(false);
@@ -64,8 +70,10 @@ export default function StoreManagement() {
 
   // Update store mutation
   const updateStoreMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => 
-      apiRequest("PUT", `/api/super-admin/stores/${id}`, data),
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const response = await apiRequest("PUT", `/api/super-admin/stores/${id}`, data);
+      return await response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/stores"] });
       setShowEditDialog(false);
@@ -106,7 +114,10 @@ export default function StoreManagement() {
 
   // Delete store mutation
   const deleteStoreMutation = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/super-admin/stores/${id}`),
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("DELETE", `/api/super-admin/stores/${id}`);
+      return await response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/stores"] });
       toast({
