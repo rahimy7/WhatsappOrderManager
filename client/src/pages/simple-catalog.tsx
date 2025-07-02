@@ -12,7 +12,10 @@ import { apiRequest } from "@/lib/queryClient";
 
 const formatCurrency = (amount: string | number) => {
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  return numAmount.toLocaleString('es-MX');
+  return numAmount.toLocaleString('es-MX', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 };
 
 export default function SimpleCatalog() {
@@ -241,7 +244,7 @@ export default function SimpleCatalog() {
       message += `   Subtotal: $${formatCurrency(item.product.price * item.quantity)}\n\n`;
     });
     
-    message += `💰 *TOTAL: $${cart.subtotal}*\n\n`;
+    message += `💰 *TOTAL: $${formatCurrency(cart.subtotal)}*\n\n`;
     message += "Por favor confirma tu pedido y proporciona tu dirección de entrega.";
 
     const encodedMessage = encodeURIComponent(message);
