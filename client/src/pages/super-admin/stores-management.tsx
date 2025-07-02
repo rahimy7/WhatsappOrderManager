@@ -457,14 +457,16 @@ export default function StoresManagement() {
 
       {/* Lista de Tiendas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredStores.map((store) => (
-          <Card key={store.id} className="relative">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{store.name}</CardTitle>
-                  <CardDescription className="mt-1">{store.domain}</CardDescription>
-                </div>
+        {filteredStores.map((store) => {
+          console.log('Renderizando tienda:', store.id, 'Nombre:', store.name, 'Objeto completo:', store);
+          return (
+            <Card key={store.id} className="relative">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg">{store.name || 'Sin nombre'}</CardTitle>
+                    <CardDescription className="mt-1">{store.domain}</CardDescription>
+                  </div>
                 <div className="flex gap-2">
                   {getStatusBadge(store.status)}
                   {getPlanBadge(store.planType)}
