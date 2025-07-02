@@ -92,9 +92,13 @@ export default function StoresManagement() {
   });
 
   // Debug log para verificar datos
+  console.log('=== DEBUG STORES ===');
   console.log('Stores data received:', stores);
+  console.log('Array length:', stores?.length);
   console.log('Query error:', error);
   console.log('Is loading:', isLoading);
+  console.log('Stores type:', typeof stores);
+  console.log('===================');
 
   const createStoreMutation = useMutation({
     mutationFn: async (data: StoreFormData) => {
