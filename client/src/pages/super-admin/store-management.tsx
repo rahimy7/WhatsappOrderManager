@@ -138,6 +138,31 @@ export default function StoreManagement() {
     },
   });
 
+  // Validate ecosystem mutation
+  const validateMutation = useMutation({
+    mutationFn: async (storeId: number) => {
+      const response = await apiRequest("GET", `/api/super-admin/stores/${storeId}/validate`);
+      return await response.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Validación completada",
+        description: data.message || "El ecosistema de la tienda se ha validado exitosamente",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error en validación",
+        description: error?.message || "No se pudo validar el ecosistema de la tienda",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleValidateEcosystem = (storeId: number) => {
+    validateMutation.mutate(storeId);
+  };
+
   const handleCreateStore = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -381,7 +406,7 @@ export default function StoreManagement() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
@@ -403,7 +428,7 @@ export default function StoreManagement() {
                   className="flex items-center gap-1"
                 >
                   <Settings className="h-3 w-3" />
-                  Configuración
+                  Ajustes
                 </Button>
                 <Button
                   variant="outline"
@@ -415,6 +440,16 @@ export default function StoreManagement() {
                 >
                   <Package className="h-3 w-3" />
                   Productos
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleValidateEcosystem(store.id)}
+                  className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                  disabled={validateMutation.isPending}
+                >
+                  <Database className="h-3 w-3" />
+                  {validateMutation.isPending ? "Validando..." : "Validar Ecosistema"}
                 </Button>
                 <Button
                   variant="outline"
