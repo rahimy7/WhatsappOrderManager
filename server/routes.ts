@@ -6356,7 +6356,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { action } = req.body;
 
+      console.log('Store status update request:', { id, action, body: req.body });
+
       if (!['enable', 'disable', 'suspend'].includes(action)) {
+        console.log('Invalid action received:', action, 'Valid actions:', ['enable', 'disable', 'suspend']);
         return res.status(400).json({ message: "Acción inválida" });
       }
 
