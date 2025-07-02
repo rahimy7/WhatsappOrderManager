@@ -3768,11 +3768,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return;
         }
         
-        console.log('Config object keys:', Object.keys(config));
-        console.log('Config object values:', Object.values(config));
-        
-        const storedToken = (config as any).whatsappVerifyToken || (config as any).webhookVerifyToken || (config as any).webhook_verify_token;
-        console.log(`Stored verify token: ${storedToken ? '***' + storedToken.slice(-4) : 'none'}`);
+        const storedToken = (config as any).webhookVerifyToken || (config as any).whatsappVerifyToken;
         
         if (token === storedToken) {
           console.log("Webhook verified successfully!");
