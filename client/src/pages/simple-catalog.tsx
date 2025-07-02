@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, MessageCircle, Phone, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -367,15 +367,7 @@ export default function SimpleCatalog() {
                     </Badge>
                   </div>
                   
-                  <div className="flex items-center gap-1 mb-4">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-4 h-4 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
-                      />
-                    ))}
-                    <span className="text-sm text-gray-600 ml-1">4.5</span>
-                  </div>
+
                 </CardContent>
               </div>
               
@@ -540,6 +532,9 @@ export default function SimpleCatalog() {
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">{selectedProduct?.name}</DialogTitle>
+            <DialogDescription>
+              Detalles completos del producto incluyendo imágenes y especificaciones
+            </DialogDescription>
           </DialogHeader>
           
           {selectedProduct && (
@@ -643,15 +638,7 @@ export default function SimpleCatalog() {
                   </Badge>
                 </div>
                 
-                <div className="flex items-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-5 h-5 ${i < 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
-                    />
-                  ))}
-                  <span className="text-sm text-gray-600 ml-2">4.5 (128 reseñas)</span>
-                </div>
+
                 
                 {selectedProduct.description && (
                   <div>
