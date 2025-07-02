@@ -367,13 +367,19 @@ export default function StoreManagement() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      setLocation(`/super-admin/store-settings?store=${store.id}`);
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Click en botón configuración - Store ID:', store.id);
+                      const targetUrl = `/super-admin/store-settings?store=${store.id}`;
+                      console.log('Navegando a:', targetUrl);
+                      setLocation(targetUrl);
                     }}
-                    className="p-2 h-8 w-8"
+                    className="p-2 h-8 w-8 hover:bg-gray-100 z-10 cursor-pointer"
                     title="Configurar tienda"
+                    type="button"
                   >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="h-4 w-4 pointer-events-none" />
                   </Button>
                   <Switch
                     checked={store.isActive}
