@@ -281,14 +281,14 @@ export default function SimpleCatalog() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div className="bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col space-y-4">
             <div className="flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-gray-900">Catálogo de Productos</h1>
-              <div className="text-sm text-gray-600">
+              <h1 className="text-3xl font-bold text-white">🛍️ Catálogo de Productos</h1>
+              <div className="text-sm text-emerald-100 bg-white/20 px-3 py-1 rounded-full">
                 {filteredProducts.length} productos encontrados
               </div>
             </div>
@@ -296,24 +296,24 @@ export default function SimpleCatalog() {
             {/* Filtros */}
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-emerald-600 w-5 h-5" />
                 <Input
-                  placeholder="Buscar productos..."
+                  placeholder="🔍 Buscar productos..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-11 border-white/30 bg-white/90 text-gray-800 placeholder:text-emerald-600/70 focus:bg-white focus:border-emerald-300 rounded-full h-12"
                 />
               </div>
               
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Todas las categorías" />
+                <SelectTrigger className="w-full sm:w-56 border-white/30 bg-white/90 text-gray-800 focus:bg-white focus:border-emerald-300 rounded-full h-12">
+                  <SelectValue placeholder="📂 Todas las categorías" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas las categorías</SelectItem>
+                  <SelectItem value="all">📂 Todas las categorías</SelectItem>
                   {(categories as any[])?.map((category: any) => (
                     <SelectItem key={category.id} value={category.name}>
-                      {category.name}
+                      🏷️ {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
