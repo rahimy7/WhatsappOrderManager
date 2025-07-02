@@ -794,6 +794,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Campo trigger ahora es completamente personalizable por los administradores
   - Selector de triggers predefinidos disponible como opción adicional para facilitar configuración
   - Sistema garantiza que cualquier texto no reconocido active automáticamente el mensaje de bienvenida configurado
+- July 02, 2025. CORREGIDO: Mensajes de bienvenida ahora incluyen botones interactivos siempre:
+  - Solucionado problema donde mensajes de comandos no reconocidos enviaban texto simple sin botones
+  - Modificada función processAutoResponse para retornar indicador de éxito/fallo
+  - Unificada lógica de envío de mensajes interactivos tanto para "hola" como para comandos no reconocidos
+  - Sistema ahora envía consistentemente el mensaje de bienvenida con botones "Ver Productos", "Ver Servicios", "Obtener Ayuda"
+  - Eliminada duplicación de código mediante uso centralizado de processAutoResponse
+  - Experiencia de usuario mejorada: todos los mensajes de bienvenida incluyen menú interactivo
 
 ## User Preferences
 

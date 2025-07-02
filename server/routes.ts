@@ -89,9 +89,12 @@ async function processAutoResponse(trigger: string, phoneNumber: string) {
       
       // Log the auto-response
       console.log(`Auto-response sent for trigger: ${trigger} to ${phoneNumber}`);
+      return true; // Indicate successful response
     }
+    return false; // No response found
   } catch (error) {
     console.error('Error processing auto-response:', error);
+    return false;
   }
 }
 
@@ -1670,19 +1673,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'processing'
         });
         
-        // Use configured welcome auto-response directly
-        const welcomeResponses = await storage.getAutoResponsesByTrigger('welcome');
-        if (welcomeResponses.length > 0) {
-          const welcomeResponse = welcomeResponses[0];
-          await sendWhatsAppMessage(from, welcomeResponse.messageText);
-          
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Mensaje enviado desde auto-response: ${welcomeResponse.name}`,
-            status: 'sent'
-          });
-        } else {
+        // Use configured welcome auto-response directly with interactive buttons
+        const success = await processAutoResponse('welcome', from);
+        if (!success) {
           await storage.addWhatsAppLog({
             type: 'warning',
             phoneNumber: from,
@@ -1703,18 +1696,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'processing'
         });
         
-        const welcomeResponses = await storage.getAutoResponsesByTrigger('welcome');
-        if (welcomeResponses.length > 0) {
-          const welcomeResponse = welcomeResponses[0];
-          await sendWhatsAppMessage(from, welcomeResponse.messageText);
-          
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Mensaje de bienvenida enviado por comando no reconocido: ${welcomeResponse.name}`,
-            status: 'sent'
-          });
-        } else {
+        const success = await processAutoResponse('welcome', from);
+        if (!success) {
           await storage.addWhatsAppLog({
             type: 'warning',
             phoneNumber: from,
