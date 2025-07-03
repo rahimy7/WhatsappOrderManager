@@ -285,17 +285,17 @@ function PlanForm({
     name: plan?.name || '',
     description: plan?.description || '',
     type: plan?.type || 'fixed',
-    monthlyPrice: plan?.monthlyPrice || null,
+    monthlyPrice: plan?.monthlyPrice?.toString() || null,
     maxProducts: plan?.maxProducts || -1,
     maxWhatsappMessages: plan?.maxWhatsappMessages || -1,
     maxUsers: plan?.maxUsers || -1,
     maxOrders: plan?.maxOrders || -1,
     maxCustomers: plan?.maxCustomers || -1,
-    maxDbStorage: plan?.maxDbStorage || null,
-    pricePerProduct: plan?.pricePerProduct || null,
-    pricePerMessage: plan?.pricePerMessage || null,
-    pricePerGbStorage: plan?.pricePerGbStorage || null,
-    pricePerOrder: plan?.pricePerOrder || null,
+    maxDbStorage: plan?.maxDbStorage?.toString() || null,
+    pricePerProduct: plan?.pricePerProduct?.toString() || null,
+    pricePerMessage: plan?.pricePerMessage?.toString() || null,
+    pricePerGbStorage: plan?.pricePerGbStorage?.toString() || null,
+    pricePerOrder: plan?.pricePerOrder?.toString() || null,
     isActive: plan?.isActive ?? true,
   });
 
@@ -350,7 +350,7 @@ function PlanForm({
               type="number"
               step="0.01"
               value={formData.monthlyPrice || ''}
-              onChange={(e) => setFormData({ ...formData, monthlyPrice: e.target.value ? parseFloat(e.target.value) : null })}
+              onChange={(e) => setFormData({ ...formData, monthlyPrice: e.target.value || null })}
               placeholder="0.00"
             />
           </div>
@@ -402,7 +402,7 @@ function PlanForm({
               type="number"
               step="0.1"
               value={formData.maxDbStorage || ''}
-              onChange={(e) => setFormData({ ...formData, maxDbStorage: e.target.value ? parseFloat(e.target.value) : null })}
+              onChange={(e) => setFormData({ ...formData, maxDbStorage: e.target.value || null })}
               placeholder="Ilimitado"
             />
           </div>
@@ -422,7 +422,7 @@ function PlanForm({
                 type="number"
                 step="0.01"
                 value={formData.pricePerProduct || ''}
-                onChange={(e) => setFormData({ ...formData, pricePerProduct: e.target.value ? parseFloat(e.target.value) : null })}
+                onChange={(e) => setFormData({ ...formData, pricePerProduct: e.target.value || null })}
                 placeholder="0.00"
               />
             </div>
@@ -434,7 +434,7 @@ function PlanForm({
                 type="number"
                 step="0.001"
                 value={formData.pricePerMessage || ''}
-                onChange={(e) => setFormData({ ...formData, pricePerMessage: e.target.value ? parseFloat(e.target.value) : null })}
+                onChange={(e) => setFormData({ ...formData, pricePerMessage: e.target.value || null })}
                 placeholder="0.000"
               />
             </div>
@@ -446,7 +446,7 @@ function PlanForm({
                 type="number"
                 step="0.01"
                 value={formData.pricePerGbStorage || ''}
-                onChange={(e) => setFormData({ ...formData, pricePerGbStorage: e.target.value ? parseFloat(e.target.value) : null })}
+                onChange={(e) => setFormData({ ...formData, pricePerGbStorage: e.target.value || null })}
                 placeholder="0.00"
               />
             </div>
@@ -458,7 +458,7 @@ function PlanForm({
                 type="number"
                 step="0.01"
                 value={formData.pricePerOrder || ''}
-                onChange={(e) => setFormData({ ...formData, pricePerOrder: e.target.value ? parseFloat(e.target.value) : null })}
+                onChange={(e) => setFormData({ ...formData, pricePerOrder: e.target.value || null })}
                 placeholder="0.00"
               />
             </div>
