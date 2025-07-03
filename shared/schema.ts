@@ -21,6 +21,7 @@ export const virtualStores = pgTable("virtual_stores", {
   isActive: boolean("is_active").default(true),
   subscription: text("subscription").default("free"), // 'free', 'basic', 'premium', 'enterprise'
   subscriptionExpiry: timestamp("subscription_expiry"),
+  subscriptionPlanId: integer("subscription_plan_id").references(() => subscriptionPlans.id),
   databaseUrl: text("database_url").notNull(), // URL de la base de datos específica de la tienda
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -54,19 +55,14 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   
   // Precios
   monthlyPrice: decimal("monthly_price", { precision: 10, scale: 2 }).default("0.00"),
-  yearlyPrice: decimal("yearly_price", { precision: 10, scale: 2 }).default("0.00"),
-  setupFee: decimal("setup_fee", { precision: 10, scale: 2 }).default("0.00"),
   
   // Límites de recursos
   maxProducts: integer("max_products").default(-1), // -1 = ilimitado
-  maxDbStorage: integer("max_db_storage_gb").default(-1), // GB, -1 = ilimitado
+  maxDbStorage: decimal("max_db_storage", { precision: 10, scale: 2 }).default("-1"), // GB, -1 = ilimitado
   maxWhatsappMessages: integer("max_whatsapp_messages").default(-1), // por mes, -1 = ilimitado
   maxUsers: integer("max_users").default(-1), // usuarios de la tienda
   maxOrders: integer("max_orders").default(-1), // órdenes por mes
   maxCustomers: integer("max_customers").default(-1), // -1 = ilimitado
-  
-  // Características incluidas
-  features: text("features").array(), // Array de características JSON
   
   // Precios por uso (para planes usage_based o hybrid)
   pricePerProduct: decimal("price_per_product", { precision: 10, scale: 4 }).default("0.00"),
