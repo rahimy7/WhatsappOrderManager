@@ -45,6 +45,7 @@ import StoresPage from "@/pages/super-admin/stores";
 import StoreSettings from "@/pages/super-admin/store-settings";
 import StoreProducts from "@/pages/super-admin/store-products";
 import StoreThemes from "@/pages/super-admin/store-themes";
+import SubscriptionPlans from "@/pages/super-admin/subscription-plans";
 import AppLayout from "@/components/layout/app-layout";
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -137,6 +138,7 @@ function Router() {
       <Route path="/super-admin/store-settings" component={() => <ProtectedRoute component={StoreSettings} permission="super_admin" />} />
       <Route path="/super-admin/store-products" component={() => <ProtectedRoute component={StoreProducts} permission="super_admin" />} />
       <Route path="/super-admin/store-themes" component={() => <ProtectedRoute component={StoreThemes} permission="super_admin" />} />
+      <Route path="/super-admin/subscription-plans" component={() => <ProtectedRoute component={SubscriptionPlans} permission="super_admin" />} />
       <Route path="/super-admin/settings" component={() => <ProtectedRoute component={GlobalSettings} permission="super_admin" />} />
       <Route path="/catalog" component={Catalog} />
       <Route path="/public-catalog" component={PublicCatalogClean} />

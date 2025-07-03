@@ -205,6 +205,14 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       roles: ["super_admin"], // Solo super admin
     },
     {
+      href: "/super-admin/subscription-plans",
+      icon: Package,
+      label: "Planes de Suscripción",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
       href: "/super-admin/global-orders",
       icon: ShoppingCart,
       label: "Pedidos Globales",

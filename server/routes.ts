@@ -18,6 +18,9 @@ import {
   insertVirtualStoreSchema,
   insertSystemUserSchema,
   insertSystemAuditLogSchema,
+  insertSubscriptionPlanSchema,
+  insertStoreSubscriptionSchema,
+  insertUsageHistorySchema,
 } from "@shared/schema";
 import { loginSchema, AuthUser } from "@shared/auth";
 import { masterDb, getTenantDb, tenantMiddleware, getStoreInfo, validateStore, createTenantDatabase, copyDefaultConfigurationsToTenant } from "./multi-tenant-db";
@@ -6718,6 +6721,404 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error('Error updating global config:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // ================================
+  // SUBSCRIPTION PLANS MANAGEMENT
+  // ================================
+
+  // Get all subscription plans
+  app.get('/api/super-admin/subscription-plans', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const plans = await masterDb
+        .select()
+        .from(schema.subscriptionPlans)
+        .orderBy(schema.subscriptionPlans.monthlyPrice);
+
+      res.json(plans);
+    } catch (error) {
+      console.error('Error fetching subscription plans:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Create subscription plan
+  app.post('/api/super-admin/subscription-plans', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const planData = schema.insertSubscriptionPlanSchema.parse(req.body);
+      
+      const [plan] = await masterDb
+        .insert(schema.subscriptionPlans)
+        .values(planData)
+        .returning();
+
+      console.log(`New subscription plan created: ${plan.name}`);
+      res.status(201).json(plan);
+    } catch (error) {
+      console.error('Error creating subscription plan:', error);
+      res.status(500).json({ 
+        message: 'Error al crear el plan de suscripción',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Update subscription plan
+  app.put('/api/super-admin/subscription-plans/:id', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const planId = parseInt(req.params.id);
+      const updateData = schema.insertSubscriptionPlanSchema.partial().parse(req.body);
+
+      const [plan] = await masterDb
+        .update(schema.subscriptionPlans)
+        .set({ ...updateData, updatedAt: new Date() })
+        .where(eq(schema.subscriptionPlans.id, planId))
+        .returning();
+
+      if (!plan) {
+        return res.status(404).json({ message: 'Plan no encontrado' });
+      }
+
+      res.json(plan);
+    } catch (error) {
+      console.error('Error updating subscription plan:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Delete subscription plan
+  app.delete('/api/super-admin/subscription-plans/:id', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const planId = parseInt(req.params.id);
+
+      // Check if plan is being used by any stores
+      const storesUsingPlan = await masterDb
+        .select()
+        .from(schema.storeSubscriptions)
+        .where(eq(schema.storeSubscriptions.planId, planId))
+        .limit(1);
+
+      if (storesUsingPlan.length > 0) {
+        return res.status(400).json({ 
+          message: 'No se puede eliminar el plan. Hay tiendas que lo están usando.' 
+        });
+      }
+
+      await masterDb
+        .delete(schema.subscriptionPlans)
+        .where(eq(schema.subscriptionPlans.id, planId));
+
+      res.json({ message: 'Plan eliminado exitosamente' });
+    } catch (error) {
+      console.error('Error deleting subscription plan:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Get store subscriptions with details
+  app.get('/api/super-admin/store-subscriptions', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const subscriptions = await masterDb
+        .select({
+          id: schema.storeSubscriptions.id,
+          storeId: schema.storeSubscriptions.storeId,
+          storeName: schema.virtualStores.name,
+          planId: schema.storeSubscriptions.planId,
+          planName: schema.subscriptionPlans.name,
+          planType: schema.subscriptionPlans.type,
+          status: schema.storeSubscriptions.status,
+          startDate: schema.storeSubscriptions.startDate,
+          endDate: schema.storeSubscriptions.endDate,
+          billingCycle: schema.storeSubscriptions.billingCycle,
+          currentProducts: schema.storeSubscriptions.currentProducts,
+          currentWhatsappMessages: schema.storeSubscriptions.currentWhatsappMessages,
+          currentUsers: schema.storeSubscriptions.currentUsers,
+          currentOrders: schema.storeSubscriptions.currentOrders,
+          nextBillingDate: schema.storeSubscriptions.nextBillingDate,
+          autoRenew: schema.storeSubscriptions.autoRenew,
+        })
+        .from(schema.storeSubscriptions)
+        .leftJoin(schema.virtualStores, eq(schema.storeSubscriptions.storeId, schema.virtualStores.id))
+        .leftJoin(schema.subscriptionPlans, eq(schema.storeSubscriptions.planId, schema.subscriptionPlans.id))
+        .orderBy(schema.storeSubscriptions.createdAt);
+
+      res.json(subscriptions);
+    } catch (error) {
+      console.error('Error fetching store subscriptions:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Create store subscription
+  app.post('/api/super-admin/store-subscriptions', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const subscriptionData = schema.insertStoreSubscriptionSchema.parse(req.body);
+      
+      // Check if store already has an active subscription
+      const existingSubscription = await masterDb
+        .select()
+        .from(schema.storeSubscriptions)
+        .where(
+          and(
+            eq(schema.storeSubscriptions.storeId, subscriptionData.storeId),
+            eq(schema.storeSubscriptions.status, 'active')
+          )
+        )
+        .limit(1);
+
+      if (existingSubscription.length > 0) {
+        return res.status(400).json({ 
+          message: 'La tienda ya tiene una suscripción activa' 
+        });
+      }
+
+      const [subscription] = await masterDb
+        .insert(schema.storeSubscriptions)
+        .values(subscriptionData)
+        .returning();
+
+      console.log(`New subscription created for store ${subscriptionData.storeId}`);
+      res.status(201).json(subscription);
+    } catch (error) {
+      console.error('Error creating store subscription:', error);
+      res.status(500).json({ 
+        message: 'Error al crear la suscripción',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Update store subscription
+  app.put('/api/super-admin/store-subscriptions/:id', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const subscriptionId = parseInt(req.params.id);
+      const updateData = schema.insertStoreSubscriptionSchema.partial().parse(req.body);
+
+      const [subscription] = await masterDb
+        .update(schema.storeSubscriptions)
+        .set({ ...updateData, updatedAt: new Date() })
+        .where(eq(schema.storeSubscriptions.id, subscriptionId))
+        .returning();
+
+      if (!subscription) {
+        return res.status(404).json({ message: 'Suscripción no encontrada' });
+      }
+
+      res.json(subscription);
+    } catch (error) {
+      console.error('Error updating store subscription:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Get usage metrics for a store
+  app.get('/api/super-admin/stores/:storeId/usage', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const storeId = parseInt(req.params.storeId);
+      
+      // Get current subscription
+      const subscription = await masterDb
+        .select()
+        .from(schema.storeSubscriptions)
+        .where(
+          and(
+            eq(schema.storeSubscriptions.storeId, storeId),
+            eq(schema.storeSubscriptions.status, 'active')
+          )
+        )
+        .limit(1);
+
+      if (subscription.length === 0) {
+        return res.status(404).json({ message: 'Suscripción activa no encontrada' });
+      }
+
+      // Get usage history for the current billing period
+      const currentDate = new Date();
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      
+      const usageHistory = await masterDb
+        .select()
+        .from(schema.usageHistory)
+        .where(
+          and(
+            eq(schema.usageHistory.storeId, storeId),
+            eq(schema.usageHistory.subscriptionId, subscription[0].id),
+            gte(schema.usageHistory.periodStart, startOfMonth)
+          )
+        )
+        .orderBy(desc(schema.usageHistory.periodStart))
+        .limit(1);
+
+      const currentUsage = usageHistory.length > 0 ? usageHistory[0] : null;
+
+      res.json({
+        subscription: subscription[0],
+        currentUsage: currentUsage,
+        billingPeriod: {
+          start: startOfMonth.toISOString(),
+          end: new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching store usage:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  });
+
+  // Calculate usage and billing for a store
+  app.post('/api/super-admin/stores/:storeId/calculate-billing', authenticateToken, async (req: any, res) => {
+    try {
+      if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const storeId = parseInt(req.params.storeId);
+      
+      // Get store info and subscription
+      const storeInfo = await masterDb
+        .select()
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, storeId))
+        .limit(1);
+
+      if (storeInfo.length === 0) {
+        return res.status(404).json({ message: 'Tienda no encontrada' });
+      }
+
+      const subscription = await masterDb
+        .select()
+        .from(schema.storeSubscriptions)
+        .leftJoin(schema.subscriptionPlans, eq(schema.storeSubscriptions.planId, schema.subscriptionPlans.id))
+        .where(
+          and(
+            eq(schema.storeSubscriptions.storeId, storeId),
+            eq(schema.storeSubscriptions.status, 'active')
+          )
+        )
+        .limit(1);
+
+      if (subscription.length === 0) {
+        return res.status(404).json({ message: 'Suscripción activa no encontrada' });
+      }
+
+      const plan = subscription[0].subscription_plans!;
+      const currentSubscription = subscription[0].store_subscriptions;
+
+      // Calculate usage from tenant database (would need actual implementation)
+      // For now, using current values from subscription record
+      const currentUsage = {
+        products: currentSubscription.currentProducts || 0,
+        whatsappMessages: currentSubscription.currentWhatsappMessages || 0,
+        users: currentSubscription.currentUsers || 0,
+        orders: currentSubscription.currentOrders || 0,
+        customers: currentSubscription.currentCustomers || 0,
+        dbStorageGb: parseFloat(currentSubscription.currentDbStorage?.toString() || '0')
+      };
+
+      // Calculate costs based on plan type
+      let fixedCost = 0;
+      let usageCost = 0;
+      let overageCharges = 0;
+
+      if (plan.type === 'fixed' || plan.type === 'hybrid') {
+        fixedCost = parseFloat(plan.monthlyPrice?.toString() || '0');
+      }
+
+      if (plan.type === 'usage_based' || plan.type === 'hybrid') {
+        // Calculate usage-based costs
+        if (plan.maxProducts !== -1 && currentUsage.products > plan.maxProducts) {
+          overageCharges += (currentUsage.products - plan.maxProducts) * parseFloat(plan.pricePerProduct?.toString() || '0');
+        }
+        if (plan.maxWhatsappMessages !== -1 && currentUsage.whatsappMessages > plan.maxWhatsappMessages) {
+          overageCharges += (currentUsage.whatsappMessages - plan.maxWhatsappMessages) * parseFloat(plan.pricePerMessage?.toString() || '0');
+        }
+        
+        // For pure usage-based plans, calculate all usage costs
+        if (plan.type === 'usage_based') {
+          usageCost += currentUsage.products * parseFloat(plan.pricePerProduct?.toString() || '0');
+          usageCost += currentUsage.whatsappMessages * parseFloat(plan.pricePerMessage?.toString() || '0');
+          usageCost += currentUsage.dbStorageGb * parseFloat(plan.pricePerGbStorage?.toString() || '0');
+          usageCost += currentUsage.orders * parseFloat(plan.pricePerOrder?.toString() || '0');
+        }
+      }
+
+      const totalCost = fixedCost + usageCost + overageCharges;
+
+      const billingCalculation = {
+        storeId,
+        storeName: storeInfo[0].name,
+        plan: {
+          id: plan.id,
+          name: plan.name,
+          type: plan.type
+        },
+        billingPeriod: {
+          start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(),
+          end: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString()
+        },
+        usage: currentUsage,
+        limits: {
+          products: plan.maxProducts,
+          whatsappMessages: plan.maxWhatsappMessages,
+          users: plan.maxUsers,
+          orders: plan.maxOrders,
+          customers: plan.maxCustomers,
+          dbStorageGb: plan.maxDbStorage
+        },
+        costs: {
+          fixed: fixedCost,
+          usage: usageCost,
+          overage: overageCharges,
+          total: totalCost
+        },
+        warnings: []
+      };
+
+      // Add warnings for approaching limits
+      if (plan.maxProducts !== -1 && currentUsage.products > plan.maxProducts * 0.8) {
+        billingCalculation.warnings.push(`Productos: ${currentUsage.products}/${plan.maxProducts} (${Math.round(currentUsage.products/plan.maxProducts*100)}%)`);
+      }
+      if (plan.maxWhatsappMessages !== -1 && currentUsage.whatsappMessages > plan.maxWhatsappMessages * 0.8) {
+        billingCalculation.warnings.push(`Mensajes WhatsApp: ${currentUsage.whatsappMessages}/${plan.maxWhatsappMessages} (${Math.round(currentUsage.whatsappMessages/plan.maxWhatsappMessages*100)}%)`);
+      }
+
+      res.json(billingCalculation);
+    } catch (error) {
+      console.error('Error calculating billing:', error);
       res.status(500).json({ message: 'Error interno del servidor' });
     }
   });

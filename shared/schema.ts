@@ -44,6 +44,93 @@ export const systemUsers = pgTable("system_users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Planes de suscripción del sistema
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  type: text("type").notNull().default("fixed"), // 'fixed', 'usage_based', 'hybrid'
+  isActive: boolean("is_active").default(true),
+  
+  // Precios
+  monthlyPrice: decimal("monthly_price", { precision: 10, scale: 2 }).default("0.00"),
+  yearlyPrice: decimal("yearly_price", { precision: 10, scale: 2 }).default("0.00"),
+  setupFee: decimal("setup_fee", { precision: 10, scale: 2 }).default("0.00"),
+  
+  // Límites de recursos
+  maxProducts: integer("max_products").default(-1), // -1 = ilimitado
+  maxDbStorage: integer("max_db_storage_gb").default(-1), // GB, -1 = ilimitado
+  maxWhatsappMessages: integer("max_whatsapp_messages").default(-1), // por mes, -1 = ilimitado
+  maxUsers: integer("max_users").default(-1), // usuarios de la tienda
+  maxOrders: integer("max_orders").default(-1), // órdenes por mes
+  maxCustomers: integer("max_customers").default(-1), // -1 = ilimitado
+  
+  // Características incluidas
+  features: text("features").array(), // Array de características JSON
+  
+  // Precios por uso (para planes usage_based o hybrid)
+  pricePerProduct: decimal("price_per_product", { precision: 10, scale: 4 }).default("0.00"),
+  pricePerMessage: decimal("price_per_message", { precision: 10, scale: 4 }).default("0.00"),
+  pricePerGbStorage: decimal("price_per_gb_storage", { precision: 10, scale: 2 }).default("0.00"),
+  pricePerOrder: decimal("price_per_order", { precision: 10, scale: 4 }).default("0.00"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Suscripciones activas de las tiendas
+export const storeSubscriptions = pgTable("store_subscriptions", {
+  id: serial("id").primaryKey(),
+  storeId: integer("store_id").references(() => virtualStores.id).notNull(),
+  planId: integer("plan_id").references(() => subscriptionPlans.id).notNull(),
+  
+  status: text("status").notNull().default("active"), // 'active', 'suspended', 'cancelled', 'expired'
+  startDate: timestamp("start_date").defaultNow(),
+  endDate: timestamp("end_date"),
+  autoRenew: boolean("auto_renew").default(true),
+  
+  // Uso actual del período
+  currentProducts: integer("current_products").default(0),
+  currentDbStorage: decimal("current_db_storage_gb", { precision: 8, scale: 2 }).default("0.00"),
+  currentWhatsappMessages: integer("current_whatsapp_messages").default(0),
+  currentUsers: integer("current_users").default(0),
+  currentOrders: integer("current_orders").default(0),
+  currentCustomers: integer("current_customers").default(0),
+  
+  // Facturación
+  lastBillingDate: timestamp("last_billing_date"),
+  nextBillingDate: timestamp("next_billing_date"),
+  billingCycle: text("billing_cycle").default("monthly"), // 'monthly', 'yearly'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Historial de uso y facturación
+export const usageHistory = pgTable("usage_history", {
+  id: serial("id").primaryKey(),
+  storeId: integer("store_id").references(() => virtualStores.id).notNull(),
+  subscriptionId: integer("subscription_id").references(() => storeSubscriptions.id).notNull(),
+  
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Uso registrado en el período
+  productsUsed: integer("products_used").default(0),
+  dbStorageUsed: decimal("db_storage_used_gb", { precision: 8, scale: 2 }).default("0.00"),
+  whatsappMessagesUsed: integer("whatsapp_messages_used").default(0),
+  usersActive: integer("users_active").default(0),
+  ordersProcessed: integer("orders_processed").default(0),
+  customersActive: integer("customers_active").default(0),
+  
+  // Costos calculados
+  fixedCost: decimal("fixed_cost", { precision: 10, scale: 2 }).default("0.00"),
+  usageCost: decimal("usage_cost", { precision: 10, scale: 2 }).default("0.00"),
+  totalCost: decimal("total_cost", { precision: 10, scale: 2 }).default("0.00"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Tabla de auditoría para el sistema multi-tenant
 export const systemAuditLog = pgTable("system_audit_log", {
   id: serial("id").primaryKey(),
@@ -452,6 +539,24 @@ export const insertProductCategorySchema = createInsertSchema(productCategories)
   updatedAt: true,
 });
 
+// Subscription plan schemas
+export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertStoreSubscriptionSchema = createInsertSchema(storeSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUsageHistorySchema = createInsertSchema(usageHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -500,6 +605,16 @@ export type InsertShoppingCart = z.infer<typeof insertShoppingCartSchema>;
 
 export type ProductCategory = typeof productCategories.$inferSelect;
 export type InsertProductCategory = z.infer<typeof insertProductCategorySchema>;
+
+// Subscription types
+export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
+export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
+
+export type StoreSubscription = typeof storeSubscriptions.$inferSelect;
+export type InsertStoreSubscription = z.infer<typeof insertStoreSubscriptionSchema>;
+
+export type UsageHistory = typeof usageHistory.$inferSelect;
+export type InsertUsageHistory = z.infer<typeof insertUsageHistorySchema>;
 
 export type CartItem = typeof shoppingCart.$inferSelect;
 export type InsertCartItem = z.infer<typeof insertShoppingCartSchema>;
