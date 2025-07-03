@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Store, Settings } from "lucide-react";
+import { ArrowLeft, Store, Settings, CreditCard, Package, MessageSquare, Users } from "lucide-react";
+import type { SubscriptionPlan } from "@shared/schema";
 
 export default function StoreSettings() {
   const { toast } = useToast();
@@ -32,6 +34,11 @@ export default function StoreSettings() {
     select: (data: any[]) => data?.find((s: any) => s.id === storeId)
   });
 
+  // Fetch subscription plans
+  const { data: subscriptionPlans = [], isLoading: plansLoading } = useQuery({
+    queryKey: ['/api/super-admin/subscription-plans'],
+  });
+
   // Update store mutation
   const updateStoreMutation = useMutation({
     mutationFn: (data: any) => 
@@ -52,6 +59,15 @@ export default function StoreSettings() {
     },
   });
 
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+
+  // Initialize selected plan when store data loads
+  useEffect(() => {
+    if (store?.subscriptionPlanId) {
+      setSelectedPlanId(store.subscriptionPlanId.toString());
+    }
+  }, [store]);
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -59,9 +75,14 @@ export default function StoreSettings() {
       name: formData.get('name') as string,
       domain: formData.get('domain') as string,
       description: formData.get('description') as string,
-      plan: formData.get('plan') as string,
+      subscriptionPlanId: selectedPlanId ? parseInt(selectedPlanId) : null,
     };
     updateStoreMutation.mutate(data);
+  };
+
+  const formatPrice = (price: string | null) => {
+    if (!price) return 'N/A';
+    return `$${parseFloat(price).toLocaleString('es-MX')}`;
   };
 
   if (!storeId) {
@@ -149,18 +170,78 @@ export default function StoreSettings() {
               />
             </div>
 
-            <div>
-              <Label htmlFor="plan">Plan</Label>
-              <Select name="plan" defaultValue={store?.plan || "basic"}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un plan" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="basic">Básico</SelectItem>
-                  <SelectItem value="premium">Premium</SelectItem>
-                  <SelectItem value="enterprise">Empresarial</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Plan de Suscripción */}
+            <div className="space-y-4">
+              <Label>Plan de Suscripción</Label>
+              <div className="grid gap-4">
+                {subscriptionPlans.map((plan: SubscriptionPlan) => {
+                  const isSelected = selectedPlanId === plan.id.toString();
+                  return (
+                    <Card 
+                      key={plan.id} 
+                      className={`cursor-pointer transition-all ${
+                        isSelected 
+                          ? 'border-blue-500 bg-blue-50 shadow-md' 
+                          : 'hover:border-gray-300 hover:shadow-sm'
+                      }`}
+                      onClick={() => setSelectedPlanId(plan.id.toString())}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div 
+                                className={`w-4 h-4 rounded-full border-2 ${
+                                  isSelected 
+                                    ? 'border-blue-500 bg-blue-500' 
+                                    : 'border-gray-300'
+                                }`}
+                              >
+                                {isSelected && <div className="w-2 h-2 bg-white rounded-full m-0.5" />}
+                              </div>
+                              <h3 className="font-semibold text-lg">{plan.name}</h3>
+                              <Badge className={
+                                plan.type === 'fixed' ? 'bg-blue-100 text-blue-800' :
+                                plan.type === 'usage_based' ? 'bg-green-100 text-green-800' :
+                                'bg-purple-100 text-purple-800'
+                              }>
+                                {plan.type === 'fixed' ? 'Fijo' : 
+                                 plan.type === 'usage_based' ? 'Por Uso' : 'Híbrido'}
+                              </Badge>
+                            </div>
+                            
+                            <p className="text-gray-600 mb-3">{plan.description}</p>
+                            
+                            <div className="text-2xl font-bold text-blue-600 mb-3">
+                              {formatPrice(plan.monthlyPrice?.toString())}
+                              <span className="text-sm font-normal text-gray-500">/mes</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4 text-gray-500" />
+                                <span>Productos: {plan.maxProducts === -1 ? 'Ilimitados' : plan.maxProducts}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4 text-gray-500" />
+                                <span>WhatsApp: {plan.maxWhatsappMessages === -1 ? 'Ilimitados' : plan.maxWhatsappMessages}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4 text-gray-500" />
+                                <span>Usuarios: {plan.maxUsers === -1 ? 'Ilimitados' : plan.maxUsers}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-gray-500" />
+                                <span>BD: {plan.maxDbStorage === null ? 'N/A' : `${plan.maxDbStorage}GB`}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="flex items-center space-x-2">

@@ -6471,6 +6471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updateData.contactPhone) dbData.whatsappNumber = updateData.contactPhone;
       if (updateData.plan) dbData.subscription = updateData.plan;
       if (updateData.planType) dbData.subscription = updateData.planType;
+      if (updateData.subscriptionPlanId !== undefined) dbData.subscriptionPlanId = updateData.subscriptionPlanId;
 
       // Agregar timestamp de actualización
       dbData.updatedAt = new Date();
