@@ -216,6 +216,15 @@ export default function StoreSettings() {
             <div>
               <span className="font-medium">Email del propietario:</span> {store?.ownerEmail || "No disponible"}
             </div>
+            <div className="md:col-span-2">
+              <span className="font-medium">Schema de BD:</span>{" "}
+              <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">
+                {store?.databaseUrl ? 
+                  store.databaseUrl.match(/schema=([^&]+)/)?.[1] || "schema no encontrado" 
+                  : "No disponible"
+                }
+              </code>
+            </div>
           </div>
         </CardContent>
       </Card>
