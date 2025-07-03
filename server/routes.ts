@@ -6298,37 +6298,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Acceso denegado" });
       }
 
-      const { name, description, domain, contactEmail, contactPhone, address, planType } = req.body;
+      console.log('=== CREATE STORE REQUEST ===');
+      console.log('Request body:', req.body);
 
-      // Validar datos requeridos
-      if (!name || !description || !domain || !contactEmail || !contactPhone || !address || !planType) {
-        return res.status(400).json({ message: "Todos los campos son requeridos" });
+      const { 
+        storeName, 
+        description, 
+        domain, 
+        storeEmail, 
+        storePhone, 
+        storeAddress, 
+        plan,
+        ownerName,
+        ownerEmail 
+      } = req.body;
+
+      // Validar datos mínimos requeridos
+      if (!storeName || !description || !domain) {
+        return res.status(400).json({ message: "Nombre, descripción y dominio son requeridos" });
       }
 
-      // Crear nueva tienda en la base de datos real
-      const validatedData = {
-        name,
-        description,
-        domain,
-        contactEmail,
-        contactPhone,
-        address,
-        planType,
-        status: 'active' as const,
-        subscriptionStatus: 'trial' as const,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        databaseUrl: process.env.DATABASE_URL + `?schema=store_${Date.now()}`
+      // Generar schema único con timestamp
+      const schemaName = `store_${Date.now()}`;
+      const databaseUrl = `${process.env.DATABASE_URL}?schema=${schemaName}`;
+
+      // Crear nueva tienda en la base de datos 
+      const storeData = {
+        name: storeName,
+        description: description,
+        domain: domain,
+        slug: storeName.toLowerCase().replace(/\s+/g, '-'),
+        address: storeAddress || '',
+        whatsappNumber: storePhone || '',
+        subscription: plan || 'basic',
+        databaseUrl: databaseUrl,
+        isActive: true,
+        timezone: 'America/Mexico_City',
+        currency: 'MXN'
       };
+
+      console.log('Creating store with data:', storeData);
       
       const [store] = await masterDb
         .insert(schema.virtualStores)
-        .values(validatedData)
+        .values(storeData)
         .returning();
 
+      console.log('Store created with ID:', store.id);
+
+      // MIGRACIÓN AUTOMÁTICA: Crear schema separado y migrar tablas
+      try {
+        console.log('=== INICIANDO MIGRACIÓN AUTOMÁTICA ===');
+        console.log('Schema name:', schemaName);
+        
+        // Importar función de migración
+        const { migrateStoreToSeparateSchema } = await import('./schema-migration');
+        
+        // Ejecutar migración automática
+        const migrationResult = await migrateStoreToSeparateSchema(store.id);
+        
+        console.log('Migration result:', migrationResult.success ? 'SUCCESS' : 'FAILED');
+        if (migrationResult.success) {
+          console.log('Migrated tables:', migrationResult.migratedTables.length);
+        } else {
+          console.log('Migration errors:', migrationResult.errors);
+        }
+        
+      } catch (migrationError) {
+        console.error('Error during automatic migration:', migrationError);
+        // No fallar la creación de tienda si la migración falla
+      }
+
       // Configurar la nueva tienda con ajustes predeterminados
-      await copyDefaultConfigurationsToTenant(store.id);
+      try {
+        console.log('=== CONFIGURANDO AJUSTES PREDETERMINADOS ===');
+        await copyDefaultConfigurationsToTenant(store.id);
+        console.log('Default configurations applied successfully');
+      } catch (configError) {
+        console.error('Error applying default configurations:', configError);
+      }
+
+      // Crear usuario propietario si se proporcionaron datos
+      if (ownerName && ownerEmail) {
+        try {
+          console.log('=== CREANDO USUARIO PROPIETARIO ===');
+          const hashedPassword = await bcrypt.hash('defaultpassword123', 10);
+          
+          const [owner] = await masterDb
+            .insert(schema.users)
+            .values({
+              username: ownerEmail.split('@')[0],
+              name: ownerName,
+              email: ownerEmail,
+              password: hashedPassword,
+              role: 'admin',
+              status: 'active',
+              storeId: store.id
+            })
+            .returning();
+          
+          console.log('Owner created with ID:', owner.id);
+        } catch (ownerError) {
+          console.error('Error creating owner:', ownerError);
+        }
+      }
       
-      console.log(`New store created: ${store.name} with default configurations`);
+      console.log(`✅ NEW STORE CREATED: ${store.name} with schema ${schemaName}`);
       
       // Transformar respuesta para que coincida con la interfaz esperada
       const transformedStore = {
@@ -6337,9 +6412,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: store.description || '',
         domain: store.domain || '',
         status: store.isActive ? 'active' : 'inactive',
-        subscriptionStatus: store.subscription || 'trial',
+        subscriptionStatus: store.subscription || 'basic',
         planType: store.subscription || 'basic',
-        contactEmail: '', // No existe en el schema actual
+        contactEmail: storeEmail || '',
         contactPhone: store.whatsappNumber || '',
         address: store.address || '',
         createdAt: store.createdAt?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
@@ -6355,9 +6430,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       res.status(201).json(transformedStore);
+
     } catch (error) {
       console.error('Error creating store:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
+      res.status(500).json({ 
+        message: 'Error interno del servidor al crear la tienda',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
