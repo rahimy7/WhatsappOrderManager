@@ -541,12 +541,12 @@ export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans
   createdAt: true,
   updatedAt: true,
 }).extend({
-  monthlyPrice: z.union([z.string(), z.number()]).transform(val => String(val)),
-  maxDbStorage: z.union([z.string(), z.number()]).transform(val => String(val)),
-  pricePerProduct: z.union([z.string(), z.number()]).transform(val => String(val)),
-  pricePerMessage: z.union([z.string(), z.number()]).transform(val => String(val)),
-  pricePerGbStorage: z.union([z.string(), z.number()]).transform(val => String(val)),
-  pricePerOrder: z.union([z.string(), z.number()]).transform(val => String(val)),
+  monthlyPrice: z.string().nullable().optional(),
+  maxDbStorage: z.string().nullable().optional(),
+  pricePerProduct: z.string().nullable().optional(),
+  pricePerMessage: z.string().nullable().optional(),
+  pricePerGbStorage: z.string().nullable().optional(),
+  pricePerOrder: z.string().nullable().optional(),
 });
 
 export const insertStoreSubscriptionSchema = createInsertSchema(storeSubscriptions).omit({

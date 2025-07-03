@@ -6756,7 +6756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Acceso denegado" });
       }
 
-      const planData = schema.insertSubscriptionPlanSchema.parse(req.body);
+      const planData = insertSubscriptionPlanSchema.parse(req.body);
       
       const [plan] = await masterDb
         .insert(schema.subscriptionPlans)
@@ -6782,7 +6782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const planId = parseInt(req.params.id);
-      const updateData = schema.insertSubscriptionPlanSchema.partial().parse(req.body);
+      const updateData = insertSubscriptionPlanSchema.partial().parse(req.body);
 
       const [plan] = await masterDb
         .update(schema.subscriptionPlans)
