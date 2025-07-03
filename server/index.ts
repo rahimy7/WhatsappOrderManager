@@ -7,6 +7,42 @@ import { getStoreInfo, getTenantDb, masterDb } from "./multi-tenant-db";
 
 const app = express();
 
+// Schema migration endpoints
+app.post('/api/super-admin/stores/:id/migrate-schema', async (req, res) => {
+  try {
+    const { migrateStoreToSeparateSchema } = await import('./schema-migration');
+    const storeId = parseInt(req.params.id);
+    const result = await migrateStoreToSeparateSchema(storeId);
+    res.json(result);
+  } catch (error) {
+    console.error('Error during schema migration:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+app.get('/api/super-admin/capacity', async (req, res) => {
+  try {
+    const { calculateStoreCapacity, validateCapacityForNewStores } = await import('./schema-migration');
+    const capacity = calculateStoreCapacity();
+    const newStoresParam = req.query.newStores;
+    const newStores = newStoresParam ? parseInt(newStoresParam as string) : 0;
+    const validation = validateCapacityForNewStores(newStores);
+    
+    res.json({
+      capacity,
+      validation: newStores > 0 ? validation : null
+    });
+  } catch (error) {
+    console.error('Error calculating capacity:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // CRITICAL: Super admin validation endpoint MUST be registered BEFORE any middleware
 app.get('/api/super-admin/stores/:id/validate', async (req, res) => {
   try {
