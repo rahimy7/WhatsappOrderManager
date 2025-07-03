@@ -400,6 +400,80 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
+  // VALIDACIÓN ESPECÍFICA PARA TIENDAS MIGRADAS
+  app.get('/api/super-admin/stores/:id/validate-migration', async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.id);
+      console.log('=== VALIDACIÓN DE MIGRACIÓN ===');
+      console.log('Store ID:', storeId);
+      
+      const [store] = await masterDb
+        .select()
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, storeId))
+        .limit(1);
+
+      if (!store) {
+        return res.status(404).json({
+          valid: false,
+          message: `Tienda con ID ${storeId} no encontrada`
+        });
+      }
+
+      const schemaMatch = store.databaseUrl?.match(/schema=([^&]+)/);
+      if (!schemaMatch) {
+        return res.json({
+          valid: false,
+          migrationStatus: 'not_started',
+          message: `${store.name} no tiene schema separado configurado`
+        });
+      }
+
+      const schemaName = schemaMatch[1];
+      const tenantDb = await getTenantDb(storeId);
+      const tenantTables = await tenantDb.execute(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = '${schemaName}' 
+        ORDER BY table_name
+      `);
+      
+      const tables = tenantTables.rows.map((row: any) => row.table_name as string);
+      const CRITICAL_TABLES = [
+        'users', 'customers', 'products', 'orders', 'order_items',
+        'conversations', 'messages', 'auto_responses', 'store_settings',
+        'whatsapp_settings', 'notifications', 'assignment_rules',
+        'customer_history', 'shopping_cart', 'whatsapp_logs'
+      ];
+
+      const missingTables = CRITICAL_TABLES.filter(table => !tables.includes(table));
+      const isComplete = missingTables.length === 0;
+
+      res.json({
+        valid: isComplete,
+        migrationStatus: isComplete ? 'completed' : 'partial',
+        message: isComplete 
+          ? `✅ MIGRACIÓN COMPLETA: ${store.name} - ${CRITICAL_TABLES.length} tablas en schema ${schemaName}`
+          : `⚠️ MIGRACIÓN PARCIAL: ${store.name} - faltan ${missingTables.length} tablas`,
+        details: {
+          storeName: store.name,
+          schemaName: schemaName,
+          tablesCount: tables.length,
+          missingTablesCount: missingTables.length,
+          recommendations: isComplete ? ["✅ Operacional"] : [`Migrar: ${missingTables.join(', ')}`]
+        }
+      });
+
+    } catch (error) {
+      console.error('Error en validación:', error);
+      res.status(500).json({ 
+        valid: false, 
+        message: 'Error interno',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // ALWAYS serve the app on port 5000
   // this serves both the API and the client.
   // It is the only port that is not firewalled.

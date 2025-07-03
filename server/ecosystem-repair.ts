@@ -97,10 +97,14 @@ export async function validateStoreEcosystem(storeId: number): Promise<Ecosystem
       try {
         const tenantDb = await getTenantDb(storeId);
         
+        // Extraer el schema name de la URL de la tienda
+        const schemaMatch = store.databaseUrl?.match(/schema=([^&]+)/);
+        const tenantSchema = schemaMatch ? schemaMatch[1] : 'public';
+        
         const tenantTables = await tenantDb.execute(`
           SELECT table_name 
           FROM information_schema.tables 
-          WHERE table_schema = 'public' 
+          WHERE table_schema = '${tenantSchema}' 
           ORDER BY table_name
         `);
         result.tables.tenant = tenantTables.rows.map((row: any) => row.table_name as string);
@@ -136,28 +140,36 @@ export async function validateStoreEcosystem(storeId: number): Promise<Ecosystem
       }
     }
 
-    // 5. Verificar datos problemáticos en BD global
-    if (result.architecture.usingGlobalDatabase) {
-      // Buscar productos que deberían estar en BD de tienda
-      const globalProducts = await masterDb
-        .select()
-        .from(schema.products)
-        .where(eq(schema.products.storeId, storeId));
-      
-      if (globalProducts.length > 0) {
-        result.issues.push(`❌ Encontrados ${globalProducts.length} productos en BD global que deberían estar en BD de tienda`);
-        result.recommendations.push("Migrar productos de BD global a BD de tienda");
-      }
+    // 5. Validar arquitectura multi-tenant
+    const TENANT_TABLES = [
+      'users', 'customers', 'products', 'orders', 'order_items',
+      'conversations', 'messages', 'auto_responses', 'store_settings',
+      'whatsapp_settings', 'notifications', 'assignment_rules',
+      'customer_history', 'shopping_cart', 'whatsapp_logs'
+    ];
 
-      // Buscar conversaciones en BD global
-      const globalConversations = await masterDb
-        .select()
-        .from(schema.conversations)
-        .where(eq(schema.conversations.storeId, storeId));
+    if (result.architecture.hasSeparateDatabase && result.tables.tenant.length > 0) {
+      // Verificar si las tablas críticas están en el schema de la tienda
+      const tenantTablesSet = new Set(result.tables.tenant);
+      const missingTables = TENANT_TABLES.filter(table => !tenantTablesSet.has(table));
       
-      if (globalConversations.length > 0) {
-        result.issues.push(`❌ Encontradas ${globalConversations.length} conversaciones en BD global`);
-        result.recommendations.push("Migrar conversaciones a BD de tienda");
+      if (missingTables.length === 0) {
+        // Todas las tablas están migradas correctamente
+        result.isValid = true;
+        result.issues = [`✅ ARQUITECTURA MULTI-TENANT CORRECTA: Todas las ${TENANT_TABLES.length} tablas están en schema separado`];
+        result.recommendations = [`✅ Sistema completamente migrado y operacional`];
+      } else {
+        result.issues.push(`❌ Faltan ${missingTables.length} tablas en schema de tienda: ${missingTables.join(', ')}`);
+        result.recommendations.push("Completar migración de tablas faltantes");
+      }
+    } else if (result.architecture.usingGlobalDatabase) {
+      // Lógica original para BD global
+      const globalTablesInProduction = result.tables.global.filter(table => TENANT_TABLES.includes(table));
+      if (globalTablesInProduction.length > 0) {
+        result.issues.push(`❌ ARQUITECTURA INCORRECTA: ${globalTablesInProduction.length} tablas de tienda encontradas en BD global`);
+        result.issues.push(`Tablas problemáticas: ${globalTablesInProduction.join(', ')}`);
+        result.recommendations.push("Migrar datos a bases de datos separadas por tienda");
+        result.isValid = false;
       }
     }
 
