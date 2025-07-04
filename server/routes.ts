@@ -199,6 +199,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, password, storeId } = req.body;
       
+      console.log('LOGIN REQUEST DATA:', { username, password, storeId, body: req.body });
+      
       // Importar sistema de autenticación multi-tenant
       const { authenticateUser } = await import('./multi-tenant-auth.js');
       
