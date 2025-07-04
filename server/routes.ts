@@ -6018,7 +6018,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/super-admin/users/:id', requireSuperAdmin, async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
-      const { username, name, email, role, status, companyId, password } = req.body;
+      const { 
+        username, 
+        name, 
+        email, 
+        role, 
+        status, 
+        storeId, 
+        resetPassword, 
+        forcePasswordChange, 
+        newPassword 
+      } = req.body;
 
       const updateData: any = {
         username,
@@ -6026,23 +6036,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email,
         role,
         isActive: status === 'active',
-        storeId: companyId ? parseInt(companyId) : null,
+        storeId: storeId ? parseInt(storeId) : null,
       };
 
-      // Solo actualizar password si se proporciona
-      if (password && password.trim() !== '') {
-        updateData.password = await bcrypt.hash(password, 10);
+      // Si se solicita forzar cambio de contraseña
+      if (forcePasswordChange) {
+        updateData.forcePasswordChange = true;
       }
 
+      // Manejar reseteo de contraseña
+      if (resetPassword) {
+        let passwordToUse = newPassword;
+        
+        // Si no se proporciona nueva contraseña, generar una temporal
+        if (!passwordToUse || passwordToUse.trim() === '') {
+          passwordToUse = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+        }
+        
+        updateData.password = await bcrypt.hash(passwordToUse, 10);
+        updateData.forcePasswordChange = true; // Forzar cambio cuando se resetea
+        
+        // Actualizar usuario
+        await masterDb
+          .update(schema.systemUsers)
+          .set(updateData)
+          .where(eq(schema.systemUsers.id, userId));
+
+        // Retornar la nueva contraseña temporal si fue generada
+        return res.json({ 
+          message: 'Usuario actualizado exitosamente',
+          newPassword: newPassword ? undefined : passwordToUse,
+          passwordReset: true
+        });
+      }
+
+      // Actualización normal sin reset de contraseña
       await masterDb
         .update(schema.systemUsers)
         .set(updateData)
         .where(eq(schema.systemUsers.id, userId));
 
-      res.json({ message: 'User updated successfully' });
+      res.json({ message: 'Usuario actualizado exitosamente' });
     } catch (error) {
       console.error('Error updating user:', error);
-      res.status(500).json({ error: 'Failed to update user' });
+      res.status(500).json({ error: 'Error al actualizar usuario' });
     }
   });
 

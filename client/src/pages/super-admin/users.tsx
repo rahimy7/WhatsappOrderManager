@@ -28,8 +28,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -101,6 +101,9 @@ const editUserSchema = z.object({
   phone: z.string().min(10, {
     message: "Teléfono debe tener al menos 10 dígitos",
   }),
+  username: z.string().min(3, {
+    message: "Usuario debe tener al menos 3 caracteres",
+  }),
   role: z.enum(["store_admin", "store_owner", "super_admin"], {
     required_error: "Rol requerido",
   }),
@@ -110,6 +113,9 @@ const editUserSchema = z.object({
   storeId: z.number({
     required_error: "Tienda requerida",
   }),
+  resetPassword: z.boolean().default(false),
+  forcePasswordChange: z.boolean().default(false),
+  newPassword: z.string().optional(),
 });
 
 type EditUserForm = z.infer<typeof editUserSchema>;
@@ -157,9 +163,13 @@ export default function SuperAdminUsers() {
       name: "",
       email: "",
       phone: "",
+      username: "",
       role: "store_admin",
       status: "active",
       storeId: 1,
+      resetPassword: false,
+      forcePasswordChange: false,
+      newPassword: "",
     },
   });
 
@@ -279,16 +289,37 @@ export default function SuperAdminUsers() {
     mutationFn: async (data: EditUserForm & { id: number }) => {
       return apiRequest("PUT", `/api/super-admin/users/${data.id}`, data);
     },
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/user-metrics"] });
       setIsEditDialogOpen(false);
       editForm.reset();
+      
+      // Si se reseteó la contraseña y se generó una nueva, mostrar credenciales
+      if (response.passwordReset && response.newPassword) {
+        const storeName = stores?.find(store => store.id === selectedUser?.storeId)?.name || "N/A";
+        setUserCredentials({
+          name: selectedUser?.name || "",
+          email: selectedUser?.email || "",
+          username: selectedUser?.username || "",
+          tempPassword: response.newPassword,
+          storeName: storeName,
+          role: selectedUser?.role || "",
+          invitationSent: false
+        });
+        setIsCredentialsDialogOpen(true);
+        toast({
+          title: "Contraseña reseteada",
+          description: "Se ha generado una nueva contraseña temporal para el usuario",
+        });
+      } else {
+        toast({
+          title: "Usuario actualizado",
+          description: "La información del usuario ha sido actualizada exitosamente",
+        });
+      }
+      
       setSelectedUser(null);
-      toast({
-        title: "Usuario actualizado",
-        description: "La información del usuario ha sido actualizada exitosamente",
-      });
     },
     onError: () => {
       toast({
@@ -387,9 +418,13 @@ export default function SuperAdminUsers() {
       name: user.name,
       email: user.email,
       phone: user.phone,
+      username: user.username,
       role: user.role as any,
       status: user.status as any,
       storeId: user.storeId || 1,
+      resetPassword: false,
+      forcePasswordChange: false,
+      newPassword: "",
     });
     setIsEditDialogOpen(true);
   };
@@ -545,18 +580,18 @@ export default function SuperAdminUsers() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-sm font-medium">Tienda Asignada</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value?.toString() || ""}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Seleccionar tienda" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {stores.map((store) => (
+                              {stores?.map((store) => (
                                 <SelectItem key={store.id} value={store.id.toString()}>
                                   {store.name}
                                 </SelectItem>
-                              ))}
+                              )) || []}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -975,104 +1010,205 @@ export default function SuperAdminUsers() {
 
       {/* Dialog de edición de usuario */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Usuario</DialogTitle>
             <DialogDescription>
-              Modifica la información del usuario seleccionado
+              Modifica la información del usuario y configuraciones de acceso
             </DialogDescription>
           </DialogHeader>
           <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(handleEditUserSubmit)} className="space-y-4">
-              <FormField
-                control={editForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre completo</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej: María García López" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+            <form onSubmit={editForm.handleSubmit(handleEditUserSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Información Personal */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Información Personal</h3>
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nombre completo</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: María García López" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="email@ejemplo.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Teléfono</FormLabel>
+                        <FormControl>
+                          <Input placeholder="+52 555 123 4567" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Configuración de Acceso */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Configuración de Acceso</h3>
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nombre de usuario</FormLabel>
+                        <FormControl>
+                          <Input placeholder="usuario123" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Rol</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un rol" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="store_admin">Administrador de Tienda</SelectItem>
+                            <SelectItem value="store_owner">Propietario de Tienda</SelectItem>
+                            <SelectItem value="super_admin">Super Administrador</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estado</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un estado" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="active">Activo</SelectItem>
+                            <SelectItem value="inactive">Inactivo</SelectItem>
+                            <SelectItem value="suspended">Suspendido</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+
+              {/* Gestión de Contraseñas */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Gestión de Contraseñas</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={editForm.control}
+                    name="resetPassword"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>
+                            Resetear contraseña
+                          </FormLabel>
+                          <FormDescription>
+                            Generar una nueva contraseña temporal para el usuario
+                          </FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={editForm.control}
+                    name="forcePasswordChange"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>
+                            Solicitar cambio de contraseña
+                          </FormLabel>
+                          <FormDescription>
+                            El usuario deberá cambiar su contraseña en el próximo inicio de sesión
+                          </FormDescription>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {editForm.watch("resetPassword") && (
+                  <FormField
+                    control={editForm.control}
+                    name="newPassword"
+                    render={({ field }) => (
+                      <FormItem className="mt-4">
+                        <FormLabel>Nueva contraseña (opcional)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="password" 
+                            placeholder="Dejar vacío para generar automáticamente" 
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Si se deja vacío, se generará una contraseña temporal automáticamente
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
-              
-              <FormField
-                control={editForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="email@ejemplo.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={editForm.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Teléfono</FormLabel>
-                    <FormControl>
-                      <Input placeholder="+52 555 123 4567" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={editForm.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Rol</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un rol" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="store_admin">Administrador de Tienda</SelectItem>
-                        <SelectItem value="store_owner">Propietario de Tienda</SelectItem>
-                        <SelectItem value="super_admin">Super Administrador</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={editForm.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Estado</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona un estado" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="active">Activo</SelectItem>
-                        <SelectItem value="inactive">Inactivo</SelectItem>
-                        <SelectItem value="suspended">Suspendido</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <div className="flex justify-end space-x-2">
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-6 border-t">
                 <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                   Cancelar
                 </Button>
