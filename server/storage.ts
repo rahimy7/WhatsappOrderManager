@@ -18,6 +18,7 @@ import {
   shoppingCart,
   productCategories,
   storeSettings,
+  virtualStores,
   type User,
   type Customer,
   type Product,
@@ -36,6 +37,7 @@ import {
   type ShoppingCart,
   type ProductCategory,
   type StoreSettings,
+  type VirtualStore,
   type InsertUser,
   type InsertCustomer,
   type InsertProduct,
@@ -247,6 +249,9 @@ export interface IStorage {
   // Store Configuration
   getStoreConfig(): Promise<StoreSettings | undefined>;
   updateStoreConfig(config: { storeWhatsAppNumber: string; storeName: string; storeAddress?: string; storeEmail?: string }): Promise<StoreSettings>;
+  
+  // Virtual Stores Management
+  getAllStores(): Promise<VirtualStore[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -1256,6 +1261,12 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date()
     };
+  }
+
+  // Virtual Stores Management (stub for in-memory)
+  async getAllStores(): Promise<VirtualStore[]> {
+    // Return empty array for in-memory storage
+    return [];
   }
 }
 
@@ -2904,6 +2915,11 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return newConfig;
     }
+  }
+
+  // Virtual Stores Management
+  async getAllStores(): Promise<VirtualStore[]> {
+    return await db.select().from(virtualStores).orderBy(virtualStores.name);
   }
 }
 

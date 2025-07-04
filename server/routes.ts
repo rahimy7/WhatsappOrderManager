@@ -2254,15 +2254,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
-  // Simplified WhatsApp message processing function
+  // Multi-tenant WhatsApp message processing function
   async function processWhatsAppMessage(value: any) {
     try {
       if (value.messages && value.messages.length > 0) {
         for (const message of value.messages) {
           const from = message.from;
+          const to = value.metadata?.phone_number_id || value.contacts?.[0]?.wa_id;
           const messageId = message.id;
           const timestamp = message.timestamp;
           const messageType = message.type;
+
+          // STEP 1: Identify which store should handle this message based on phone number
+          let targetStoreId: number | null = null;
+          let storeConfig: any = null;
+
+          // Query all active WhatsApp configurations to find the matching store
+          try {
+            const allStores = await storage.getAllStores();
+            for (const store of allStores) {
+              const config = await storage.getWhatsAppConfig(store.id);
+              if (config && config.phoneNumberId === to) {
+                targetStoreId = store.id;
+                storeConfig = config;
+                break;
+              }
+            }
+
+            await storage.addWhatsAppLog({
+              type: 'info',
+              phoneNumber: from,
+              messageContent: `Enrutamiento: ${to} → Tienda ID: ${targetStoreId || 'No encontrada'}`,
+              status: targetStoreId ? 'routed' : 'unrouted',
+              rawData: JSON.stringify({ 
+                from, 
+                to, 
+                targetStoreId, 
+                hasStoreConfig: !!storeConfig 
+              })
+            });
+
+            if (!targetStoreId) {
+              await storage.addWhatsAppLog({
+                type: 'warning',
+                phoneNumber: from,
+                messageContent: `No se encontró tienda para el número ${to}`,
+                status: 'failed',
+                rawData: JSON.stringify({ availableStores: allStores.length })
+              });
+              return; // Skip processing if no store found
+            }
+
+          } catch (error) {
+            await storage.addWhatsAppLog({
+              type: 'error',
+              phoneNumber: from,
+              messageContent: 'Error identificando tienda de destino',
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : String(error)
+            });
+            return;
+          }
           
           let messageText = '';
           if (messageType === 'text') {
@@ -2306,16 +2358,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
             })
           });
 
-          // Find or create customer
+          // STEP 2: Get tenant-specific storage for the identified store
+          let tenantStorage: any;
+          try {
+            const { getTenantDb } = await import('./multi-tenant-db.js');
+            tenantStorage = await getTenantDb(targetStoreId);
+            
+            await storage.addWhatsAppLog({
+              type: 'info',
+              phoneNumber: from,
+              messageContent: `Conectado a base de datos de tienda ${targetStoreId}`,
+              status: 'connected',
+              rawData: JSON.stringify({ storeId: targetStoreId })
+            });
+          } catch (error) {
+            await storage.addWhatsAppLog({
+              type: 'error',
+              phoneNumber: from,
+              messageContent: 'Error conectando a base de datos de tienda',
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : String(error)
+            });
+            return;
+          }
+
+          // STEP 3: Find or create customer using tenant-specific storage
           await storage.addWhatsAppLog({
             type: 'debug',
             phoneNumber: from,
-            messageContent: 'Buscando cliente por teléfono',
+            messageContent: `Buscando cliente por teléfono en tienda ${targetStoreId}`,
             status: 'processing',
-            rawData: JSON.stringify({ phoneNumber: from })
+            rawData: JSON.stringify({ phoneNumber: from, storeId: targetStoreId })
           });
 
-          let customer = await storage.getCustomerByPhone(from);
+          let customer = await tenantStorage.getCustomerByPhone(from);
           let isNewCustomer = false;
           
           await storage.addWhatsAppLog({
