@@ -75,18 +75,23 @@ export async function authenticateStoreUser(username: string, password: string):
       .where(eq(schema.systemUsers.username, username))
       .limit(1);
 
-    if (!user) return null;
+    if (!user) {
+      return null;
+    }
 
     // Verificar contraseña
     const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) return null;
+    
+    if (!isValidPassword) {
+      return null;
+    }
 
     return {
       id: user.id,
       username: user.username,
       role: user.role,
       storeId: user.storeId !== null ? user.storeId : undefined,
-      level: 'store'
+      level: 'store' as 'store'
     };
   } catch (error) {
     console.error('Error authenticating store user:', error);
@@ -109,16 +114,22 @@ export async function authenticateTenantUser(
 }
 
 /**
- * Autenticación universal que intenta todos los niveles
+ * Autenticación universal que intenta todos los niveles con validación de tienda
  */
 export async function authenticateUser(username: string, password: string, storeId?: number): Promise<AuthUser | null> {
-  // 1. Intentar autenticación global
+  // 1. Intentar autenticación global (super admin puede acceder a cualquier tienda)
   let user = await authenticateGlobalUser(username, password);
   if (user) return user;
 
   // 2. Intentar autenticación de tienda
   user = await authenticateStoreUser(username, password);
-  if (user) return user;
+  if (user) {
+    // Validar que el usuario pertenece a la tienda solicitada
+    if (storeId && user.storeId && user.storeId !== storeId) {
+      return null; // Usuario no puede acceder a esta tienda
+    }
+    return user;
+  }
 
   // 3. Si se proporciona storeId, intentar autenticación de tenant
   if (storeId) {

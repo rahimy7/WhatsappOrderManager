@@ -201,13 +201,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { username, password, storeId } = req.body;
       
       // Importar sistema de autenticación multi-tenant
-      const { authenticateUser } = await import('./multi-tenant-auth.js');
+      const { authenticateUser, authenticateStoreUser } = await import('./multi-tenant-auth.js');
+      
+      // Verificar si es un usuario de tienda para detectar intentos de acceso incorrecto
+      if (storeId) {
+        const storeUser = await authenticateStoreUser(username, password);
+        
+        if (storeUser && storeUser.storeId && storeUser.storeId !== storeId) {
+          return res.status(403).json({ 
+            success: false,
+            message: `Acceso denegado: No tienes permisos para acceder a esta tienda. Tu tienda asignada es la ID ${storeUser.storeId}.`,
+            errorCode: "STORE_ACCESS_DENIED"
+          });
+        }
+      }
       
       // Autenticar usuario usando el nuevo sistema multi-tenant
       const authUser = await authenticateUser(username, password, storeId);
       
       if (!authUser) {
-        return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
+        return res.status(401).json({ 
+          success: false,
+          message: "Usuario o contraseña incorrectos",
+          errorCode: "INVALID_CREDENTIALS"
+        });
       }
       
       // Generar token JWT
@@ -233,7 +250,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error en login multi-tenant:', error);
       res.status(500).json({ 
         success: false,
-        message: "Error interno del servidor" 
+        message: "Error interno del servidor",
+        errorCode: "INTERNAL_ERROR"
       });
     }
   });
