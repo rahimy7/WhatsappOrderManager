@@ -6017,6 +6017,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Actualizar usuario
   app.put('/api/super-admin/users/:id', requireSuperAdmin, async (req, res) => {
     try {
+      console.log('=== USER UPDATE REQUEST ===');
+      console.log('User ID:', req.params.id);
+      console.log('Request body:', req.body);
+      
       const userId = parseInt(req.params.id);
       const { 
         username, 
@@ -6039,6 +6043,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storeId: storeId ? parseInt(storeId) : null,
       };
 
+      console.log('Update data:', updateData);
+
       // Si se solicita forzar cambio de contraseña
       if (forcePasswordChange) {
         updateData.forcePasswordChange = true;
@@ -6058,9 +6064,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Actualizar usuario
         await masterDb
-          .update(schema.systemUsers)
+          .update(schema.users)
           .set(updateData)
-          .where(eq(schema.systemUsers.id, userId));
+          .where(eq(schema.users.id, userId));
 
         // Retornar la nueva contraseña temporal si fue generada
         return res.json({ 
@@ -6072,9 +6078,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Actualización normal sin reset de contraseña
       await masterDb
-        .update(schema.systemUsers)
+        .update(schema.users)
         .set(updateData)
-        .where(eq(schema.systemUsers.id, userId));
+        .where(eq(schema.users.id, userId));
 
       res.json({ message: 'Usuario actualizado exitosamente' });
     } catch (error) {
@@ -6091,8 +6097,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar que no sea super admin
       const user = await masterDb
         .select()
-        .from(schema.systemUsers)
-        .where(eq(schema.systemUsers.id, userId))
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
         .limit(1);
 
       if (user.length === 0) {
@@ -6104,8 +6110,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await masterDb
-        .delete(schema.systemUsers)
-        .where(eq(schema.systemUsers.id, userId));
+        .delete(schema.users)
+        .where(eq(schema.users.id, userId));
 
       res.json({ message: 'User deleted successfully' });
     } catch (error) {
@@ -6122,8 +6128,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar que el usuario existe
       const user = await masterDb
         .select()
-        .from(schema.systemUsers)
-        .where(eq(schema.systemUsers.id, userId))
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
         .limit(1);
 
       if (user.length === 0) {
@@ -6136,9 +6142,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Actualizar la contraseña en la base de datos
       await masterDb
-        .update(schema.systemUsers)
+        .update(schema.users)
         .set({ password: hashedPassword })
-        .where(eq(schema.systemUsers.id, userId));
+        .where(eq(schema.users.id, userId));
 
       res.json({ 
         message: 'Password reset successfully',
