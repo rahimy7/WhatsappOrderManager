@@ -197,15 +197,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rutas de autenticación
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { username, password, storeId } = req.body;
+      const { username, password, storeId, companyId } = req.body;
       
-      console.log('LOGIN REQUEST DATA:', { username, password, storeId, body: req.body });
+      // Usar storeId o companyId (compatibilidad con ambos formatos)
+      const finalStoreId = storeId || (companyId ? parseInt(companyId) : undefined);
       
       // Importar sistema de autenticación multi-tenant
       const { authenticateUser } = await import('./multi-tenant-auth.js');
       
       // Autenticar usuario usando el nuevo sistema multi-tenant
-      const authUser = await authenticateUser(username, password, storeId);
+      const authUser = await authenticateUser(username, password, finalStoreId);
       
       if (!authUser) {
         return res.status(401).json({ 
@@ -217,7 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Para usuarios de tienda, el storeId es obligatorio y debe coincidir
       if (authUser.level === 'store' || authUser.level === 'tenant') {
-        if (!storeId) {
+        if (!finalStoreId) {
           return res.status(400).json({ 
             success: false,
             message: "Debes especificar el ID de la tienda para acceder.",
@@ -225,10 +226,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        if (!authUser.storeId || authUser.storeId !== storeId) {
+        if (!authUser.storeId || authUser.storeId !== parseInt(finalStoreId)) {
           return res.status(403).json({ 
             success: false,
-            message: `Acceso denegado: No perteneces a la tienda ${storeId}. Usuario asignado a tienda ${authUser.storeId || 'sin asignar'}.`,
+            message: `Acceso denegado: No perteneces a la tienda ${finalStoreId}. Usuario asignado a tienda ${authUser.storeId || 'sin asignar'}.`,
             errorCode: "STORE_ACCESS_DENIED"
           });
         }

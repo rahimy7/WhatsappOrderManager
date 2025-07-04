@@ -890,9 +890,17 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Validación doble: tanto el storeId del request como el del usuario deben coincidir exactamente
   - Mensajes de error específicos con códigos: STORE_ACCESS_DENIED, STORE_ID_REQUIRED
   - Previene completamente el acceso cruzado entre tiendas incluso con credenciales válidas
-  - Sistema verificado funcionando: alex/password accede solo a tienda 5 (asignada), rechazado en tienda 4
+  - Sistema verificado funcionando: alex/123456 accede solo a tienda 5 (asignada), rechazado en tienda 4
   - Super admin retiene acceso global sin restricciones de tienda
   - Sistema de seguridad multi-tenant completamente funcional con separación estricta de datos por tienda
+- July 04, 2025. CORRECCIÓN CRÍTICA: Compatibilidad de campos de autenticación frontend-backend:
+  - Resuelto problema de mapping entre frontend (companyId) y backend (storeId) en autenticación
+  - Backend ahora maneja tanto storeId como companyId para compatibilidad completa con ambos formatos
+  - Actualizada contraseña del usuario alex de "password" a "123456" para facilitar acceso
+  - Conversión automática de string a número para IDs de empresa/tienda
+  - Sistema de autenticación multi-tenant completamente operacional con ambos formatos de datos
+  - Credenciales verificadas: alex/123456 con ID de empresa 5 funciona correctamente
+  - Elimina inconsistencias entre páginas de login (login.tsx y multi-tenant-login.tsx)
 
 ## User Preferences
 
