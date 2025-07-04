@@ -6064,9 +6064,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Actualizar usuario
         await masterDb
-          .update(schema.users)
+          .update(schema.systemUsers)
           .set(updateData)
-          .where(eq(schema.users.id, userId));
+          .where(eq(schema.systemUsers.id, userId));
 
         // Retornar la nueva contraseña temporal si fue generada
         return res.json({ 
@@ -6079,9 +6079,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Actualización normal sin reset de contraseña
       console.log('Executing update query...');
       const updateResult = await masterDb
-        .update(schema.users)
+        .update(schema.systemUsers)
         .set(updateData)
-        .where(eq(schema.users.id, userId))
+        .where(eq(schema.systemUsers.id, userId))
         .returning();
 
       console.log('Update result:', updateResult);
@@ -6090,8 +6090,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar que el usuario se actualizó
       const updatedUser = await masterDb
         .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.id, userId))
         .limit(1);
 
       console.log('User after update:', updatedUser[0]);
@@ -6111,8 +6111,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar que no sea super admin
       const user = await masterDb
         .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.id, userId))
         .limit(1);
 
       if (user.length === 0) {
@@ -6124,8 +6124,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await masterDb
-        .delete(schema.users)
-        .where(eq(schema.users.id, userId));
+        .delete(schema.systemUsers)
+        .where(eq(schema.systemUsers.id, userId));
 
       res.json({ message: 'User deleted successfully' });
     } catch (error) {
@@ -6142,8 +6142,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar que el usuario existe
       const user = await masterDb
         .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.id, userId))
         .limit(1);
 
       if (user.length === 0) {
@@ -6156,9 +6156,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Actualizar la contraseña en la base de datos
       await masterDb
-        .update(schema.users)
+        .update(schema.systemUsers)
         .set({ password: hashedPassword })
-        .where(eq(schema.users.id, userId));
+        .where(eq(schema.systemUsers.id, userId));
 
       res.json({ 
         message: 'Password reset successfully',
