@@ -5904,7 +5904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Crear usuario
   app.post('/api/super-admin/users', requireSuperAdmin, async (req, res) => {
     try {
-      const { name, email, phone, role, storeId, sendInvitation, invitationMessage } = req.body;
+      const { name, email, phone, username: customUsername, password: customPassword, role, storeId, sendInvitation, invitationMessage } = req.body;
 
       // Verificar si el email ya existe
       const existingUser = await masterDb
@@ -5917,26 +5917,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'El email ya está registrado' });
       }
 
-      // Generar username único basado en el email
-      const emailUsername = email.split('@')[0];
-      let username = emailUsername;
-      let counter = 1;
-      
-      while (true) {
+      // Usar username personalizado o generar uno automáticamente
+      let username;
+      if (customUsername && customUsername.trim()) {
+        // Verificar que el username personalizado no exista
         const usernameExists = await masterDb
           .select()
           .from(schema.systemUsers)
-          .where(eq(schema.systemUsers.username, username))
+          .where(eq(schema.systemUsers.username, customUsername.trim()))
           .limit(1);
           
-        if (usernameExists.length === 0) break;
+        if (usernameExists.length > 0) {
+          return res.status(400).json({ error: 'El nombre de usuario ya está en uso' });
+        }
         
-        username = `${emailUsername}${counter}`;
-        counter++;
+        username = customUsername.trim();
+      } else {
+        // Generar username único basado en el email
+        const emailUsername = email.split('@')[0];
+        username = emailUsername;
+        let counter = 1;
+        
+        while (true) {
+          const usernameExists = await masterDb
+            .select()
+            .from(schema.systemUsers)
+            .where(eq(schema.systemUsers.username, username))
+            .limit(1);
+            
+          if (usernameExists.length === 0) break;
+          
+          username = `${emailUsername}${counter}`;
+          counter++;
+        }
       }
 
-      // Generar contraseña temporal segura
-      const tempPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12).toUpperCase() + '123!';
+      // Usar contraseña personalizada o generar una temporal
+      const tempPassword = customPassword && customPassword.trim() ? 
+        customPassword.trim() : 
+        Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12).toUpperCase() + '123!';
 
       // Hash password
       const hashedPassword = await bcrypt.hash(tempPassword, 10);

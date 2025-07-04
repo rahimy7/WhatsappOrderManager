@@ -75,6 +75,8 @@ const createUserSchema = z.object({
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
   email: z.string().email("Email válido requerido"),
   phone: z.string().min(10, "Teléfono debe tener al menos 10 dígitos").optional(),
+  username: z.string().min(3, "Usuario debe tener al menos 3 caracteres").optional(),
+  password: z.string().min(6, "Contraseña debe tener al menos 6 caracteres").optional(),
   role: z.enum(["store_owner", "store_admin"], {
     required_error: "Rol requerido",
   }),
@@ -180,29 +182,42 @@ export default function SuperAdminUsers() {
     },
     onSuccess: (data: any) => {
       console.log("User creation response:", data);
+      console.log("Response data properties:", Object.keys(data));
+      console.log("Full response data:", JSON.stringify(data, null, 2));
+      
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/user-metrics"] });
       setIsCreateDialogOpen(false);
       form.reset();
       
-      // Guardar las credenciales y mostrar el diálogo
-      const credentials = {
-        name: data.name || '',
-        email: data.email || '',
-        username: data.username || '',
-        tempPassword: data.tempPassword || '',
-        storeName: data.storeName || '',
-        role: data.role || '',
-        invitationSent: data.invitationSent || false,
-      };
-      console.log("Setting credentials:", credentials);
-      setUserCredentials(credentials);
-      setIsCredentialsDialogOpen(true);
-      
-      toast({
-        title: "Usuario creado exitosamente",
-        description: "Las credenciales de acceso han sido generadas",
-      });
+      // Verificar si tenemos las credenciales en la respuesta
+      if (data.username && data.tempPassword) {
+        // Guardar las credenciales y mostrar el diálogo
+        const credentials = {
+          name: data.name || '',
+          email: data.email || '',
+          username: data.username || '',
+          tempPassword: data.tempPassword || '',
+          storeName: data.storeName || '',
+          role: data.role || '',
+          invitationSent: data.invitationSent || false,
+        };
+        console.log("Setting credentials:", credentials);
+        setUserCredentials(credentials);
+        setIsCredentialsDialogOpen(true);
+        
+        toast({
+          title: "Usuario creado exitosamente",
+          description: "Las credenciales de acceso han sido generadas",
+        });
+      } else {
+        console.error("No credentials found in response!");
+        toast({
+          title: "Usuario creado",
+          description: "El usuario se creó pero no se pudieron obtener las credenciales",
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: any) => {
       toast({
@@ -464,6 +479,34 @@ export default function SuperAdminUsers() {
                       <FormLabel>Teléfono (Opcional)</FormLabel>
                       <FormControl>
                         <Input placeholder="Ej: +52 55 1234 5678" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre de Usuario (Opcional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Se generará automáticamente desde el email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contraseña (Opcional)</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="Se generará automáticamente si no se especifica" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
