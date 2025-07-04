@@ -1251,6 +1251,34 @@ export default function SuperAdminUsers() {
                       </FormItem>
                     )}
                   />
+                  
+                  <FormField
+                    control={editForm.control}
+                    name="storeId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tienda Asignada</FormLabel>
+                        <Select 
+                          onValueChange={(value) => field.onChange(parseInt(value))} 
+                          value={field.value?.toString() || ""}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona una tienda" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {stores?.map((store) => (
+                              <SelectItem key={store.id} value={store.id.toString()}>
+                                {store.name}
+                              </SelectItem>
+                            )) || []}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               </div>
 
