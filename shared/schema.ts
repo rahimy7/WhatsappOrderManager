@@ -301,6 +301,7 @@ export const messages = pgTable("messages", {
 
 export const whatsappSettings = pgTable("whatsapp_settings", {
   id: serial("id").primaryKey(),
+  storeId: integer("store_id").references(() => virtualStores.id).notNull(),
   accessToken: text("access_token").notNull(),
   phoneNumberId: text("phone_number_id").notNull(),
   webhookVerifyToken: text("webhook_verify_token").notNull(),

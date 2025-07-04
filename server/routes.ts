@@ -103,9 +103,9 @@ async function processAutoResponse(trigger: string, phoneNumber: string) {
 }
 
 // Helper functions for WhatsApp message sending
-async function sendWhatsAppMessage(phoneNumber: string, message: string) {
+async function sendWhatsAppMessage(phoneNumber: string, message: string, storeId?: number) {
   try {
-    const config = await storage.getWhatsAppConfig();
+    const config = await storage.getWhatsAppConfig(storeId);
     
     if (!config) {
       console.error('WhatsApp configuration not found');
@@ -144,9 +144,9 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string) {
   }
 }
 
-async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
+async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any, storeId?: number) {
   try {
-    const config = await storage.getWhatsAppConfig();
+    const config = await storage.getWhatsAppConfig(storeId);
     
     if (!config) {
       console.error('WhatsApp configuration not found');
@@ -1020,12 +1020,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WhatsApp Settings API
   app.get("/api/settings/whatsapp", async (req, res) => {
     try {
-      let whatsappConfig = await storage.getWhatsAppConfig();
+      const authUser = req.user as AuthUser;
+      const storeId = authUser?.storeId;
+      
+      let whatsappConfig = await storage.getWhatsAppConfig(storeId);
       let storeConfig = await storage.getStoreConfig();
       
       // Initialize config with environment variables if not set
       if (!whatsappConfig || !whatsappConfig.accessToken) {
         const envConfig = {
+          storeId: storeId || 1, // Default to store 1 if no storeId
           accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
           phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
           webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "",
@@ -1065,6 +1069,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/settings/whatsapp", async (req, res) => {
     try {
+      const authUser = req.user as AuthUser;
+      const storeId = authUser?.storeId;
+      
       const configData = z.object({
         metaAppId: z.string(),
         metaAppSecret: z.string(),
@@ -1076,6 +1083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).parse(req.body);
 
       const dbConfig = {
+        storeId: storeId || 1, // Default to store 1 if no storeId
         accessToken: configData.whatsappToken,
         phoneNumberId: configData.whatsappPhoneNumberId,
         webhookVerifyToken: configData.whatsappVerifyToken,
@@ -1095,6 +1103,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/settings/whatsapp", async (req, res) => {
     try {
+      const authUser = req.user as AuthUser;
+      const storeId = authUser?.storeId;
+      
       const configData = z.object({
         accessToken: z.string(),
         phoneNumberId: z.string(),
@@ -1104,7 +1115,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: z.boolean().optional()
       }).parse(req.body);
 
-      const config = await storage.updateWhatsAppConfig(configData);
+      const configWithStoreId = {
+        ...configData,
+        storeId: storeId || 1, // Default to store 1 if no storeId
+      };
+
+      const config = await storage.updateWhatsAppConfig(configWithStoreId);
       res.json({ success: true, config });
     } catch (error) {
       if (error instanceof z.ZodError) {

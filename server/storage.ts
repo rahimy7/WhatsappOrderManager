@@ -162,7 +162,7 @@ export interface IStorage {
   }>;
 
   // WhatsApp Settings
-  getWhatsAppConfig(): Promise<WhatsAppSettings | null>;
+  getWhatsAppConfig(storeId?: number): Promise<WhatsAppSettings | null>;
   updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings>;
   
   // WhatsApp Logs
@@ -259,6 +259,7 @@ export class MemStorage implements IStorage {
   private conversations: Map<number, Conversation> = new Map();
   private messages: Map<number, Message> = new Map();
   private whatsappConfig: any = null;
+  private whatsappConfigByStore: Map<string, any> = new Map();
   private whatsappLogs: any[] = [];
   
   private currentUserId = 1;
@@ -1032,8 +1033,16 @@ export class MemStorage implements IStorage {
     };
   }
 
-  async getWhatsAppConfig(): Promise<any> {
-    return this.whatsappConfig || {
+  async getWhatsAppConfig(storeId?: number): Promise<any> {
+    // In MemStorage, we'll use a simple store-based config map
+    const storeKey = storeId ? `store_${storeId}` : 'default';
+    
+    if (!this.whatsappConfigByStore) {
+      this.whatsappConfigByStore = new Map();
+    }
+    
+    return this.whatsappConfigByStore.get(storeKey) || {
+      storeId: storeId || 1,
       metaAppId: "",
       metaAppSecret: "",
       whatsappBusinessAccountId: "",
@@ -1045,11 +1054,19 @@ export class MemStorage implements IStorage {
   }
 
   async updateWhatsAppConfig(config: any): Promise<any> {
-    this.whatsappConfig = {
+    const storeKey = config.storeId ? `store_${config.storeId}` : 'default';
+    
+    if (!this.whatsappConfigByStore) {
+      this.whatsappConfigByStore = new Map();
+    }
+    
+    const updatedConfig = {
       ...config,
       updatedAt: new Date(),
     };
-    return this.whatsappConfig;
+    
+    this.whatsappConfigByStore.set(storeKey, updatedConfig);
+    return updatedConfig;
   }
 
   async getWhatsAppLogs(): Promise<any[]> {
@@ -1932,18 +1949,34 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // WhatsApp Settings with PostgreSQL
-  async getWhatsAppConfig(): Promise<WhatsAppSettings | null> {
-    const [config] = await db.select().from(whatsappSettings)
-      .where(eq(whatsappSettings.isActive, true))
-      .orderBy(desc(whatsappSettings.createdAt));
-    
-    return config || null;
+  // WhatsApp Settings with PostgreSQL - Now store-specific
+  async getWhatsAppConfig(storeId?: number): Promise<WhatsAppSettings | null> {
+    if (storeId) {
+      // Get configuration specific to the store
+      const [config] = await db.select().from(whatsappSettings)
+        .where(
+          and(
+            eq(whatsappSettings.storeId, storeId),
+            eq(whatsappSettings.isActive, true)
+          )
+        )
+        .orderBy(desc(whatsappSettings.createdAt));
+      
+      return config || null;
+    } else {
+      // Fallback: get any active configuration for super admin
+      const [config] = await db.select().from(whatsappSettings)
+        .where(eq(whatsappSettings.isActive, true))
+        .orderBy(desc(whatsappSettings.createdAt));
+      
+      return config || null;
+    }
   }
 
   async updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings> {
-    // Obtener la configuración activa existente
-    const existingConfig = await this.getWhatsAppConfig();
+    // Obtener la configuración activa existente - se debe pasar storeId
+    const storeId = config.storeId;
+    const existingConfig = await this.getWhatsAppConfig(storeId);
     
     if (existingConfig) {
       // Actualizar la configuración existente
