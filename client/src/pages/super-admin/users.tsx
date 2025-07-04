@@ -130,6 +130,7 @@ export default function SuperAdminUsers() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCredentialsDialogOpen, setIsCredentialsDialogOpen] = useState(false);
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [userCredentials, setUserCredentials] = useState<{
     name: string;
     email: string;
@@ -361,6 +362,30 @@ export default function SuperAdminUsers() {
     },
   });
 
+  // Mutación para eliminar usuario
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      return apiRequest("DELETE", `/api/super-admin/users/${userId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/user-metrics"] });
+      setIsDeleteDialogOpen(false);
+      setSelectedUser(null);
+      toast({
+        title: "Usuario eliminado",
+        description: "El usuario ha sido eliminado exitosamente",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el usuario",
+        variant: "destructive",
+      });
+    },
+  });
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800';
@@ -443,6 +468,17 @@ export default function SuperAdminUsers() {
   const confirmResetPassword = () => {
     if (selectedUser) {
       resetPasswordMutation.mutate(selectedUser.id);
+    }
+  };
+
+  const handleDeleteUser = (user: StoreOwner) => {
+    setSelectedUser(user);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteUser = () => {
+    if (selectedUser) {
+      deleteUserMutation.mutate(selectedUser.id);
     }
   };
 
@@ -898,6 +934,14 @@ export default function SuperAdminUsers() {
                       Reactivar
                     </Button>
                   ) : null}
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={() => handleDeleteUser(user)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Eliminar
+                  </Button>
                 </div>
 
                 {/* Botones de acción - Vista Móvil */}
@@ -957,6 +1001,19 @@ export default function SuperAdminUsers() {
                     ) : (
                       <div></div>
                     )}
+                  </div>
+                  
+                  {/* Botón de eliminar - vista móvil */}
+                  <div className="mt-2">
+                    <Button 
+                      variant="destructive" 
+                      size="sm"
+                      onClick={() => handleDeleteUser(user)}
+                      className="w-full"
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Eliminar Usuario
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1407,6 +1464,50 @@ export default function SuperAdminUsers() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación de eliminación */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Eliminación</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="py-4">
+              <div className="flex items-center space-x-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-8 w-8 text-red-600" />
+                <div>
+                  <p className="font-semibold text-red-800">{selectedUser.name}</p>
+                  <p className="text-sm text-red-600">@{selectedUser.username} • {selectedUser.email}</p>
+                </div>
+              </div>
+              <div className="mt-4 text-sm text-gray-600">
+                <p>• Se eliminará toda la información del usuario</p>
+                <p>• Esta acción es permanente y no se puede deshacer</p>
+                <p>• El usuario perderá acceso inmediatamente</p>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end space-x-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={deleteUserMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmDeleteUser}
+              disabled={deleteUserMutation.isPending}
+            >
+              {deleteUserMutation.isPending ? "Eliminando..." : "Eliminar Usuario"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
