@@ -6077,10 +6077,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Actualización normal sin reset de contraseña
-      await masterDb
+      console.log('Executing update query...');
+      const updateResult = await masterDb
         .update(schema.users)
         .set(updateData)
-        .where(eq(schema.users.id, userId));
+        .where(eq(schema.users.id, userId))
+        .returning();
+
+      console.log('Update result:', updateResult);
+      console.log('Rows affected:', updateResult.length);
+
+      // Verificar que el usuario se actualizó
+      const updatedUser = await masterDb
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1);
+
+      console.log('User after update:', updatedUser[0]);
 
       res.json({ message: 'Usuario actualizado exitosamente' });
     } catch (error) {

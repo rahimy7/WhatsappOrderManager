@@ -839,6 +839,12 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Campo de schema agregado en configuración de tienda para visualización (no editable)
   - Validación simplificada: solo nombre, descripción y dominio son obligatorios para creación
   - Sistema multi-tenant confirmado operacional: 2 tiendas activas con schemas separados completamente funcionales
+- July 04, 2025. CORRECCIÓN CRÍTICA: Sistema de gestión de usuarios completamente funcional:
+  - Corregido problema donde endpoints de usuarios usaban tabla incorrecta (schema.systemUsers vs schema.users)
+  - Actualizado endpoints de actualización, eliminación y reseteo de contraseña para usar schema.users
+  - Agregado logging detallado para debugging de operaciones de usuario
+  - Vista móvil mejorada con botones organizados en grid 2x2 para mejor usabilidad
+  - Sistema de actualización de usuarios funcionando correctamente con validación en tiempo real
 
 ## User Preferences
 
