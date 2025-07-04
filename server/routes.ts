@@ -5950,18 +5950,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Middleware para verificar super admin
   const requireSuperAdmin = (req: any, res: any, next: any) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
+    console.log('=== SUPER ADMIN AUTH DEBUG ===');
+    console.log('Token present:', !!token);
+    
     if (!token) {
+      console.log('No token provided');
       return res.status(401).json({ error: 'Token required' });
     }
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
+      console.log('Decoded token:', { id: decoded.id, role: decoded.role, username: decoded.username });
+      
       if (decoded.role !== 'super_admin') {
+        console.log('User role is not super_admin:', decoded.role);
         return res.status(403).json({ error: 'Super admin access required' });
       }
+      
+      console.log('Super admin access granted');
       req.user = decoded;
       next();
     } catch (error) {
+      console.log('Token verification failed:', error);
       return res.status(401).json({ error: 'Invalid token' });
     }
   };
