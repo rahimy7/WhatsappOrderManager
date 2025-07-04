@@ -920,6 +920,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Sistema de seguridad validado: usuarios solo pueden acceder a datos de su tienda asignada
   - Logging de debug removido para optimización en producción
   - Arquitectura multi-tenant completamente estable con separación total de datos por tienda
+- July 04, 2025. ESTANDARIZACIÓN DE ROLES COMPLETADA:
+  - Eliminados roles duplicados: "admin" y "store_owner" consolidados en "store_admin"
+  - Jerarquía de roles simplificada: super_admin → store_admin → technician/seller/delivery/support/customer_service
+  - Sistema de permisos unificado con un solo rol administrativo por tienda (store_admin)
+  - Actualizada función getRoleDisplayName para reflejar estructura estandarizada
+  - Eliminadas duplicaciones de permisos y conflictos entre roles similares
+  - Arquitectura multi-tenant optimizada con roles claros y sin redundancias
 
 ## User Preferences
 

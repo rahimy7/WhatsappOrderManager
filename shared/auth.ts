@@ -45,20 +45,8 @@ export const rolePermissions = {
     'manage_global_users',
     'view_global_metrics'
   ],
-  admin: [
-    'view_dashboard',
-    'manage_users',
-    'manage_orders',
-    'manage_customers',
-    'manage_products',
-    'view_reports',
-    'manage_settings',
-    'view_conversations',
-    'send_messages',
-    'view_notifications',
-    'manage_assignments'
-  ],
-  store_owner: [
+  // Administrador de tienda - máximos permisos a nivel tienda
+  store_admin: [
     'view_dashboard',
     'manage_users',
     'manage_orders',
@@ -137,8 +125,7 @@ export function hasPermission(userRole: string, permission: string): boolean {
 export function getRoleDisplayName(role: string): string {
   const roleNames = {
     super_admin: 'Super Administrador',
-    admin: 'Administrador',
-    store_owner: 'Propietario de Tienda',
+    store_admin: 'Administrador de Tienda',
     technician: 'Técnico',
     seller: 'Vendedor',
     delivery: 'Repartidor',
