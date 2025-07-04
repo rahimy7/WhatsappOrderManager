@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { registerUserManagementRoutes } from "./user-management-routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedAutoResponses } from "./seed-auto-responses";
 import { seedAssignmentRules } from "./seed-assignment-rules";
@@ -378,6 +379,9 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+  
+  // Register multi-tenant user management routes
+  registerUserManagementRoutes(app);
 
   // Seed default auto responses and assignment rules
   await seedAutoResponses();
