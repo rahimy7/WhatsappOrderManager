@@ -114,7 +114,8 @@ export async function authenticateTenantUser(
 }
 
 /**
- * Autenticación universal que intenta todos los niveles con validación de tienda
+ * Autenticación universal que intenta todos los niveles sin validar tienda
+ * La validación de tienda se hace en el endpoint de login
  */
 export async function authenticateUser(username: string, password: string, storeId?: number): Promise<AuthUser | null> {
   // 1. Intentar autenticación global (super admin puede acceder a cualquier tienda)
@@ -123,13 +124,7 @@ export async function authenticateUser(username: string, password: string, store
 
   // 2. Intentar autenticación de tienda
   user = await authenticateStoreUser(username, password);
-  if (user) {
-    // Validar que el usuario pertenece a la tienda solicitada
-    if (storeId && user.storeId && user.storeId !== storeId) {
-      return null; // Usuario no puede acceder a esta tienda
-    }
-    return user;
-  }
+  if (user) return user;
 
   // 3. Si se proporciona storeId, intentar autenticación de tenant
   if (storeId) {

@@ -200,20 +200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { username, password, storeId } = req.body;
       
       // Importar sistema de autenticación multi-tenant
-      const { authenticateUser, authenticateStoreUser } = await import('./multi-tenant-auth.js');
-      
-      // Verificar si es un usuario de tienda para detectar intentos de acceso incorrecto
-      if (storeId) {
-        const storeUser = await authenticateStoreUser(username, password);
-        
-        if (storeUser && storeUser.storeId && storeUser.storeId !== storeId) {
-          return res.status(403).json({ 
-            success: false,
-            message: `Acceso denegado: No tienes permisos para acceder a esta tienda. Tu tienda asignada es la ID ${storeUser.storeId}.`,
-            errorCode: "STORE_ACCESS_DENIED"
-          });
-        }
-      }
+      const { authenticateUser } = await import('./multi-tenant-auth.js');
       
       // Autenticar usuario usando el nuevo sistema multi-tenant
       const authUser = await authenticateUser(username, password, storeId);
@@ -224,6 +211,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Usuario o contraseña incorrectos",
           errorCode: "INVALID_CREDENTIALS"
         });
+      }
+      
+      // Para usuarios de tienda, el storeId es obligatorio y debe coincidir
+      if (authUser.level === 'store' || authUser.level === 'tenant') {
+        if (!storeId) {
+          return res.status(400).json({ 
+            success: false,
+            message: "Debes especificar el ID de la tienda para acceder.",
+            errorCode: "STORE_ID_REQUIRED"
+          });
+        }
+        
+        if (!authUser.storeId || authUser.storeId !== storeId) {
+          return res.status(403).json({ 
+            success: false,
+            message: `Acceso denegado: No perteneces a la tienda ${storeId}. Usuario asignado a tienda ${authUser.storeId || 'sin asignar'}.`,
+            errorCode: "STORE_ACCESS_DENIED"
+          });
+        }
       }
       
       // Generar token JWT
@@ -243,7 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         user: authUser, 
         token,
-        message: `Acceso autorizado - Nivel: ${authUser.level}`
+        message: `Acceso autorizado - Nivel: ${authUser.level}${authUser.storeId ? ` - Tienda: ${authUser.storeId}` : ''}`
       });
     } catch (error) {
       console.error('Error en login multi-tenant:', error);

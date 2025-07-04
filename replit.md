@@ -883,6 +883,16 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Respuestas HTTP limpias sin información de debug expuesta
   - Rendimiento mejorado al eliminar logging innecesario en endpoints de alta frecuencia
   - Preparación final para entorno de producción con logging profesional
+- July 04, 2025. VALIDACIÓN ESTRICTA DE TIENDA EN LOGIN COMPLETAMENTE OPERACIONAL:
+  - Sistema de login valida obligatoriamente que el usuario pertenezca a la tienda específica
+  - Credenciales correctas no garantizan acceso si la tienda no coincide con la asignada al usuario
+  - Para usuarios de nivel 'store' y 'tenant', el storeId es obligatorio en el login
+  - Validación doble: tanto el storeId del request como el del usuario deben coincidir exactamente
+  - Mensajes de error específicos con códigos: STORE_ACCESS_DENIED, STORE_ID_REQUIRED
+  - Previene completamente el acceso cruzado entre tiendas incluso con credenciales válidas
+  - Sistema verificado funcionando: alex/password accede solo a tienda 5 (asignada), rechazado en tienda 4
+  - Super admin retiene acceso global sin restricciones de tienda
+  - Sistema de seguridad multi-tenant completamente funcional con separación estricta de datos por tienda
 
 ## User Preferences
 
