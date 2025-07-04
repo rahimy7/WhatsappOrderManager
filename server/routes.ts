@@ -5548,30 +5548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Gestión de usuarios globales del sistema
-  app.get('/api/super-admin/users', async (req, res) => {
-    try {
-      const users = await masterDb
-        .select({
-          id: schema.systemUsers.id,
-          username: schema.systemUsers.username,
-          email: schema.systemUsers.email,
-          role: schema.systemUsers.role,
-          storeId: schema.systemUsers.storeId,
-          storeName: schema.virtualStores.name,
-          isActive: schema.systemUsers.isActive,
-          lastLogin: schema.systemUsers.lastLogin,
-          createdAt: schema.systemUsers.createdAt,
-        })
-        .from(schema.systemUsers)
-        .leftJoin(schema.virtualStores, eq(schema.systemUsers.storeId, schema.virtualStores.id));
 
-      res.json(users);
-    } catch (error) {
-      console.error('Error fetching system users:', error);
-      res.status(500).json({ error: 'Failed to fetch users' });
-    }
-  });
 
   // Crear usuario propietario/administrador de tienda
   app.post('/api/super-admin/users', async (req, res) => {
@@ -6000,19 +5977,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: schema.systemUsers.username,
           name: schema.systemUsers.name,
           email: schema.systemUsers.email,
+          phone: sql<string>`COALESCE(${schema.systemUsers.phone}, '')`,
           role: schema.systemUsers.role,
           status: sql<string>`CASE WHEN ${schema.systemUsers.isActive} THEN 'active' ELSE 'inactive' END`,
-          companyId: schema.systemUsers.storeId,
-          companyName: schema.virtualStores.name,
+          registrationDate: schema.systemUsers.createdAt,
           lastLogin: schema.systemUsers.lastLogin,
-          createdAt: schema.systemUsers.createdAt,
+          storeId: schema.systemUsers.storeId,
+          storeName: sql<string>`COALESCE(${schema.virtualStores.name}, 'Sin tienda asignada')`,
+          storeStatus: sql<string>`CASE WHEN ${schema.virtualStores.isActive} THEN 'active' ELSE 'inactive' END`,
+          subscriptionStatus: sql<string>`'active'`,
+          totalOrders: sql<number>`0`,
+          monthlyRevenue: sql<number>`0`,
         })
         .from(schema.systemUsers)
         .leftJoin(schema.virtualStores, eq(schema.systemUsers.storeId, schema.virtualStores.id))
         .where(ne(schema.systemUsers.role, 'super_admin'))
         .orderBy(desc(schema.systemUsers.createdAt));
 
-      res.json(users);
+      // Add permissions array to each user
+      const usersWithPermissions = users.map(user => ({
+        ...user,
+        permissions: user.role === 'store_owner' ? ['manage_store', 'view_reports'] : ['manage_orders']
+      }));
+
+      res.json(usersWithPermissions);
     } catch (error) {
       console.error('Error fetching users:', error);
       res.status(500).json({ error: 'Failed to fetch users' });

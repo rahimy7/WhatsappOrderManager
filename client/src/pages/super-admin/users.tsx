@@ -345,7 +345,7 @@ export default function SuperAdminUsers() {
     }
   };
 
-  const filteredUsers = users?.filter(user => {
+  const filteredUsers = users ? users.filter(user => {
     const matchesSearch = 
       (user.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -355,7 +355,7 @@ export default function SuperAdminUsers() {
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
     
     return matchesSearch && matchesRole && matchesStatus;
-  }) || [];
+  }) : [];
 
   const handleViewDetails = (user: StoreOwner) => {
     setSelectedUser(user);
@@ -924,11 +924,17 @@ export default function SuperAdminUsers() {
               <div>
                 <h3 className="font-semibold mb-2">Permisos</h3>
                 <div className="flex flex-wrap gap-2">
-                  {selectedUser.permissions.map((permission, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {permission}
-                    </Badge>
-                  ))}
+                  {selectedUser.permissions && selectedUser.permissions.length > 0 ? 
+                    selectedUser.permissions.map((permission, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {permission}
+                      </Badge>
+                    )) : (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">
+                        Sin permisos especiales
+                      </Badge>
+                    )
+                  }
                 </div>
               </div>
             </div>
