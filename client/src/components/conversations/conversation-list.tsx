@@ -78,7 +78,7 @@ export default function ConversationList({
                   <p className={`text-sm truncate ${
                     conversation.unreadCount > 0 ? "font-bold text-gray-900" : "font-semibold text-gray-900"
                   }`}>
-                    {conversation.customer.name}
+                    {conversation.customer?.name || 'Cliente sin nombre'}
                   </p>
                   <div className="flex items-center gap-1">
                     {conversation.lastMessageAt && (
