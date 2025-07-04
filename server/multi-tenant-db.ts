@@ -46,8 +46,20 @@ export async function getTenantDb(storeId: number): Promise<any> {
   }
 
   // Crear conexión a la base de datos específica de la tienda
-  const tenantPool = new Pool({ connectionString: store.databaseUrl });
+  // Extraer el schema name de la URL
+  const schemaMatch = store.databaseUrl.match(/[&?]schema=([^&]+)/);
+  const schemaName = schemaMatch ? schemaMatch[1] : 'public';
+  
+  console.log(`🔄 Creating tenant connection for store ${storeId} with schema: ${schemaName}`);
+  
+  // Crear URL de conexión específica para el schema
+  const baseUrl = process.env.DATABASE_URL;
+  const tenantUrl = `${baseUrl}&options=-c%20search_path%3D${schemaName}`;
+  
+  const tenantPool = new Pool({ connectionString: tenantUrl });
   const tenantDb = drizzle({ client: tenantPool, schema });
+  
+  console.log(`✅ Tenant DB configured for schema: ${schemaName}`);
 
   // Almacenar en caché
   dbConnections.set(storeId, tenantDb);
@@ -243,6 +255,11 @@ export async function invalidateTenantConnection(storeId: number): Promise<void>
 export function tenantMiddleware() {
   return async (req: any, res: any, next: any) => {
     try {
+      console.log('=== TENANT MIDDLEWARE EJECUTÁNDOSE ===');
+      console.log('Path:', req.path);
+      console.log('Method:', req.method);
+      console.log('User exists:', !!req.user);
+      
       // Obtener storeId del usuario autenticado si existe
       let storeId = req.headers['x-store-id'] || req.session?.storeId || req.user?.storeId;
       
@@ -251,14 +268,29 @@ export function tenantMiddleware() {
         storeId = req.user.storeId;
       }
       
+      // Debugging específico para órdenes
+      if (req.path === '/orders') {
+        console.log('=== ORDERS ENDPOINT DEBUG ===');
+        console.log('User:', req.user ? `${req.user.username} (ID: ${req.user.id}, storeId: ${req.user.storeId}, level: ${req.user.level})` : 'No user');
+        console.log('Final storeId:', storeId);
+      }
+      
       if (storeId) {
         const tenantDb = await getTenantDb(parseInt(storeId));
         req.tenantDb = tenantDb;
         req.storeId = parseInt(storeId);
+        
+        if (req.path === '/orders') {
+          console.log('✅ Using tenant DB for store:', storeId);
+        }
       } else {
         // Usar base de datos maestra solo para super admin o usuarios sin tienda
         req.tenantDb = masterDb;
         req.storeId = null;
+        
+        if (req.path === '/orders') {
+          console.log('❌ Using master DB (no storeId)');
+        }
       }
       
       next();

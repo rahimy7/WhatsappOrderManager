@@ -388,11 +388,16 @@ app.use((req, res, next) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
         req.user = decoded;
+        console.log('🔑 JWT Success - User authenticated:', (decoded as any).username, 'storeId:', (decoded as any).storeId);
       } catch (error) {
-        // Token inválido, continuar sin usuario
+        console.log('❌ JWT Error:', (error as Error).message);
+        console.log('Token preview:', token.substring(0, 20) + '...');
+        console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
       }
+    } else {
+      console.log('ℹ️ No Authorization header or invalid format');
     }
     next();
   }
@@ -400,14 +405,21 @@ app.use((req, res, next) => {
   app.use('/api', extractUserFromToken);
   
   app.use('/api', (req, res, next) => {
+    console.log('=== MIDDLEWARE WRAPPER EJECUTÁNDOSE ===');
+    console.log('Path:', req.path);
+    console.log('Method:', req.method);
+    
     // Excluir rutas de super admin del middleware multi-tenant
     if (req.path.startsWith('/super-admin') || req.path.startsWith('/auth')) {
+      console.log('Excluyendo ruta:', req.path);
       return next();
     }
     // Aplicar middleware para todas las demás rutas
+    console.log('Aplicando tenant middleware para:', req.path);
     return tenantMiddleware()(req, res, next);
   });
 
+  // IMPORTANT: Register routes AFTER applying middleware
   const server = await registerRoutes(app);
   
   // Register multi-tenant user management routes
