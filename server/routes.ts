@@ -4,6 +4,7 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
+import { createTenantStorage } from "./tenant-storage";
 import { 
   insertOrderSchema, 
   insertCustomerSchema, 
@@ -368,9 +369,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Orders routes
-  app.get("/api/orders", async (req, res) => {
+  app.get("/api/orders", async (req: any, res) => {
     try {
-      const orders = await storage.getAllOrders();
+      // Usar tenant storage si está disponible, sino usar storage global (para super admin)
+      const tenantStorage = req.tenantDb ? createTenantStorage(req.tenantDb) : storage;
+      const orders = await tenantStorage.getAllOrders();
       res.json(orders);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch orders" });
@@ -656,9 +659,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Customers routes
-  app.get("/api/customers", async (req, res) => {
+  app.get("/api/customers", async (req: any, res) => {
     try {
-      const customers = await storage.getAllCustomers();
+      const tenantStorage = req.tenantDb ? createTenantStorage(req.tenantDb) : storage;
+      const customers = await tenantStorage.getAllCustomers();
       res.json(customers);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch customers" });
@@ -709,9 +713,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Products routes
-  app.get("/api/products", async (req, res) => {
+  app.get("/api/products", async (req: any, res) => {
     try {
-      const products = await storage.getAllProducts();
+      const tenantStorage = req.tenantDb ? createTenantStorage(req.tenantDb) : storage;
+      const products = await tenantStorage.getAllProducts();
       res.json(products);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch products" });
@@ -884,9 +889,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Conversations routes
-  app.get("/api/conversations", async (req, res) => {
+  app.get("/api/conversations", async (req: any, res) => {
     try {
-      const conversations = await storage.getActiveConversations();
+      const tenantStorage = req.tenantDb ? createTenantStorage(req.tenantDb) : storage;
+      const conversations = await tenantStorage.getAllConversations();
       res.json(conversations);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch conversations" });

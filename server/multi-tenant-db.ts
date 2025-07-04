@@ -238,18 +238,25 @@ export async function invalidateTenantConnection(storeId: number): Promise<void>
 }
 
 /**
- * Middleware para extraer el storeId de la sesión/header y configurar la base de datos
+ * Middleware para extraer el storeId del usuario autenticado y configurar la base de datos específica
  */
 export function tenantMiddleware() {
   return async (req: any, res: any, next: any) => {
     try {
-      const storeId = req.headers['x-store-id'] || req.session?.storeId;
+      // Obtener storeId del usuario autenticado si existe
+      let storeId = req.headers['x-store-id'] || req.session?.storeId || req.user?.storeId;
+      
+      // Si el usuario está autenticado y tiene storeId, usarlo
+      if (req.user && req.user.storeId && req.user.level !== 'global') {
+        storeId = req.user.storeId;
+      }
       
       if (storeId) {
-        req.tenantDb = await getTenantDb(parseInt(storeId));
+        const tenantDb = await getTenantDb(parseInt(storeId));
+        req.tenantDb = tenantDb;
         req.storeId = parseInt(storeId);
       } else {
-        // Usar base de datos maestra si no hay storeId
+        // Usar base de datos maestra solo para super admin o usuarios sin tienda
         req.tenantDb = masterDb;
         req.storeId = null;
       }

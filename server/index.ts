@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
 import { registerRoutes } from "./routes";
 import { registerUserManagementRoutes } from "./user-management-routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -378,6 +379,35 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Aplicar middleware multi-tenant para todas las rutas de API (excepto super-admin)
+  const { tenantMiddleware } = await import('./multi-tenant-db');
+  
+  // Middleware de autenticación (necesario para obtener storeId del usuario)
+  function extractUserFromToken(req: any, res: any, next: any) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+        req.user = decoded;
+      } catch (error) {
+        // Token inválido, continuar sin usuario
+      }
+    }
+    next();
+  }
+  
+  app.use('/api', extractUserFromToken);
+  
+  app.use('/api', (req, res, next) => {
+    // Excluir rutas de super admin del middleware multi-tenant
+    if (req.path.startsWith('/super-admin') || req.path.startsWith('/auth')) {
+      return next();
+    }
+    // Aplicar middleware para todas las demás rutas
+    return tenantMiddleware()(req, res, next);
+  });
+
   const server = await registerRoutes(app);
   
   // Register multi-tenant user management routes
