@@ -344,6 +344,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // El token ya contiene la información necesaria del usuario
       const tokenUser = req.user;
       
+      let storeInfo = null;
+      
+      // Si el usuario tiene storeId, obtener información de la tienda
+      if (tokenUser.storeId) {
+        try {
+          const { getStoreInfo } = await import('./multi-tenant-db.js');
+          storeInfo = await getStoreInfo(tokenUser.storeId);
+        } catch (error) {
+          console.error('Error getting store info:', error);
+        }
+      }
+      
       res.json({
         id: tokenUser.id,
         username: tokenUser.username,
@@ -351,7 +363,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: tokenUser.role,
         status: 'active',
         level: tokenUser.level,
-        storeId: tokenUser.storeId
+        storeId: tokenUser.storeId,
+        storeName: storeInfo?.name || null
       });
     } catch (error) {
       res.status(500).json({ message: "Error interno del servidor" });

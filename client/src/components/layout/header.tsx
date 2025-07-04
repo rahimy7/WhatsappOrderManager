@@ -67,8 +67,12 @@ export default function Header({
             </Button>
           )}
           <div>
-            <h2 className="text-lg md:text-2xl font-bold text-white">{title}</h2>
-            <p className="text-sm md:text-base text-emerald-100 hidden sm:block">{subtitle}</p>
+            <h2 className="text-lg md:text-2xl font-bold text-white">
+              {user?.storeName ? `${user.storeName}` : title}
+            </h2>
+            <p className="text-sm md:text-base text-emerald-100 hidden sm:block">
+              {user?.name ? `Bienvenido, ${user.name}` : subtitle}
+            </p>
           </div>
         </div>
         <div className="flex items-center space-x-2 md:space-x-4">

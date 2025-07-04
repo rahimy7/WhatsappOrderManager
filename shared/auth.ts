@@ -18,6 +18,8 @@ export interface AuthUser {
   phone?: string;
   email?: string;
   department?: string;
+  storeId?: number;
+  storeName?: string;
 }
 
 export interface AuthResponse {
