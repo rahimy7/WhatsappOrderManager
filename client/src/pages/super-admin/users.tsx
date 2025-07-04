@@ -40,7 +40,7 @@ interface StoreOwner {
   name: string;
   email: string;
   phone: string;
-  role: 'store_owner' | 'super_admin';
+  role: 'store_admin' | 'super_admin';
   status: 'active' | 'inactive' | 'suspended';
   registrationDate: string;
   lastLogin: string;
@@ -406,7 +406,7 @@ export default function SuperAdminUsers() {
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'super_admin': return <Crown className="h-4 w-4" />;
-      case 'store_owner': return <Building2 className="h-4 w-4" />;
+      case 'store_admin': return <Building2 className="h-4 w-4" />;
       default: return <Users className="h-4 w-4" />;
     }
   };
@@ -601,7 +601,7 @@ export default function SuperAdminUsers() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="store_owner">Propietario de Tienda</SelectItem>
+                              <SelectItem value="store_admin">Administrador de Tienda</SelectItem>
                               <SelectItem value="super_admin">Super Administrador</SelectItem>
                             </SelectContent>
                           </Select>
@@ -839,11 +839,11 @@ export default function SuperAdminUsers() {
                       </Badge>
                       <Badge className={getRoleColor(user.role)}>
                         {user.role === 'super_admin' && 'Super Admin'}
-                        {user.role === 'store_owner' && 'Propietario'}
+                        {user.role === 'store_admin' && 'Admin de Tienda'}
                       </Badge>
                     </div>
                     
-                    {user.role === 'store_owner' && (
+                    {user.role === 'store_admin' && (
                       <div className="text-left md:text-right">
                         <div className="font-semibold">${(user.monthlyRevenue || 0).toLocaleString()}/mes</div>
                         <div className="text-sm text-muted-foreground">

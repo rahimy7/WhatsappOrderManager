@@ -94,8 +94,8 @@ function RoleDashboard() {
     return <ProtectedRoute component={GlobalDashboard} permission="super_admin" />;
   }
   
-  // Administradores regulares y propietarios de tienda al Dashboard Principal
-  if (user?.role === 'admin' || user?.role === 'store_owner') {
+  // Administradores de tienda al Dashboard Principal
+  if (user?.role === 'store_admin') {
     return <ProtectedRoute component={Dashboard} permission="view_dashboard" />;
   }
   
