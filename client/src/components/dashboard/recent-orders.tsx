@@ -126,12 +126,12 @@ export default function RecentOrders() {
                       <div className="flex items-center">
                         <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center mr-3">
                           <span className="text-xs font-medium text-gray-600">
-                            {order.customer.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                            {order.customer?.name ? order.customer.name.split(" ").map(n => n[0]).join("").slice(0, 2) : 'CL'}
                           </span>
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{order.customer.name}</div>
-                          <div className="text-sm text-gray-500">{order.customer.phone}</div>
+                          <div className="text-sm font-medium text-gray-900">{order.customer?.name || 'Cliente sin nombre'}</div>
+                          <div className="text-sm text-gray-500">{order.customer?.phone || 'Sin teléfono'}</div>
                         </div>
                       </div>
                     </td>
