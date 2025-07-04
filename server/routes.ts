@@ -5816,8 +5816,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
-      console.log('Decoded token:', { id: decoded.id, role: decoded.role, username: decoded.username });
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as any;
+      console.log('Decoded token:', { 
+        id: decoded.id || decoded.userId, 
+        role: decoded.role, 
+        username: decoded.username 
+      });
       
       if (decoded.role !== 'super_admin') {
         console.log('User role is not super_admin:', decoded.role);
@@ -5825,7 +5829,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log('Super admin access granted');
-      req.user = decoded;
+      // Normalize the user object to always have 'id' field
+      req.user = {
+        ...decoded,
+        id: decoded.id || decoded.userId
+      };
       next();
     } catch (error) {
       console.log('Token verification failed:', error);
