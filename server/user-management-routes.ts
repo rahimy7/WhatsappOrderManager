@@ -45,7 +45,6 @@ export function registerUserManagementRoutes(app: Express) {
   // Obtener todos los usuarios de tienda (system_users)
   app.get('/api/super-admin/users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      console.log('=== SUPER ADMIN USERS DEBUG ===');
       const users = await masterDb
         .select({
           id: schema.systemUsers.id,
@@ -61,7 +60,6 @@ export function registerUserManagementRoutes(app: Express) {
         .from(schema.systemUsers)
         .leftJoin(schema.virtualStores, eq(schema.systemUsers.storeId, schema.virtualStores.id));
 
-      console.log(`Found ${users.length} system users`);
       res.json(users);
     } catch (error) {
       console.error('Error fetching system users:', error);

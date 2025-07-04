@@ -91,7 +91,7 @@ async function processAutoResponse(trigger: string, phoneNumber: string) {
       }
       
       // Log the auto-response
-      console.log(`Auto-response sent for trigger: ${trigger} to ${phoneNumber}`);
+
       return true; // Indicate successful response
     }
     return false; // No response found
@@ -135,7 +135,7 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string) {
     }
 
     const result = await response.json();
-    console.log('WhatsApp message sent:', result);
+
     return true;
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
@@ -170,7 +170,6 @@ async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any)
     }
 
     const result = await response.json();
-    console.log('WhatsApp interactive message sent:', result);
     return true;
   } catch (error) {
     console.error('Error sending WhatsApp interactive message:', error);
@@ -261,17 +260,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ================================
   app.get('/api/super-admin/stores/:id/validate', async (req, res) => {
     try {
-      console.log('=== VALIDANDO TIENDA (EARLY ENDPOINT) ===');
       const storeId = parseInt(req.params.id);
-      console.log('Store ID:', storeId);
       
       // Obtener información de la tienda directamente desde master DB
-      console.log('Obteniendo información de la tienda desde master DB...');
       const store = await getStoreInfo(storeId);
-      console.log('Store info:', store);
       
       if (!store) {
-        console.log('Tienda no encontrada');
         return res.status(404).json({ 
           valid: false, 
           message: 'Tienda no encontrada' 
@@ -279,9 +273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validar que la tienda esté activa
-      console.log('Store active?', store.isActive);
       if (!store.isActive) {
-        console.log('Tienda inactiva');
         return res.json({
           valid: false,
           message: 'Tienda inactiva - No se puede validar',
@@ -293,11 +285,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Intentar obtener la base de datos de la tienda
-      console.log('Intentando obtener tenantDb...');
       let tenantDb;
       try {
         tenantDb = await getTenantDb(storeId);
-        console.log('TenantDb obtenido exitosamente');
       } catch (error) {
         console.error('Error al obtener tenantDb:', error);
         return res.json({
@@ -311,7 +301,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validación simplificada exitosa
-      console.log('Validación completada exitosamente');
       
       res.json({
         valid: true,
@@ -437,9 +426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/orders/technician", authenticateToken, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      console.log(`[TECHNICIAN ORDERS] Fetching orders for user ID: ${userId}`);
       const orders = await storage.getTechnicianOrders(userId);
-      console.log(`[TECHNICIAN ORDERS] Found ${orders.length} orders`);
       res.json(orders);
     } catch (error) {
       console.error("[TECHNICIAN ORDERS] Error:", error);
@@ -792,7 +779,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         productData = req.body;
       }
 
-      console.log("Creating product with data:", productData);
       const validatedData = insertProductSchema.parse(productData);
       const product = await storage.createProduct(validatedData);
       res.status(201).json(product);
@@ -2789,7 +2775,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rawData: JSON.stringify({ buttonId, interactiveType: interactive.type })
       });
 
-      console.log('Processing button interaction:', buttonId);
 
       // Handle menu buttons from welcome message and auto-responses
       if (buttonId === 'products' || buttonId === 'show_products') {
@@ -3720,7 +3705,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const token = req.query["hub.verify_token"];
       const challenge = req.query["hub.challenge"];
 
-      console.log(`Webhook verification request - Mode: ${mode}, Token: ${typeof token === 'string' && token ? '***' + token.slice(-4) : 'none'}, Challenge: ${challenge}`);
 
       // Check the mode and token sent by WhatsApp
       if (mode === "subscribe") {
@@ -3728,7 +3712,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const config = await storage.getWhatsAppConfig();
         
         if (!config) {
-          console.log("No WhatsApp config found");
           res.status(403).send("Forbidden");
           return;
         }
@@ -3736,7 +3719,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const storedToken = (config as any).webhookVerifyToken || (config as any).whatsappVerifyToken;
         
         if (token === storedToken) {
-          console.log("Webhook verified successfully!");
           await storage.addWhatsAppLog({
             type: 'info',
             messageContent: 'Webhook verificado correctamente',
@@ -5786,28 +5768,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Middleware para verificar super admin
   const requireSuperAdmin = (req: any, res: any, next: any) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    console.log('=== SUPER ADMIN AUTH DEBUG ===');
-    console.log('Token present:', !!token);
-    
     if (!token) {
-      console.log('No token provided');
       return res.status(401).json({ error: 'Token required' });
     }
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as any;
-      console.log('Decoded token:', { 
-        id: decoded.id || decoded.userId, 
-        role: decoded.role, 
-        username: decoded.username 
-      });
       
       if (decoded.role !== 'super_admin') {
-        console.log('User role is not super_admin:', decoded.role);
         return res.status(403).json({ error: 'Super admin access required' });
       }
-      
-      console.log('Super admin access granted');
       // Normalize the user object to always have 'id' field
       req.user = {
         ...decoded,
@@ -5815,7 +5785,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       next();
     } catch (error) {
-      console.log('Token verification failed:', error);
       return res.status(401).json({ error: 'Invalid token' });
     }
   };
@@ -6156,24 +6125,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Super Admin Stores List
   app.get('/api/super-admin/stores', authenticateToken, async (req: any, res) => {
     try {
-      console.log('=== DEBUG SUPER ADMIN STORES ===');
-      console.log('User from token:', req.user);
-      console.log('User role:', req.user?.role);
-      console.log('Is super admin?', req.user?.role === 'super_admin');
-      
       // Verificar que sea super admin
       if (req.user.role !== 'super_admin') {
-        console.log('Access denied - not super admin');
         return res.status(403).json({ message: "Acceso denegado" });
       }
-
-      console.log('Super admin verified, fetching stores...');
       
       // Obtener tiendas reales de la base de datos
       const stores = await masterDb.select().from(schema.virtualStores);
       
-      console.log('Raw stores from DB:', stores.length, 'stores found');
-      console.log('First store:', stores[0]);
+
       
       // Transformar datos para que coincidan con la interfaz esperada
       const transformedStores = stores.map(store => ({
@@ -6200,9 +6160,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }));
 
-      console.log('Transformed stores:', transformedStores.length, 'stores');
-      console.log('Sample transformed store:', transformedStores[0]);
-      console.log('Transformed store names:', transformedStores.map(s => s.name));
       
       res.json(transformedStores);
     } catch (error) {
@@ -6365,7 +6322,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/super-admin/stores/:id', authenticateToken, async (req: any, res) => {
     try {
       console.log('=== UPDATE STORE REQUEST ===');
-      console.log('Store ID:', req.params.id);
       console.log('Request body:', req.body);
       console.log('User:', req.user);
 
