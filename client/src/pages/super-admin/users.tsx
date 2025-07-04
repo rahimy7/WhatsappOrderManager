@@ -778,20 +778,23 @@ export default function SuperAdminUsers() {
           <div className="space-y-4">
             {filteredUsers.map((user) => (
               <div key={user.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
                     <div className="flex items-center space-x-2">
                       {getStatusIcon(user.status)}
-                      <div>
-                        <h3 className="font-semibold flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold flex items-center gap-2 text-lg">
                           {user.name}
                           {getRoleIcon(user.role)}
                         </h3>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-foreground truncate">
                           @{user.username} • {user.email}
                         </p>
                       </div>
                     </div>
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row items-start md:items-center gap-2">
                     <div className="flex space-x-2">
                       <Badge className={getStatusColor(user.status)}>
                         {user.status === 'active' && 'Activo'}
@@ -803,16 +806,16 @@ export default function SuperAdminUsers() {
                         {user.role === 'store_owner' && 'Propietario'}
                       </Badge>
                     </div>
-                  </div>
-                  
-                  {user.role === 'store_owner' && (
-                    <div className="text-right">
-                      <div className="font-semibold">${(user.monthlyRevenue || 0).toLocaleString()}/mes</div>
-                      <div className="text-sm text-muted-foreground">
-                        {user.totalOrders || 0} pedidos totales
+                    
+                    {user.role === 'store_owner' && (
+                      <div className="text-left md:text-right">
+                        <div className="font-semibold">${(user.monthlyRevenue || 0).toLocaleString()}/mes</div>
+                        <div className="text-sm text-muted-foreground">
+                          {user.totalOrders || 0} pedidos totales
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {user.storeName && (
@@ -829,26 +832,27 @@ export default function SuperAdminUsers() {
                   </div>
                 )}
 
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Registro:</span>
-                    <div className="font-medium">{new Date(user.registrationDate).toLocaleDateString()}</div>
+                    <span className="text-muted-foreground text-xs">Registro:</span>
+                    <div className="font-medium text-sm">{new Date(user.registrationDate).toLocaleDateString()}</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Último acceso:</span>
-                    <div className="font-medium">{new Date(user.lastLogin).toLocaleDateString()}</div>
+                    <span className="text-muted-foreground text-xs">Último acceso:</span>
+                    <div className="font-medium text-sm">{new Date(user.lastLogin).toLocaleDateString()}</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Teléfono:</span>
-                    <div className="font-medium">{user.phone || 'No registrado'}</div>
+                    <span className="text-muted-foreground text-xs">Teléfono:</span>
+                    <div className="font-medium text-sm">{user.phone || 'No registrado'}</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Permisos:</span>
-                    <div className="font-medium">{(user.permissions || []).length} asignados</div>
+                    <span className="text-muted-foreground text-xs">Permisos:</span>
+                    <div className="font-medium text-sm">{(user.permissions || []).length} asignados</div>
                   </div>
                 </div>
 
-                <div className="mt-4 flex justify-end space-x-2">
+                {/* Botones de acción - Vista Desktop */}
+                <div className="hidden md:flex mt-4 justify-end space-x-2">
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -894,6 +898,66 @@ export default function SuperAdminUsers() {
                       Reactivar
                     </Button>
                   ) : null}
+                </div>
+
+                {/* Botones de acción - Vista Móvil */}
+                <div className="md:hidden mt-4 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleViewDetails(user)}
+                      className="w-full"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Ver
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleEditUser(user)}
+                      className="w-full"
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Editar
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleResetPassword(user)}
+                      className="w-full"
+                    >
+                      <Key className="h-4 w-4 mr-1" />
+                      Reset
+                    </Button>
+                    {user.status === 'active' ? (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => suspendUserMutation.mutate(user.id)}
+                        disabled={suspendUserMutation.isPending}
+                        className="w-full"
+                      >
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        Suspender
+                      </Button>
+                    ) : user.status === 'suspended' ? (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => reactivateUserMutation.mutate(user.id)}
+                        disabled={reactivateUserMutation.isPending}
+                        className="w-full"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Reactivar
+                      </Button>
+                    ) : (
+                      <div></div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
