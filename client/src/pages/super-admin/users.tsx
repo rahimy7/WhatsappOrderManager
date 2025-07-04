@@ -179,21 +179,24 @@ export default function SuperAdminUsers() {
       return apiRequest("POST", "/api/super-admin/users", userData);
     },
     onSuccess: (data: any) => {
+      console.log("User creation response:", data);
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/user-metrics"] });
       setIsCreateDialogOpen(false);
       form.reset();
       
       // Guardar las credenciales y mostrar el diálogo
-      setUserCredentials({
-        name: data.name,
-        email: data.email,
-        username: data.username,
-        tempPassword: data.tempPassword,
-        storeName: data.storeName,
-        role: data.role,
+      const credentials = {
+        name: data.name || '',
+        email: data.email || '',
+        username: data.username || '',
+        tempPassword: data.tempPassword || '',
+        storeName: data.storeName || '',
+        role: data.role || '',
         invitationSent: data.invitationSent || false,
-      });
+      };
+      console.log("Setting credentials:", credentials);
+      setUserCredentials(credentials);
       setIsCredentialsDialogOpen(true);
       
       toast({
