@@ -128,9 +128,9 @@ export default function Login() {
                 Credenciales de Prueba:
               </h3>
               <div className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
-                <p><span className="font-medium">Admin:</span> admin / password</p>
-                <p><span className="font-medium">Técnico:</span> tech1 / password</p>
-                <p><span className="font-medium">Vendedor:</span> seller1 / password</p>
+                <p><span className="font-medium">Super Admin:</span> superadmin / password</p>
+                <p><span className="font-medium">Admin Tienda:</span> rahimy7 / password</p>
+                <p><span className="font-medium">Técnico:</span> Rahimy7 / password</p>
               </div>
             </div>
           </CardContent>

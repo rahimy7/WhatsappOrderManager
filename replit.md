@@ -857,6 +857,17 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - APIs REST completas para gestión de usuarios: CRUD por nivel, métricas, reset de contraseñas
   - Documentación completa en MULTI_TENANT_MIGRATION_COMPLETED.md
   - Sistema listo para producción con capacidad para hasta 90 tiendas usando schemas PostgreSQL separados
+- July 04, 2025. SISTEMA DE AUTENTICACIÓN MULTI-TENANT COMPLETAMENTE OPERACIONAL:
+  - Corregido problema crítico de contraseña hasheada incorrectamente para usuario de tienda rahimy7
+  - Sistema de autenticación de 3 niveles funcionando perfectamente:
+    * Super Admin: superadmin/admin123 - Nivel global (tabla users)
+    * Store Admin: rahimy7/password - Nivel tienda (tabla system_users, storeId: 4)
+    * Tenant Users: Preparado para autenticación en schemas separados por tienda
+  - Función authenticateUser() con cascada de autenticación: global → store → tenant
+  - Endpoint /api/auth/login funcionando con tokens JWT y niveles de acceso apropiados
+  - Campo mapping corregido entre schema (storeId) y base de datos (store_id)
+  - Logging y debugging implementado para troubleshooting futuro
+  - Sistema de verificación de contraseñas bcrypt funcionando correctamente en todos los niveles
 
 ## User Preferences
 

@@ -198,72 +198,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rutas de autenticación
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { username, password, companyId } = loginSchema.parse(req.body);
+      const { username, password, storeId } = req.body;
       
-      const user = await storage.getUserByUsername(username);
-      if (!user) {
+      // Importar sistema de autenticación multi-tenant
+      const { authenticateUser } = await import('./multi-tenant-auth.js');
+      
+      // Autenticar usuario usando el nuevo sistema multi-tenant
+      const authUser = await authenticateUser(username, password, storeId);
+      
+      if (!authUser) {
         return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
       }
-
-      // Comparar contraseña hasheada usando bcrypt
-      const isValidPassword = await bcrypt.compare(password, user.password);
-      if (!isValidPassword) {
-        return res.status(401).json({ message: "Usuario o contraseña incorrectos" });
-      }
-
-      // Validar acceso según tipo de usuario
-      if (user.role === 'super_admin') {
-        // Super admin puede acceder sin companyId - no se requiere validación adicional
-        console.log(`Super admin login: ${username}`);
-      } else {
-        // Usuarios regulares requieren companyId
-        if (!companyId) {
-          return res.status(400).json({ message: "ID de empresa requerido" });
-        }
-        // Aquí podrías validar que el usuario pertenece a la empresa especificada
-        // Por ahora, simplemente almacenamos el companyId en el token
-        console.log(`Tenant user login: ${username} for company: ${companyId}`);
-      }
-
+      
       // Generar token JWT
       const token = jwt.sign(
         { 
-          id: user.id, 
-          username: user.username, 
-          role: user.role,
-          companyId: user.role === 'super_admin' ? undefined : companyId
+          id: authUser.id, 
+          username: authUser.username, 
+          role: authUser.role,
+          level: authUser.level,
+          storeId: authUser.storeId
         },
         process.env.JWT_SECRET || 'default-secret',
         { expiresIn: '24h' }
       );
 
-      // Preparar datos del usuario para el frontend
-      const authUser: AuthUser = {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        status: user.status,
-        companyId: user.role === 'super_admin' ? undefined : companyId,
-        phone: user.phone || undefined,
-        email: user.email || undefined,
-        department: user.department || undefined,
-      };
-
       res.json({ 
         success: true,
         user: authUser, 
         token,
-        message: user.role === 'super_admin' ? 'Acceso de administrador global' : 'Acceso empresarial autorizado'
+        message: `Acceso autorizado - Nivel: ${authUser.level}`
       });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          success: false,
-          message: "Datos inválidos", 
-          details: error.errors 
-        });
-      }
+      console.error('Error en login multi-tenant:', error);
       res.status(500).json({ 
         success: false,
         message: "Error interno del servidor" 
@@ -357,24 +324,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.user.id);
-      if (!user) {
-        return res.status(404).json({ message: "Usuario no encontrado" });
-      }
-
-      const authUser: AuthUser = {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        status: user.status,
-        companyId: req.user.companyId,
-        phone: user.phone || undefined,
-        email: user.email || undefined,
-        department: user.department || undefined,
-      };
-
-      res.json(authUser);
+      // El token ya contiene la información necesaria del usuario
+      const tokenUser = req.user;
+      
+      res.json({
+        id: tokenUser.id,
+        username: tokenUser.username,
+        name: tokenUser.name || tokenUser.username,
+        role: tokenUser.role,
+        status: 'active',
+        level: tokenUser.level,
+        storeId: tokenUser.storeId
+      });
     } catch (error) {
       res.status(500).json({ message: "Error interno del servidor" });
     }
