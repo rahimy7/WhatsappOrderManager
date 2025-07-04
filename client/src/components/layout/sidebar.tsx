@@ -101,7 +101,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       icon: UserPlus,
       label: "Clientes",
       badge: null,
-      permission: "manage_users",
+      permission: "manage_customers",
       excludeRoles: ["super_admin", "technician"], // Solo para admin/manager de tiendas
     },
     {

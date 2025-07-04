@@ -121,7 +121,7 @@ function Router() {
       <Route path="/whatsapp-settings" component={() => <ProtectedRoute component={WhatsAppSettings} permission="manage_settings" />} />
       <Route path="/auto-responses" component={() => <ProtectedRoute component={AutoResponses} permission="manage_settings" />} />
       <Route path="/employees" component={() => <ProtectedRoute component={Employees} permission="manage_users" />} />
-      <Route path="/customers" component={() => <ProtectedRoute component={Customers} permission="manage_users" />} />
+      <Route path="/customers" component={() => <ProtectedRoute component={Customers} permission="manage_customers" />} />
       <Route path="/assignment-rules" component={() => <ProtectedRoute component={AssignmentRules} permission="manage_assignments" />} />
       <Route path="/notifications" component={() => <ProtectedRoute component={Notifications} permission="view_notifications" />} />
       <Route path="/store-management" component={() => <ProtectedRoute component={StoreManagement} permission="manage_settings" />} />

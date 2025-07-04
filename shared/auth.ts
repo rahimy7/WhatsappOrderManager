@@ -75,6 +75,7 @@ export const rolePermissions = {
     'view_dashboard',
     'technician_work',
     'view_assigned_orders',
+    'view_orders',
     'update_order_status',
     'view_customers',
     'view_conversations',
@@ -85,7 +86,9 @@ export const rolePermissions = {
   seller: [
     'view_dashboard',
     'manage_orders',
+    'view_orders',
     'view_customers',
+    'manage_customers',
     'add_customers',
     'view_products',
     'view_conversations',
@@ -96,6 +99,7 @@ export const rolePermissions = {
   delivery: [
     'view_dashboard',
     'view_assigned_orders',
+    'view_orders',
     'update_delivery_status',
     'view_customers',
     'view_conversations',
@@ -116,6 +120,7 @@ export const rolePermissions = {
     'view_dashboard',
     'view_orders',
     'view_customers',
+    'manage_customers',
     'add_customers',
     'view_conversations',
     'send_messages',
@@ -131,7 +136,9 @@ export function hasPermission(userRole: string, permission: string): boolean {
 
 export function getRoleDisplayName(role: string): string {
   const roleNames = {
+    super_admin: 'Super Administrador',
     admin: 'Administrador',
+    store_owner: 'Propietario de Tienda',
     technician: 'Técnico',
     seller: 'Vendedor',
     delivery: 'Repartidor',

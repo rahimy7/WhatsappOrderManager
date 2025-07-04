@@ -901,6 +901,16 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Sistema de autenticación multi-tenant completamente operacional con ambos formatos de datos
   - Credenciales verificadas: alex/123456 con ID de empresa 5 funciona correctamente
   - Elimina inconsistencias entre páginas de login (login.tsx y multi-tenant-login.tsx)
+- July 04, 2025. SISTEMA DE PERMISOS COMPLETAMENTE CORREGIDO Y OPERACIONAL:
+  - Identificadas y corregidas múltiples inconsistencias en el sistema de permisos de 8 roles
+  - Agregado permiso view_orders faltante para roles: seller, technician, delivery, customer_service
+  - Agregado permiso manage_customers para roles seller y customer_service para gestión de clientes
+  - Corregida inconsistencia crítica: sidebar usaba manage_users para clientes, cambiado a manage_customers
+  - Actualizado App.tsx para usar manage_customers consistentemente en ruta /customers
+  - Agregados nombres de roles faltantes: Super Administrador y Propietario de Tienda en getRoleDisplayName
+  - Sistema de permisos ahora es 100% consistente entre sidebar.tsx, App.tsx y shared/auth.ts
+  - Todos los 8 roles (super_admin, admin, store_owner, seller, technician, delivery, support, customer_service) tienen permisos apropiados
+  - Validación estricta de tienda en login funcionando: usuarios solo acceden a su tienda asignada
 
 ## User Preferences
 
