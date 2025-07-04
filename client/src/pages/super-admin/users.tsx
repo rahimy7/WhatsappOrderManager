@@ -434,212 +434,196 @@ export default function SuperAdminUsers() {
               Nuevo Usuario
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Crear Nuevo Usuario</DialogTitle>
-              <DialogDescription>
+          <DialogContent className="max-w-4xl w-full max-h-[95vh] overflow-hidden flex flex-col sm:max-w-[90vw]">
+            <DialogHeader className="flex-shrink-0 pb-4 border-b">
+              <DialogTitle className="text-xl font-semibold">Crear Nuevo Usuario</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
                 Complete los datos para crear un nuevo propietario o administrador de tienda
               </DialogDescription>
             </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleCreateUser)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre Completo</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ej: Juan Carlos Pérez" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            
+            <div className="flex-1 overflow-y-auto py-4 px-1">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleCreateUser)} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Nombre Completo</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Ej: Juan Carlos Pérez" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="usuario@empresa.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Email</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="usuario@empresa.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Teléfono (Opcional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ej: +52 55 1234 5678" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Teléfono (Opcional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Ej: +52 55 1234 5678" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="username"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre de Usuario (Opcional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Se generará automáticamente desde el email" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="username"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Nombre de Usuario (Opcional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Se genera automáticamente desde el email" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contraseña (Opcional)</FormLabel>
-                      <FormControl>
-                        <Input type="password" placeholder="Se generará automáticamente si no se especifica" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Contraseña (Opcional)</FormLabel>
+                          <FormControl>
+                            <Input type="password" placeholder="Se genera automáticamente si no se especifica" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="storeId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tienda Asignada</FormLabel>
-                      <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar tienda" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {stores?.map((store) => (
-                            <SelectItem key={store.id} value={store.id.toString()}>
-                              {store.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="role"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Rol del Usuario</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar rol" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="store_owner">Propietario de Tienda</SelectItem>
+                              <SelectItem value="super_admin">Super Administrador</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="role"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Rol del Usuario</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar rol" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="store_owner">
-                            <div className="flex items-center">
-                              <Crown className="h-4 w-4 mr-2 text-yellow-600" />
-                              Propietario de Tienda
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="store_admin">
-                            <div className="flex items-center">
-                              <Shield className="h-4 w-4 mr-2 text-blue-600" />
-                              Administrador de Tienda
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="storeId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium">Tienda Asignada</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar tienda" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {stores.map((store) => (
+                                <SelectItem key={store.id} value={store.id.toString()}>
+                                  {store.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                <FormField
-                  control={form.control}
-                  name="sendInvitation"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                      <div className="space-y-0.5">
-                        <FormLabel>Enviar Invitación por Email</FormLabel>
-                        <div className="text-sm text-muted-foreground">
-                          Se enviará un email con las credenciales de acceso
-                        </div>
-                      </div>
-                      <FormControl>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={field.value}
-                          onChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="sendInvitation"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="text-sm font-medium">
+                              Enviar invitación por correo electrónico
+                            </FormLabel>
+                            <FormDescription className="text-xs">
+                              Se enviará un correo con las credenciales de acceso
+                            </FormDescription>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
 
-                {form.watch("sendInvitation") && (
-                  <FormField
-                    control={form.control}
-                    name="invitationMessage"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Mensaje Personalizado (Opcional)</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            placeholder="Agrega un mensaje personalizado para la invitación..."
-                            className="resize-none"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                    {form.watch("sendInvitation") && (
+                      <FormField
+                        control={form.control}
+                        name="invitationMessage"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium">Mensaje de Invitación (Opcional)</FormLabel>
+                            <FormControl>
+                              <textarea
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-h-[80px] resize-none"
+                                placeholder="Mensaje personalizado para incluir en la invitación..."
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     )}
-                  />
-                )}
-
-                <div className="flex justify-end space-x-2 pt-4">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => setIsCreateDialogOpen(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={createUserMutation.isPending}
-                  >
-                    {createUserMutation.isPending ? (
-                      <>
-                        <div className="animate-spin h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
-                        Creando...
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="h-4 w-4 mr-2" />
-                        Crear Usuario
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
-            </Form>
+                  </div>
+                </form>
+              </Form>
+            </div>
+            
+            <div className="flex-shrink-0 flex justify-end space-x-2 pt-4 border-t bg-background">
+              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={createUserMutation.isPending}
+                onClick={form.handleSubmit(handleCreateUser)}
+              >
+                {createUserMutation.isPending ? "Creando..." : "Crear Usuario"}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
