@@ -927,6 +927,8 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Actualizada función getRoleDisplayName para reflejar estructura estandarizada
   - Eliminadas duplicaciones de permisos y conflictos entre roles similares
   - Arquitectura multi-tenant optimizada con roles claros y sin redundancias
+  - Usuarios existentes actualizados: alex (tienda 5) migrado de "store_owner" a "store_admin"
+  - Base de datos completamente actualizada en system_users y esquemas tenant separados
 
 ## User Preferences
 
