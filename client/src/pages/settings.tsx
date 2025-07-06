@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -216,6 +217,7 @@ export default function Settings() {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const { data: config = {}, isLoading } = useQuery<any>({
     queryKey: ["/api/settings/whatsapp"],
@@ -339,7 +341,8 @@ export default function Settings() {
   const testConnectionMutation = useMutation({
     mutationFn: async () => {
       setIsTestingConnection(true);
-      return apiRequest("POST", "/api/whatsapp/test-connection");
+      const storeId = user?.storeId || user?.companyId;
+      return apiRequest("POST", "/api/whatsapp/test-connection", { storeId });
     },
     onSuccess: (result: any) => {
       setIsTestingConnection(false);
