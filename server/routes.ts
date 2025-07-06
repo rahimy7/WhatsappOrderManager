@@ -2483,6 +2483,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return; // Skip processing if no store found
             }
 
+            // IMMEDIATE RESPONSE: Send response using the exact same phoneNumberId (like your example)
+            const responseMessage = "¡Hola! Gracias por contactarnos. Estamos procesando tu mensaje.";
+            
+            try {
+              const url = `https://graph.facebook.com/v20.0/${to}/messages`;
+              
+              const data = {
+                messaging_product: "whatsapp",
+                to: from,
+                text: { body: responseMessage }
+              };
+
+              const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${storeConfig.accessToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                await storage.addWhatsAppLog({
+                  type: 'outgoing',
+                  phoneNumber: from,
+                  messageContent: `✅ RESPUESTA ENVIADA desde phoneNumberId: ${to} (Store ${targetStoreId})`,
+                  status: 'sent',
+                  rawData: JSON.stringify({ 
+                    phoneNumberId: to,
+                    storeId: targetStoreId,
+                    messageId: result.messages?.[0]?.id
+                  })
+                });
+              } else {
+                const errorText = await response.text();
+                await storage.addWhatsAppLog({
+                  type: 'error',
+                  phoneNumber: from,
+                  messageContent: `❌ Error enviando respuesta desde ${to}`,
+                  status: 'error',
+                  errorMessage: errorText
+                });
+              }
+            } catch (error) {
+              await storage.addWhatsAppLog({
+                type: 'error',
+                phoneNumber: from,
+                messageContent: `❌ Error enviando respuesta desde ${to}`,
+                status: 'error',
+                errorMessage: error.toString()
+              });
+            }
+
+            // Skip the complex processing and continue to next message
+            continue;
+
           } catch (error) {
             await storage.addWhatsAppLog({
               type: 'error',
