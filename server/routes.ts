@@ -195,6 +195,212 @@ function authenticateToken(req: any, res: any, next: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // WhatsApp Multi-Tenant Connection Test - ENHANCED VERSION (Priority override)
+  app.post("/api/whatsapp/test-connection", async (req, res) => {
+    try {
+      const { storeId } = req.body;
+      
+      console.log("🔍 [ENHANCED] Iniciando prueba de conexión WhatsApp multi-tenant...");
+      console.log("Store ID:", storeId);
+      
+      // Configuraciones de tiendas de prueba
+      const storeConfigs = {
+        4: { name: "RVR SERVICE", phoneNumberId: "667993026397854", number: "+1 555 655 0331" },
+        5: { name: "MASQUESALUD", phoneNumberId: "690329620832620", number: "+1 809 357 6939" }
+      };
+      
+      // Validar store ID
+      if (!storeId || !storeConfigs[storeId as keyof typeof storeConfigs]) {
+        return res.json({
+          success: false,
+          error: "INVALID_STORE",
+          message: "Store ID inválido o no soportado",
+          availableStores: Object.keys(storeConfigs).map(id => ({
+            id: parseInt(id),
+            name: storeConfigs[parseInt(id) as keyof typeof storeConfigs].name
+          }))
+        });
+      }
+      
+      const storeConfig = storeConfigs[storeId as keyof typeof storeConfigs];
+      
+      // Obtener configuración WhatsApp para la tienda específica
+      let config = null;
+      let configSource = "unknown";
+      
+      try {
+        if (storeId) {
+          // Para tiendas específicas, usar storage global con storeId
+          config = await storage.getWhatsAppConfig(storeId);
+          configSource = `global storage for store ${storeId} (${storeConfig.name})`;
+        } else {
+          // Usar storage global sin filtrar por tienda
+          config = await storage.getWhatsAppConfig();
+          configSource = "global storage";
+        }
+        console.log("✅ Configuración obtenida desde:", configSource);
+      } catch (configError) {
+        console.log("❌ Error obteniendo configuración:", configError);
+        return res.json({
+          success: false,
+          error: "CONFIG_ERROR",
+          message: "Error al obtener configuración de WhatsApp",
+          details: {
+            source: configSource,
+            store: storeConfig.name,
+            error: configError instanceof Error ? configError.message : String(configError)
+          }
+        });
+      }
+
+      // Validar configuración existe
+      if (!config) {
+        return res.json({
+          success: false,
+          error: "NO_CONFIG",
+          message: `No se encontró configuración de WhatsApp para ${storeConfig.name}`,
+          details: {
+            source: configSource,
+            storeId: storeId,
+            storeName: storeConfig.name,
+            expectedPhoneNumberId: storeConfig.phoneNumberId
+          }
+        });
+      }
+
+      console.log("📋 Configuración encontrada:", {
+        hasAccessToken: !!config.accessToken,
+        hasPhoneNumberId: !!config.phoneNumberId,
+        hasBusinessAccountId: !!config.businessAccountId,
+        isActive: config.isActive,
+        expectedPhoneNumberId: storeConfig.phoneNumberId,
+        actualPhoneNumberId: config.phoneNumberId
+      });
+
+      // Validar campos obligatorios
+      const missingFields = [];
+      if (!config.accessToken) missingFields.push("accessToken");
+      if (!config.phoneNumberId) missingFields.push("phoneNumberId");
+      if (!config.businessAccountId) missingFields.push("businessAccountId");
+
+      if (missingFields.length > 0) {
+        return res.json({
+          success: false,
+          error: "MISSING_CREDENTIALS",
+          message: `Faltan credenciales obligatorias de WhatsApp para ${storeConfig.name}`,
+          details: {
+            missingFields,
+            source: configSource,
+            configId: config.id,
+            storeName: storeConfig.name
+          }
+        });
+      }
+
+      // Verificar coincidencia de phoneNumberId
+      if (config.phoneNumberId !== storeConfig.phoneNumberId) {
+        console.log("⚠️ PhoneNumberId no coincide con configuración esperada");
+        return res.json({
+          success: false,
+          error: "PHONE_NUMBER_MISMATCH",
+          message: `PhoneNumberId no coincide para ${storeConfig.name}`,
+          details: {
+            expected: storeConfig.phoneNumberId,
+            actual: config.phoneNumberId,
+            storeName: storeConfig.name,
+            source: configSource
+          }
+        });
+      }
+
+      // Probar conexión real con WhatsApp API
+      console.log("🚀 Probando conexión con WhatsApp API...");
+      
+      try {
+        const testResponse = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${config.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log("📡 Respuesta de WhatsApp API:", testResponse.status, testResponse.statusText);
+
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json().catch(() => ({}));
+          console.log("❌ Error de WhatsApp API:", errorData);
+          
+          let errorMessage = "Error de conexión con WhatsApp Business API";
+          if (testResponse.status === 401) {
+            errorMessage = "Token de acceso inválido o expirado";
+          } else if (testResponse.status === 404) {
+            errorMessage = "PhoneNumberId no encontrado";
+          }
+          
+          return res.json({
+            success: false,
+            error: "WHATSAPP_API_ERROR",
+            message: errorMessage,
+            details: {
+              status: testResponse.status,
+              statusText: testResponse.statusText,
+              error: errorData.error || {},
+              phoneNumberId: config.phoneNumberId,
+              source: configSource,
+              storeName: storeConfig.name,
+              whatsappNumber: storeConfig.number
+            }
+          });
+        }
+
+        const responseData = await testResponse.json();
+        console.log("✅ Conexión exitosa con WhatsApp API");
+
+        res.json({
+          success: true,
+          message: `Conexión exitosa con WhatsApp Business API para ${storeConfig.name}`,
+          details: {
+            storeName: storeConfig.name,
+            whatsappNumber: storeConfig.number,
+            phoneNumberId: config.phoneNumberId,
+            businessAccountId: config.businessAccountId,
+            isActive: config.isActive,
+            source: configSource,
+            timestamp: new Date().toISOString(),
+            phoneData: responseData
+          }
+        });
+
+      } catch (fetchError) {
+        console.log("❌ Error de red al conectar con WhatsApp:", fetchError);
+        return res.json({
+          success: false,
+          error: "NETWORK_ERROR",
+          message: `Error de red al conectar con WhatsApp Business API para ${storeConfig.name}`,
+          details: {
+            error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+            source: configSource,
+            storeName: storeConfig.name,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+    } catch (error) {
+      console.log("❌ Error general en prueba de conexión:", error);
+      res.status(500).json({
+        success: false,
+        error: "GENERAL_ERROR",
+        message: "Error interno del servidor",
+        details: {
+          error: error instanceof Error ? error.message : String(error),
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+  });
+
   // Rutas de autenticación
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -1216,67 +1422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Test WhatsApp Connection
-  app.post("/api/whatsapp/test-connection", async (req, res) => {
-    try {
-      const config = await storage.getWhatsAppConfig();
-      
-      if (!config?.accessToken || !config?.phoneNumberId) {
-        return res.json({ 
-          success: false, 
-          message: "Configuración incompleta. Falta token o Phone Number ID." 
-        });
-      }
 
-      // Test API call to verify token permissions
-      const testResponse = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${config.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (testResponse.ok) {
-        await storage.addWhatsAppLog({
-          type: 'success',
-          messageContent: 'Prueba de conexión exitosa',
-          rawData: JSON.stringify({ status: 'connected', timestamp: new Date().toISOString() })
-        });
-        
-        res.json({ 
-          success: true, 
-          message: "Conexión exitosa. Token y permisos correctos." 
-        });
-      } else {
-        const errorData = await testResponse.text();
-        await storage.addWhatsAppLog({
-          type: 'error',
-          messageContent: 'Error en prueba de conexión',
-          errorMessage: errorData,
-          rawData: JSON.stringify({ status: testResponse.status, response: errorData })
-        });
-        
-        res.json({ 
-          success: false, 
-          message: `Error de conexión: ${testResponse.status}. Verifica token y permisos.` 
-        });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      await storage.addWhatsAppLog({
-        type: 'error',
-        messageContent: 'Error en prueba de conexión',
-        errorMessage: errorMessage,
-        rawData: JSON.stringify({ error: errorMessage, timestamp: new Date().toISOString() })
-      });
-      
-      res.json({ 
-        success: false, 
-        message: `Error: ${errorMessage}` 
-      });
-    }
-  });
 
   // WhatsApp Connection Status
   app.get("/api/whatsapp/status", async (req, res) => {
@@ -3985,34 +4131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // WhatsApp Connection Test
-  app.post("/api/whatsapp/test-connection", async (req, res) => {
-    try {
-      const config = await storage.getWhatsAppConfig();
-      
-      if (!config.metaAppId || !config.whatsappToken) {
-        return res.json({
-          success: false,
-          message: "WhatsApp credentials not configured"
-        });
-      }
 
-      // In a real implementation, this would make an actual API call to WhatsApp
-      // For now, simulate the test
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API delay
-      
-      res.json({
-        success: true,
-        message: "Conexión exitosa con WhatsApp Business API",
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        success: false, 
-        message: "Error al probar la conexión con WhatsApp Business API" 
-      });
-    }
-  });
 
   // WhatsApp API simulation for sending messages
   app.post("/api/whatsapp/send", async (req, res) => {

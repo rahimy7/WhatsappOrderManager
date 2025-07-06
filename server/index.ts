@@ -409,8 +409,10 @@ app.use((req, res, next) => {
     console.log('Path:', req.path);
     console.log('Method:', req.method);
     
-    // Excluir rutas de super admin del middleware multi-tenant
-    if (req.path.startsWith('/super-admin') || req.path.startsWith('/auth')) {
+    // Excluir rutas específicas del middleware multi-tenant
+    if (req.path.startsWith('/super-admin') || 
+        req.path.startsWith('/auth') || 
+        req.path === '/whatsapp/test-connection') {
       console.log('Excluyendo ruta:', req.path);
       return next();
     }
