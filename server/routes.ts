@@ -112,6 +112,19 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string, storeId
       return false;
     }
 
+    // Log which phoneNumberId is being used for sending
+    await storage.addWhatsAppLog({
+      type: 'debug',
+      phoneNumber: phoneNumber,
+      messageContent: `Enviando mensaje usando phoneNumberId: ${config.phoneNumberId} (Store ID: ${storeId})`,
+      status: 'sending',
+      rawData: JSON.stringify({ 
+        storeId: storeId,
+        phoneNumberId: config.phoneNumberId,
+        messagePreview: message.substring(0, 50)
+      })
+    });
+
     const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
     
     const data = {
