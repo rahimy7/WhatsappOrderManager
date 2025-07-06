@@ -47,7 +47,7 @@ function formatCurrency(amount: number): string {
 }
 
 // Function to process auto-response by trigger
-async function processAutoResponse(trigger: string, phoneNumber: string) {
+async function processAutoResponse(trigger: string, phoneNumber: string, storeId?: number | null, phoneNumberId?: string | null) {
   try {
     const autoResponses = await storage.getAllAutoResponses();
     const responses = autoResponses.filter(response => response.trigger === trigger && response.isActive);
@@ -84,11 +84,11 @@ async function processAutoResponse(trigger: string, phoneNumber: string) {
         } catch (error) {
           console.error('Error parsing menu options:', error);
           // Fallback to simple text message
-          await sendWhatsAppMessage(phoneNumber, response.messageText);
+          await sendWhatsAppMessageSmart(phoneNumber, response.messageText, storeId, phoneNumberId);
         }
       } else {
         // Send simple text message
-        await sendWhatsAppMessage(phoneNumber, response.messageText);
+        await sendWhatsAppMessageSmart(phoneNumber, response.messageText, storeId, phoneNumberId);
       }
       
       // Log the auto-response
@@ -154,6 +154,83 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string, storeId
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     return false;
+  }
+}
+
+// Send WhatsApp message using specific phoneNumberId (for responses to use the same number that received the message)
+async function sendWhatsAppMessageByPhoneId(phoneNumber: string, message: string, targetPhoneNumberId: string) {
+  try {
+    // Find the store configuration that has this specific phoneNumberId
+    const allStores = await storage.getAllStores();
+    let config: any = null;
+    let storeId: number | null = null;
+
+    for (const store of allStores) {
+      const storeConfig = await storage.getWhatsAppConfig(store.id);
+      if (storeConfig && storeConfig.phoneNumberId === targetPhoneNumberId) {
+        config = storeConfig;
+        storeId = store.id;
+        break;
+      }
+    }
+    
+    if (!config) {
+      console.error(`WhatsApp configuration not found for phoneNumberId: ${targetPhoneNumberId}`);
+      return false;
+    }
+
+    // Log which phoneNumberId is being used for sending
+    await storage.addWhatsAppLog({
+      type: 'debug',
+      phoneNumber: phoneNumber,
+      messageContent: `RESPUESTA usando mismo phoneNumberId: ${targetPhoneNumberId} (Store ID: ${storeId})`,
+      status: 'sending',
+      rawData: JSON.stringify({ 
+        storeId: storeId,
+        phoneNumberId: targetPhoneNumberId,
+        messagePreview: message.substring(0, 50),
+        responseType: 'same_number'
+      })
+    });
+
+    const url = `https://graph.facebook.com/v20.0/${targetPhoneNumberId}/messages`;
+    
+    const data = {
+      messaging_product: "whatsapp",
+      to: phoneNumber,
+      text: { body: message }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('WhatsApp API error:', errorText);
+      return false;
+    }
+
+    const result = await response.json();
+
+    return true;
+  } catch (error) {
+    console.error('Error sending WhatsApp message by phone ID:', error);
+    return false;
+  }
+}
+
+// Smart WhatsApp sender: uses specific phoneNumberId if available, otherwise uses storeId
+async function sendWhatsAppMessageSmart(phoneNumber: string, message: string, storeId?: number, phoneNumberId?: string) {
+  if (phoneNumberId) {
+    return await sendWhatsAppMessageByPhoneId(phoneNumber, message, phoneNumberId);
+  } else {
+    return await sendWhatsAppMessage(phoneNumber, message, storeId);
   }
 }
 
@@ -1610,7 +1687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Function to process customer messages and responses
-  async function processCustomerMessage(customer: any, conversation: any, message: any, from: string, isNewCustomer: boolean = false, storeId?: number) {
+  async function processCustomerMessage(customer: any, conversation: any, message: any, from: string, isNewCustomer: boolean = false, storeId?: number, phoneNumberId?: string) {
     try {
       const text = message.text?.body || '';
 
@@ -1653,7 +1730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
         });
 
-        await processWebCatalogOrder(customer, from, text);
+        await processWebCatalogOrder(customer, from, text, storeId, phoneNumberId);
         return; // Stop processing here - order handled
       }
 
@@ -1680,10 +1757,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // HANDLE DIFFERENT CONVERSATION FLOWS BASED ON TYPE
       if (conversationType === 'tracking') {
-        await handleTrackingConversation(customer, from, text, storeId);
+        await handleTrackingConversation(customer, from, text, storeId, phoneNumberId);
         return;
       } else if (conversationType === 'support') {
-        await handleSupportConversation(customer, from, text, storeId);
+        await handleSupportConversation(customer, from, text, storeId, phoneNumberId);
         return;
       }
       
@@ -1745,11 +1822,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 await sendWhatsAppInteractiveMessage(from, interactiveMessage);
               } catch (error) {
                 // If menu parsing fails, send text message
-                await sendWhatsAppMessage(from, response.messageText, storeId);
+                await sendWhatsAppMessageSmart(from, response.messageText, storeId, phoneNumberId);
               }
             } else {
               // Send text message
-              await sendWhatsAppMessage(from, response.messageText, storeId);
+              await sendWhatsAppMessageSmart(from, response.messageText, storeId, phoneNumberId);
             }
             
             responseFound = true;
@@ -1767,7 +1844,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         // Use configured welcome auto-response directly with interactive buttons
-        const success = await processAutoResponse('welcome', from);
+        const success = await processAutoResponse('welcome', from, storeId, phoneNumberId);
         if (!success) {
           await storage.addWhatsAppLog({
             type: 'warning',
@@ -1789,7 +1866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'processing'
         });
         
-        const success = await processAutoResponse('welcome', from);
+        const success = await processAutoResponse('welcome', from, storeId, phoneNumberId);
         if (!success) {
           await storage.addWhatsAppLog({
             type: 'warning',
@@ -1836,7 +1913,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Function to process orders from web catalog
-  async function processWebCatalogOrder(customer: any, phoneNumber: string, orderText: string) {
+  async function processWebCatalogOrder(customer: any, phoneNumber: string, orderText: string, storeId?: number, phoneNumberId?: string) {
     try {
       await storage.addWhatsAppLog({
         type: 'info',
@@ -2050,7 +2127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ).join('\n\n');
       }
 
-      await sendWhatsAppMessage(phoneNumber, confirmationMessage);
+      await sendWhatsAppMessageSmart(phoneNumber, confirmationMessage, storeId, phoneNumberId);
 
       // Determine next step based on customer registration status
       const isNewCustomer = customer.name.startsWith('Cliente ');
@@ -2070,7 +2147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Send next data collection message using auto-responses
-      await processAutoResponse(nextTrigger, phoneNumber);
+      await processAutoResponse(nextTrigger, phoneNumber, storeId, phoneNumberId);
 
       await storage.addWhatsAppLog({
         type: 'success',
@@ -2163,7 +2240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Helper function for tracking conversations
-  async function handleTrackingConversation(customer: any, phoneNumber: string, messageText: string, storeId?: number) {
+  async function handleTrackingConversation(customer: any, phoneNumber: string, messageText: string, storeId?: number, phoneNumberId?: string) {
     try {
       await storage.addWhatsAppLog({
         type: 'debug',
@@ -2185,7 +2262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       if (activeOrders.length === 0) {
-        await sendWhatsAppMessage(phoneNumber, "No tienes pedidos activos en este momento. Te gustaria hacer un nuevo pedido?", storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, "No tienes pedidos activos en este momento. Te gustaria hacer un nuevo pedido?", storeId, phoneNumberId);
         return;
       }
 
@@ -2206,18 +2283,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           statusMessage += `\n`;
         }
         statusMessage += `Para más información o cambios, escribe de nuevo.`;
-        await sendWhatsAppMessage(phoneNumber, statusMessage, storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, statusMessage, storeId, phoneNumberId);
         return;
       }
       
       // Option 2: Contact Support for modifications
       if (lowerText.includes('editar') || lowerText.includes('modificar') || lowerText.includes('cambiar')) {
-        await sendWhatsAppMessage(phoneNumber, 
+        await sendWhatsAppMessageSmart(phoneNumber, 
           `🔧 *Modificaciones de Pedido*\n\n` +
           `Para modificaciones o cancelaciones, contacta directamente:\n\n` +
           `📞 *Teléfono:* +52 55 1234 5678\n` +
           `🕒 *Horario:* Lun-Vie 8AM-6PM, Sáb 9AM-2PM\n\n` +
-          `⚠️ *Importante:* Las modificaciones deben realizarse antes de que el técnico esté en camino.`, storeId
+          `⚠️ *Importante:* Las modificaciones deben realizarse antes de que el técnico esté en camino.`, storeId, phoneNumberId
         );
         return;
       }
@@ -2264,14 +2341,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     } catch (error) {
       console.error('Error in handleTrackingConversation:', error);
-      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error procesando tu consulta. ¿Puedes intentar de nuevo?", storeId);
+      await sendWhatsAppMessageSmart(phoneNumber, "Disculpa, hubo un error procesando tu consulta. ¿Puedes intentar de nuevo?", storeId, phoneNumberId);
     }
   }
 
 
 
   // Helper function for support conversations
-  async function handleSupportConversation(customer: any, phoneNumber: string, messageText: string, storeId?: number) {
+  async function handleSupportConversation(customer: any, phoneNumber: string, messageText: string, storeId?: number, phoneNumberId?: string) {
     try {
       await storage.addWhatsAppLog({
         type: 'debug',
@@ -2293,7 +2370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ).slice(0, 5); // Last 5 completed orders
 
       if (recentOrders.length === 0) {
-        await sendWhatsAppMessage(phoneNumber, "No tienes servicios completados para consultar. ¿Necesitas información sobre nuestros servicios?", storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, "No tienes servicios completados para consultar. ¿Necesitas información sobre nuestros servicios?", storeId, phoneNumberId);
         return;
       }
 
@@ -2308,13 +2385,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           warrantyMessage += `  Garantía: 6 meses en servicios, 1 año en productos\n\n`;
         }
         warrantyMessage += `Para hacer válida tu garantía, contacta nuestro soporte técnico.`;
-        await sendWhatsAppMessage(phoneNumber, warrantyMessage, storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, warrantyMessage, storeId, phoneNumberId);
       } else if (lowerText.includes('tecnico') || lowerText.includes('técnico') || lowerText.includes('problema')) {
-        await sendWhatsAppMessage(phoneNumber, `🔧 *Soporte Técnico*\n\nNuestro equipo técnico está disponible para ayudarte. Por favor describe tu problema y mencionael número de pedido: ${recentOrders[0]?.orderNumber || 'N/A'}`, storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, `🔧 *Soporte Técnico*\n\nNuestro equipo técnico está disponible para ayudarte. Por favor describe tu problema y mencionael número de pedido: ${recentOrders[0]?.orderNumber || 'N/A'}`, storeId, phoneNumberId);
       } else if (lowerText.includes('factura') || lowerText.includes('recibo') || lowerText.includes('invoice')) {
-        await sendWhatsAppMessage(phoneNumber, `📄 *Facturación*\n\nPodemos enviarte una copia de tu factura. Menciona el número de pedido que necesitas: ${recentOrders[0]?.orderNumber || 'Consulta disponible'}`, storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, `📄 *Facturación*\n\nPodemos enviarte una copia de tu factura. Menciona el número de pedido que necesitas: ${recentOrders[0]?.orderNumber || 'Consulta disponible'}`, storeId, phoneNumberId);
       } else if (lowerText.includes('opinion') || lowerText.includes('opinión') || lowerText.includes('feedback')) {
-        await sendWhatsAppMessage(phoneNumber, `⭐ *Tu Opinión es Importante*\n\n¿Cómo calificarías nuestro servicio del 1 al 5?\n\nEscribe cualquier comentario sobre tu experiencia con nosotros.`, storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, `⭐ *Tu Opinión es Importante*\n\n¿Cómo calificarías nuestro servicio del 1 al 5?\n\nEscribe cualquier comentario sobre tu experiencia con nosotros.`, storeId, phoneNumberId);
       } else {
         // Show support menu
         let supportMessage = `🎧 *Menú de Soporte*\n\n`;
@@ -2324,12 +2401,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         supportMessage += `• Escribe "técnico" para soporte técnico\n`;
         supportMessage += `• Escribe "factura" para solicitar factura\n`;
         supportMessage += `• Escribe "opinión" para enviar feedback\n`;
-        await sendWhatsAppMessage(phoneNumber, supportMessage, storeId);
+        await sendWhatsAppMessageSmart(phoneNumber, supportMessage, storeId, phoneNumberId);
       }
 
     } catch (error) {
       console.error('Error in handleSupportConversation:', error);
-      await sendWhatsAppMessage(phoneNumber, "Disculpa, hubo un error procesando tu consulta de soporte. ¿Puedes intentar de nuevo?", storeId);
+      await sendWhatsAppMessageSmart(phoneNumber, "Disculpa, hubo un error procesando tu consulta de soporte. ¿Puedes intentar de nuevo?", storeId, phoneNumberId);
     }
   }
 
@@ -2349,6 +2426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // STEP 1: Identify which store should handle this message based on phone number
           let targetStoreId: number | null = null;
           let storeConfig: any = null;
+          let targetPhoneNumberId: string | null = to; // Keep the exact phoneNumberId that received the message
 
           // Query all active WhatsApp configurations to find the matching store
           try {
@@ -2592,13 +2670,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Handle interactive messages (buttons) BEFORE text processing
           if (messageType === 'interactive') {
-            await handleInteractiveMessage(customer, conversation, message.interactive, from);
+            await handleInteractiveMessage(customer, conversation, message.interactive, from, targetStoreId, targetPhoneNumberId);
             return; // Don't process further as text message
           }
 
           // Handle location messages
           if (messageType === 'location') {
-            await handleLocationMessage(customer, message.location, from);
+            await handleLocationMessage(customer, message.location, from, targetPhoneNumberId);
             return; // Don't process further as text message
           }
 
@@ -2606,12 +2684,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const activeRegistrationFlow = await storage.getRegistrationFlow(from);
           
           if (activeRegistrationFlow) {
-            await handleRegistrationFlow(from, messageText, activeRegistrationFlow);
+            await handleRegistrationFlow(from, messageText, activeRegistrationFlow, targetPhoneNumberId);
             return; // Don't process as regular conversation
           }
 
           // Process customer message and respond (for text messages)
-          await processCustomerMessage(customer, conversation, message, from, isNewCustomer, targetStoreId);
+          await processCustomerMessage(customer, conversation, message, from, isNewCustomer, targetStoreId, targetPhoneNumberId);
 
           await storage.addWhatsAppLog({
             type: 'info',
@@ -2960,7 +3038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }
 
-  async function handleInteractiveMessage(customer: any, conversation: any, interactive: any, phoneNumber: string) {
+  async function handleInteractiveMessage(customer: any, conversation: any, interactive: any, phoneNumber: string, targetStoreId?: number | null, targetPhoneNumberId?: string | null) {
     if (interactive.type === 'list_reply') {
       const selectedId = interactive.list_reply.id;
       
@@ -2985,26 +3063,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Handle menu buttons from welcome message and auto-responses
       if (buttonId === 'products' || buttonId === 'show_products') {
-        await processAutoResponse('product_inquiry', phoneNumber);
+        await processAutoResponse('product_inquiry', phoneNumber, targetStoreId, targetPhoneNumberId);
       } else if (buttonId === 'services' || buttonId === 'show_services') {
-        await processAutoResponse('service_inquiry', phoneNumber);
+        await processAutoResponse('service_inquiry', phoneNumber, targetStoreId, targetPhoneNumberId);
       } else if (buttonId === 'help' || buttonId === 'show_help') {
-        await processAutoResponse('help', phoneNumber);
+        await processAutoResponse('help', phoneNumber, targetStoreId, targetPhoneNumberId);
       } else if (buttonId === 'menu' || buttonId === 'main_menu') {
-        await processAutoResponse('menu', phoneNumber);
+        await processAutoResponse('menu', phoneNumber, targetStoreId, targetPhoneNumberId);
       } else if (buttonId === 'product_12k' || buttonId === 'product_18k' || buttonId === 'product_24k') {
         // Handle specific product selections - redirect to order flow
-        await sendWhatsAppMessage(phoneNumber, 
-          "Para realizar un pedido, por favor escribe *pedido* o selecciona el producto específico desde el menú."
+        await sendWhatsAppMessageSmart(phoneNumber, 
+          "Para realizar un pedido, por favor escribe *pedido* o selecciona el producto específico desde el menú.",
+          targetStoreId, targetPhoneNumberId
         );
       } else if (buttonId === 'service_install' || buttonId === 'service_maintenance' || buttonId === 'service_repair') {
         // Handle specific service selections - redirect to order flow
-        await sendWhatsAppMessage(phoneNumber, 
-          "Para solicitar un servicio, por favor escribe *servicio* o contacta con un técnico."
+        await sendWhatsAppMessageSmart(phoneNumber, 
+          "Para solicitar un servicio, por favor escribe *servicio* o contacta con un técnico.",
+          targetStoreId, targetPhoneNumberId
         );
       } else if (buttonId === 'order' || buttonId === 'start_order') {
         // Start order process - redirect to menu or product selection
-        await processAutoResponse('menu', phoneNumber);
+        await processAutoResponse('menu', phoneNumber, targetStoreId, targetPhoneNumberId);
       } else if (buttonId.startsWith('quantity_')) {
         const [, productId, quantity] = buttonId.split('_');
         await handleQuantitySelection(customer, parseInt(productId), parseInt(quantity), phoneNumber);
