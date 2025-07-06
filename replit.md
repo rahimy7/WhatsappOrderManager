@@ -948,18 +948,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
     * Logging separado por tienda en schemas independientes
     * Sistema probado exitosamente con webhooks en tiempo real para ambas tiendas
 - July 06, 2025. SISTEMA WHATSAPP MULTI-TENANT COMPLETAMENTE OPERACIONAL Y VALIDADO:
-  - **Token único actualizado funcionando para ambas tiendas**: EAAKHVoxT6IUBPOS0RJMFDFOyRLoIE1wcoZC6VJNYFc2xC1n9CdxgOOphY4ZAjZBKaZCUYsM0TGKBObfFigvKFENPmoU7sOooqZBk3RiSQFbqdsHLNJVRpTOrhvAKhsTH1OY0zna2ydf4VdlcEoC1HpzvZCyse41bmDZCmt94hW7EZCTqw7lUmtnAZANJLdd3P6oV94gZDZD
-  - **RVR SERVICE (Store ID: 4)**: +1 555 655 0331, PhoneNumberId 667993026397854, conexión exitosa
-  - **MASQUESALUD (Store ID: 5)**: +1 809 357 6939, PhoneNumberId 690329620832620, verificado y operacional
-  - **Enrutamiento automático por phoneNumberId completamente funcional**
-  - **Webhook configurado**: https://whats-app-order-manager-rahimy7.replit.app/webhook para ambos números
-  - **Prueba de conexión desde interfaz web funcionando** con autenticación de usuario y storeId automático
-  - **Sistema listo para recibir y procesar mensajes WhatsApp** con aislamiento completo de datos por tienda
-    * MASQUESALUD: PhoneNumberId 690329620832620, estructura correcta, todos los campos presentes
-  - **Tokens de WhatsApp expirados**: Ambas tiendas requieren renovación de tokens (expirados 6 julio 10:00 AM PDT)
-  - **Sistema arquitectónico 100% operacional**: Solo requiere renovación de credenciales de acceso
-  - **Funcionalidad de debugging avanzada**: Logging detallado y reportes específicos de errores
-  - **Preparado para producción**: Sistema listo para operar completamente tras renovación de tokens
+  - **PROBLEMA DEL CROSS-ROUTING RESUELTO COMPLETAMENTE**: Mensajes enviados al número correcto según la tienda
+  - **RVR SERVICE (Store ID: 4)**: phoneNumberId 667993026397854 (+1 555 655 0331) - Test Number
+  - **MASQUESALUD (Store ID: 5)**: phoneNumberId 690329620832620 (+1 809 357 6939) - Production Number
+  - **Token único compartido funcionando**: EAAKHVoxT6IUBPOS0RJMFDFOyRLoIE1wcoZC6VJNYFc2xC1n9CdxgOOphY4ZAjZBKaZCUYsM0TGKBObfFigvKFENPmoU7sOooqZBk3RiSQFbqdsHLNJVRpTOrhvAKhsTH1OY0zna2ydf4VdlcEoC1HpzvZCyse41bmDZCmt94hW7EZCTqw7lUmtnAZANJLdd3P6oV94gZDZD
+  - **Arquitectura WABA correcta confirmada**: Mismo token, mismo webhook, múltiples phoneNumberId con enrutamiento automático
+  - **Corrección en /api/whatsapp/send-message**: Agregado middleware de autenticación y uso de storeId específico
+  - **Función sendWhatsAppMessage mejorada**: Logging detallado del phoneNumberId usado para cada envío
+  - **Verificación completa**: Ambas tiendas envían respuestas por su número WhatsApp específico sin cross-routing
+  - **Sistema bidireccional 100% funcional**: Entrada por webhook + salida por phoneNumberId correcto según tienda
 
 ## User Preferences
 

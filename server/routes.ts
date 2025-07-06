@@ -4059,8 +4059,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+
   // WhatsApp send message API
-  app.post("/api/whatsapp/send-message", async (req, res) => {
+  app.post("/api/whatsapp/send-message", authenticateToken, tenantMiddleware(), async (req: any, res) => {
     try {
       const { to, message, type = "text" } = req.body;
       
@@ -4068,11 +4069,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Número de teléfono y mensaje son requeridos" });
       }
 
-      const config = await storage.getWhatsAppConfig();
+      // Get storeId from authenticated user
+      const storeId = req.user?.storeId;
+      
+      if (!storeId) {
+        return res.status(400).json({ error: "Usuario no asociado a una tienda" });
+      }
+
+      // Use tenant storage to get the correct WhatsApp config for this store
+      const tenantStorage = req.tenantStorage || storage;
+      const config = await tenantStorage.getWhatsAppConfig();
       
       if (!config || !config.accessToken || !config.phoneNumberId) {
         return res.status(400).json({ error: "Configuración de WhatsApp incompleta" });
       }
+
+      // Log which phoneNumberId and store is being used
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: to,
+        messageContent: `API Envío: usando phoneNumberId ${config.phoneNumberId} (Store ID: ${storeId})`,
+        status: 'sending',
+        rawData: JSON.stringify({ 
+          storeId: storeId,
+          phoneNumberId: config.phoneNumberId,
+          to: to,
+          endpoint: '/api/whatsapp/send-message'
+        })
+      });
 
       const messageData = {
         messaging_product: "whatsapp",
