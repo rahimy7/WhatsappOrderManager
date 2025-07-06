@@ -2424,10 +2424,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const message of value.messages) {
           const from = message.from;
           // Extract phone_number_id from the webhook structure correctly
-          const to = value.metadata?.phone_number_id || value.phone_number_id || (value.contacts && value.contacts.length > 0 ? value.contacts[0].wa_id : null);
+          const to = value.metadata?.phone_number_id;
           const messageId = message.id;
           const timestamp = message.timestamp;
           const messageType = message.type;
+
+          // Log the extracted phone_number_id for debugging
+          await storage.addWhatsAppLog({
+            type: 'debug',
+            phoneNumber: from,
+            messageContent: `Extrayendo phoneNumberId del webhook: ${to}`,
+            status: 'processing',
+            rawData: JSON.stringify({ 
+              extractedPhoneNumberId: to,
+              hasMetadata: !!value.metadata,
+              metadataKeys: value.metadata ? Object.keys(value.metadata) : []
+            })
+          });
 
           // STEP 1: Identify which store should handle this message based on phone number
           let targetStoreId: number | null = null;
