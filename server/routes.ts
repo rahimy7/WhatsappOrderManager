@@ -54,11 +54,16 @@ async function processAutoResponse(trigger: string, phoneNumber: string, storeId
     
     if (responses.length > 0) {
       const response = responses[0]; // Use first active response for the trigger
+      console.log('🔍 RESPONSE OBJECT FULL:', JSON.stringify(response, null, 2));
       
       if (response.menuOptions && response.menuType && response.menuType !== 'text_only') {
         // Send interactive message with menu options
+        console.log('🔍 INTERACTIVE CHECK - MenuOptions exists:', !!response.menuOptions);
+        console.log('🔍 INTERACTIVE CHECK - MenuType:', response.menuType);
+        console.log('🔍 INTERACTIVE CHECK - MenuOptions raw:', response.menuOptions);
         try {
           const menuOptions = JSON.parse(response.menuOptions);
+          console.log('✅ JSON PARSED - MenuOptions:', menuOptions);
           const interactiveMessage = {
             messaging_product: "whatsapp",
             to: phoneNumber,
@@ -72,7 +77,7 @@ async function processAutoResponse(trigger: string, phoneNumber: string, storeId
                 buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
                   type: "reply",
                   reply: {
-                    id: option.value || `option_${index}`,
+                    id: option.action || option.value || `option_${index}`,
                     title: option.label.substring(0, 20) // WhatsApp button limit
                   }
                 }))
@@ -80,7 +85,7 @@ async function processAutoResponse(trigger: string, phoneNumber: string, storeId
             }
           };
           
-          await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage);
+          await sendWhatsAppInteractiveMessage(phoneNumber, interactiveMessage, storeId || undefined);
         } catch (error) {
           console.error('Error parsing menu options:', error);
           // Fallback to simple text message
@@ -236,12 +241,16 @@ async function sendWhatsAppMessageSmart(phoneNumber: string, message: string, st
 
 async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any, storeId?: number) {
   try {
+    console.log('📱 SEND INTERACTIVE - StoreId:', storeId, 'PhoneNumber:', phoneNumber);
     const config = await storage.getWhatsAppConfig(storeId);
     
     if (!config) {
-      console.error('WhatsApp configuration not found');
+      console.error('❌ WhatsApp configuration not found for storeId:', storeId);
       return false;
     }
+
+    console.log('✅ Config found - PhoneNumberId:', config.phoneNumberId);
+    console.log('📝 Interactive message structure:', JSON.stringify(message, null, 2));
 
     const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
 
@@ -1695,6 +1704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   async function processCustomerMessage(customer: any, conversation: any, message: any, from: string, isNewCustomer: boolean = false, storeId?: number, phoneNumberId?: string) {
     try {
       const text = message.text?.body || '';
+      console.log('🔀 PROCESSADA CUSTOMERMESSAGE - Mensaje:', text, 'storeId:', storeId);
 
       // PRIORITY 1: Check if message is a structured order from web catalog
       await storage.addWhatsAppLog({
@@ -1787,9 +1797,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Find matching trigger
       let matchedTrigger = null;
+      console.log('🔍 TRIGGER SEARCH - Text received:', text.toLowerCase());
+      console.log('🔍 TRIGGER SEARCH - Available triggers:', triggers.map(t => t.trigger));
+      
       for (const triggerGroup of triggers) {
         if (triggerGroup.keywords.some(keyword => text.toLowerCase().includes(keyword))) {
           matchedTrigger = triggerGroup.trigger;
+          console.log('✅ TRIGGER MATCHED:', matchedTrigger, 'from keywords:', triggerGroup.keywords);
           break;
         }
       }
@@ -1798,11 +1812,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const responses = autoResponses.filter(response => response.trigger === matchedTrigger && response.isActive);
         
         if (responses.length > 0) {
-          for (const response of responses) {
-            if (response.menuOptions && response.menuType && response.menuType !== 'text_only') {
+          for (const autoResponse of responses) {
+            if (autoResponse.menuOptions && autoResponse.menuType && autoResponse.menuType !== 'text_only') {
               // Send interactive message with menu options
+              console.log('🔍 SEGUNDA RUTA - MenuOptions detectadas:', autoResponse.menuOptions);
+              console.log('🔍 SEGUNDA RUTA - MenuType:', autoResponse.menuType);
               try {
-                const menuOptions = JSON.parse(response.menuOptions);
+                const menuOptions = JSON.parse(autoResponse.menuOptions);
+                console.log('✅ SEGUNDA RUTA - JSON parseado:', menuOptions);
                 const interactiveMessage = {
                   messaging_product: "whatsapp",
                   to: from,
@@ -1810,13 +1827,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   interactive: {
                     type: "button",
                     body: {
-                      text: response.messageText
+                      text: autoResponse.messageText
                     },
                     action: {
                       buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
                         type: "reply",
                         reply: {
-                          id: option.value || `option_${index}`,
+                          id: option.action || option.value || `option_${index}`,
                           title: option.label.substring(0, 20) // WhatsApp button limit
                         }
                       }))
@@ -1824,14 +1841,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                 };
                 
-                await sendWhatsAppInteractiveMessage(from, interactiveMessage);
+                console.log('🚀 SEGUNDA RUTA - Enviando mensaje interactivo con storeId:', storeId);
+                
+                // Use multi-tenant WhatsApp API directly
+                const config = await storage.getWhatsAppConfig(storeId);
+                if (!config) {
+                  console.error('❌ WhatsApp configuration not found for storeId:', storeId);
+                  throw new Error('WhatsApp configuration missing');
+                }
+                
+                const apiResponse = await fetch(`https://graph.facebook.com/v18.0/${config.phoneNumberId}/messages`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${config.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(interactiveMessage)
+                });
+                
+                const result = await apiResponse.json();
+                if (!apiResponse.ok) {
+                  console.error('❌ SEGUNDA RUTA - WhatsApp API Error:', result);
+                  throw new Error(`WhatsApp API error: ${result.error?.message || 'Unknown error'}`);
+                }
+                
+                console.log('✅ SEGUNDA RUTA - Mensaje interactivo enviado:', result.messages?.[0]?.id);
               } catch (error) {
                 // If menu parsing fails, send text message
-                await sendWhatsAppMessageSmart(from, response.messageText, storeId, phoneNumberId);
+                await sendWhatsAppMessageSmart(from, autoResponse.messageText, storeId, phoneNumberId);
               }
             } else {
               // Send text message
-              await sendWhatsAppMessageSmart(from, response.messageText, storeId, phoneNumberId);
+              await sendWhatsAppMessageSmart(from, autoResponse.messageText, storeId, phoneNumberId);
             }
             
             responseFound = true;
@@ -2419,15 +2460,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Multi-tenant WhatsApp message processing function
   async function processWhatsAppMessage(value: any) {
+    console.log('🎯 PROCESSWHATSAPPMESSAGE - Iniciando procesamiento');
     try {
       if (value.messages && value.messages.length > 0) {
+        console.log('📧 PROCESSWHATSAPPMESSAGE - Mensajes encontrados:', value.messages.length);
         for (const message of value.messages) {
-          const from = message.from;
-          // Extract phone_number_id from the webhook structure correctly
-          const to = value.metadata?.phone_number_id;
-          const messageId = message.id;
-          const timestamp = message.timestamp;
-          const messageType = message.type;
+          try {
+            const from = message.from;
+            console.log('📱 MESSAGE PROCESSING - Processing message from:', from);
+            // Extract phone_number_id from the webhook structure correctly
+            const to = value.metadata?.phone_number_id;
+            console.log('📱 MESSAGE PROCESSING - phoneNumberId extracted:', to);
+            const messageId = message.id;
+            const timestamp = message.timestamp;
+            const messageType = message.type;
 
           // Log the extracted phone_number_id for debugging
           await storage.addWhatsAppLog({
@@ -2445,6 +2491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // STEP 1: Identify which store should handle this message based on phone number
           let targetStoreId: number | null = null;
           let storeConfig: any = null;
+          console.log('🏪 STORE IDENTIFICATION - phoneNumberId from webhook:', to);
           let targetPhoneNumberId: string | null = to; // Keep the exact phoneNumberId that received the message
 
           // Query all active WhatsApp configurations to find the matching store
@@ -2472,6 +2519,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               })
             });
 
+            console.log('🎯 STORE ROUTING COMPLETED - StoreId:', targetStoreId, 'Config found:', !!storeConfig);
+
             if (!targetStoreId) {
               await storage.addWhatsAppLog({
                 type: 'warning',
@@ -2496,13 +2545,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
               await storage.addWhatsAppLog({
                 type: 'system',
                 phoneNumber: from,
+                messageContent: `🔧 FLOW: welcomeResponse obtenido`,
+                status: 'info',
+                rawData: JSON.stringify({ 
+                  exists: !!welcomeResponse,
+                  responseId: welcomeResponse?.id,
+                  isActive: welcomeResponse?.isActive,
+                  hasMenuOptions: !!welcomeResponse?.menuOptions,
+                  menuType: welcomeResponse?.menuType,
+                  messageText: welcomeResponse?.messageText?.substring(0, 50) + '...'
+                })
+              });
+              
+              await storage.addWhatsAppLog({
+                type: 'system',
+                phoneNumber: from,
                 messageContent: `🔍 Buscando respuesta automática para Store ${targetStoreId}, trigger: welcome`,
                 status: 'info',
                 rawData: JSON.stringify({ 
                   storeId: targetStoreId,
                   found: !!welcomeResponse,
                   isActive: welcomeResponse?.isActive,
-                  hasMessage: !!welcomeResponse?.messageText
+                  hasMessage: !!welcomeResponse?.messageText,
+                  menuOptions: welcomeResponse?.menuOptions,
+                  menuType: welcomeResponse?.menuType,
+                  responseKeys: welcomeResponse ? Object.keys(welcomeResponse) : []
                 })
               });
               
@@ -2510,15 +2577,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
               let isInteractive = false;
               let interactiveData = null;
               
-              if (welcomeResponse && welcomeResponse.isActive) {
+              if (welcomeResponse && (welcomeResponse.isActive || welcomeResponse.is_active)) {
                 responseMessage = welcomeResponse.messageText;
-                isInteractive = welcomeResponse.isInteractive;
-                if (isInteractive && welcomeResponse.interactiveData) {
+                
+                // DEBUG: Log exact values
+                await storage.addWhatsAppLog({
+                  type: 'system',
+                  phoneNumber: from,
+                  messageContent: `🔧 DEBUG: Verificando condiciones`,
+                  status: 'info',
+                  rawData: JSON.stringify({ 
+                    hasMenuOptions: !!welcomeResponse.menuOptions,
+                    menuOptionsValue: welcomeResponse.menuOptions,
+                    menuType: welcomeResponse.menuType,
+                    menuTypeCheck: welcomeResponse.menuType === 'buttons',
+                    bothConditions: !!welcomeResponse.menuOptions && welcomeResponse.menuType === 'buttons'
+                  })
+                });
+                
+                // Check if this response has menu options for interactive buttons
+                if (welcomeResponse.menuOptions && welcomeResponse.menuType === 'buttons') {
+                  isInteractive = true;
                   try {
-                    interactiveData = typeof welcomeResponse.interactiveData === 'string' 
-                      ? JSON.parse(welcomeResponse.interactiveData) 
-                      : welcomeResponse.interactiveData;
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🔧 DEBUG: Procesando menuOptions`,
+                      status: 'info',
+                      rawData: JSON.stringify({ 
+                        menuOptionsType: typeof welcomeResponse.menuOptions,
+                        menuOptionsRaw: welcomeResponse.menuOptions,
+                        menuType: welcomeResponse.menuType
+                      })
+                    });
+
+                    const menuOptions = typeof welcomeResponse.menuOptions === 'string' 
+                      ? JSON.parse(welcomeResponse.menuOptions) 
+                      : welcomeResponse.menuOptions;
+
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🔧 DEBUG: Después del parsing`,
+                      status: 'info',
+                      rawData: JSON.stringify({ 
+                        parsedMenuOptions: menuOptions,
+                        isArray: Array.isArray(menuOptions),
+                        optionsLength: menuOptions ? menuOptions.length : 0
+                      })
+                    });
+                    
+                    // Convert menu options to WhatsApp interactive format
+                    interactiveData = {
+                      type: "button",
+                      body: {
+                        text: responseMessage
+                      },
+                      action: {
+                        buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                          type: "reply",
+                          reply: {
+                            id: option.action || option.value,
+                            title: option.label.substring(0, 20) // WhatsApp limit
+                          }
+                        }))
+                      }
+                    };
+
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🔧 DEBUG: interactiveData creado`,
+                      status: 'info',
+                      rawData: JSON.stringify({ 
+                        interactiveData,
+                        isInteractive,
+                        willSendInteractive: isInteractive && interactiveData
+                      })
+                    });
                   } catch (e) {
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🚨 ERROR en procesamiento de botones`,
+                      status: 'error',
+                      rawData: JSON.stringify({ 
+                        error: e instanceof Error ? e.message : String(e),
+                        stack: e instanceof Error ? e.stack : undefined
+                      })
+                    });
                     isInteractive = false;
                   }
                 }
@@ -2575,7 +2722,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     storeId: targetStoreId,
                     messageId: result.messages?.[0]?.id,
                     isInteractive: isInteractive,
-                    fullMessage: responseMessage
+                    fullMessage: responseMessage,
+                    interactiveData: isInteractive ? interactiveData : null,
+                    sentFormat: isInteractive ? 'interactive' : 'text'
                   })
                 });
               } else {
@@ -2826,13 +2975,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Process customer message and respond (for text messages)
+          console.log('🔄 ABOUT TO CALL PROCESSCUSTOMERMESSAGE with:', { 
+            customerId: customer?.id, 
+            conversationId: conversation?.id, 
+            messageType: message.type,
+            storeId: targetStoreId
+          });
           await processCustomerMessage(customer, conversation, message, from, isNewCustomer, targetStoreId, targetPhoneNumberId);
+          console.log('✅ PROCESSCUSTOMERMESSAGE COMPLETED');
 
           await storage.addWhatsAppLog({
             type: 'info',
             message: `Mensaje guardado en conversación ${conversation.id}`,
             data: { conversationId: conversation.id, messageId }
           });
+          } catch (messageError: any) {
+            console.error('❌ ERROR INDIVIDUAL MESSAGE PROCESSING:', messageError);
+            console.error('❌ MESSAGE ERROR DETAILS:', messageError.message);
+            await storage.addWhatsAppLog({
+              type: 'error',
+              phoneNumber: message?.from || 'unknown',
+              messageContent: `Error procesando mensaje individual: ${messageError.message}`,
+              status: 'error',
+              errorMessage: messageError.message || messageError.toString()
+            });
+          }
         }
       }
 
