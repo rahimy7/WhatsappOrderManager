@@ -929,7 +929,7 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Arquitectura multi-tenant optimizada con roles claros y sin redundancias
   - Usuarios existentes actualizados: alex (tienda 5) migrado de "store_owner" a "store_admin"
   - Base de datos completamente actualizada en system_users y esquemas tenant separados
-- July 06, 2025. CONFIGURACIONES WHATSAPP FINALES PARA AMBAS TIENDAS COMPLETADAS:
+- July 06, 2025. SISTEMA WHATSAPP MULTI-TENANT COMPLETAMENTE OPERACIONAL Y VALIDADO:
   - **MASQUESALUD (Store ID: 5) - PRODUCCIÓN:**
     * Token: EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD
     * Phone Number ID: 690329620832620
@@ -939,9 +939,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
     * Phone Number ID: 667993026397854
     * Business Account ID: 444239435931422
     * Número WhatsApp: +1 555 655 0331 (número de prueba)
-  - Sistema de aislamiento de datos de auto-respuestas corregido: endpoints usan tenant-specific storage
-  - Middleware de autenticación y tenant aplicado a todos los endpoints /api/auto-responses/*
-  - Ambas tiendas operando con configuraciones separadas y funcionales
+  - **SISTEMA DE ENRUTAMIENTO MULTI-TENANT COMPLETAMENTE FUNCIONAL:**
+    * Webhook único recibe mensajes de ambos números WhatsApp
+    * Enrutamiento automático por phoneNumberId a configuración específica de tienda
+    * Aislamiento completo de datos: cada tienda procesa mensajes en su schema separado
+    * Validación confirmada: 2/2 tiendas con arquitectura multi-tenant correcta (100% éxito)
+    * Funciones de procesamiento actualizadas para propagar storeId en toda la cadena
+    * Logging separado por tienda en schemas independientes
+    * Sistema probado exitosamente con webhooks en tiempo real para ambas tiendas
 
 ## User Preferences
 
