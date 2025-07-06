@@ -2423,7 +2423,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (value.messages && value.messages.length > 0) {
         for (const message of value.messages) {
           const from = message.from;
-          const to = value.metadata?.phone_number_id || value.contacts?.[0]?.wa_id;
+          // Extract phone_number_id from the webhook structure correctly
+          const to = value.metadata?.phone_number_id || value.phone_number_id || (value.contacts && value.contacts.length > 0 ? value.contacts[0].wa_id : null);
           const messageId = message.id;
           const timestamp = message.timestamp;
           const messageType = message.type;
