@@ -2487,6 +2487,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               metadataKeys: value.metadata ? Object.keys(value.metadata) : []
             })
           });
+          
+          console.log('📋 WHATSAPP LOG COMPLETED - About to start store identification');
 
           // STEP 1: Identify which store should handle this message based on phone number
           let targetStoreId: number | null = null;

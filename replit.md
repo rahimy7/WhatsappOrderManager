@@ -951,6 +951,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **PROBLEMA DEL CROSS-ROUTING RESUELTO COMPLETAMENTE**: Mensajes enviados al número correcto según la tienda
   - **RVR SERVICE (Store ID: 4)**: phoneNumberId 667993026397854 (+1 555 655 0331) - Test Number
   - **MASQUESALUD (Store ID: 5)**: phoneNumberId 690329620832620 (+1 809 357 6939) - Production Number
+- July 06, 2025. CORRECCIÓN CRÍTICA: Referencias de columnas en respuestas automáticas completamente corregidas:
+  - **Problema identificado**: Inconsistencias entre nombres de propiedades TypeScript (camelCase) y base de datos (snake_case)
+  - **Corrección en whatsapp-simple.ts**: Cambiado resp.is_active a resp.isActive y resp.message_text a resp.messageText
+  - **Corrección en tenant-storage.ts**: Actualizado eq(schema.autoResponses.is_active, true) a eq(schema.autoResponses.isActive, true)
+  - **Esquema confirmado**: Drizzle ORM maneja mapping automático de isActive (JS) ↔ is_active (DB) y messageText (JS) ↔ message_text (DB)
+  - **Sistema verificado**: Auto-responses procesándose correctamente en ambos tenants sin errores de propiedades
+  - **Multi-tenant confirmado**: Enrutamiento por phoneNumberId funcionando perfectamente para ambas tiendas
   - **Token único compartido funcionando**: EAAKHVoxT6IUBPOS0RJMFDFOyRLoIE1wcoZC6VJNYFc2xC1n9CdxgOOphY4ZAjZBKaZCUYsM0TGKBObfFigvKFENPmoU7sOooqZBk3RiSQFbqdsHLNJVRpTOrhvAKhsTH1OY0zna2ydf4VdlcEoC1HpzvZCyse41bmDZCmt94hW7EZCTqw7lUmtnAZANJLdd3P6oV94gZDZD
   - **Arquitectura WABA correcta confirmada**: Mismo token, mismo webhook, múltiples phoneNumberId con enrutamiento automático
   - **Corrección en /api/whatsapp/send-message**: Agregado middleware de autenticación y uso de storeId específico

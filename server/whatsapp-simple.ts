@@ -67,7 +67,7 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
           let responseText = `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`;
           
           if (autoResponse) {
-            responseText = autoResponse.messageText || autoResponse.message || responseText;
+            responseText = autoResponse.messageText || responseText;
           }
 
           const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
