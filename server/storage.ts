@@ -164,7 +164,7 @@ export interface IStorage {
   }>;
 
   // WhatsApp Settings
-  getWhatsAppConfig(storeId?: number): Promise<WhatsAppSettings | null>;
+  getWhatsAppConfig(storeId?: number | null): Promise<WhatsAppSettings | null>;
   updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings>;
   
   // WhatsApp Logs
@@ -1038,7 +1038,7 @@ export class MemStorage implements IStorage {
     };
   }
 
-  async getWhatsAppConfig(storeId?: number): Promise<any> {
+  async getWhatsAppConfig(storeId?: number | null): Promise<any> {
     // In MemStorage, we'll use a simple store-based config map
     const storeKey = storeId ? `store_${storeId}` : 'default';
     
@@ -1961,7 +1961,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // WhatsApp Settings with PostgreSQL - Now store-specific
-  async getWhatsAppConfig(storeId?: number): Promise<WhatsAppSettings | null> {
+  async getWhatsAppConfig(storeId?: number | null): Promise<WhatsAppSettings | null> {
     if (storeId) {
       // Get configuration specific to the store
       const [config] = await db.select().from(whatsappSettings)

@@ -103,9 +103,9 @@ async function processAutoResponse(trigger: string, phoneNumber: string, storeId
 }
 
 // Helper functions for WhatsApp message sending
-async function sendWhatsAppMessage(phoneNumber: string, message: string, storeId?: number) {
+async function sendWhatsAppMessage(phoneNumber: string, message: string, storeId?: number | null) {
   try {
-    const config = await storage.getWhatsAppConfig(storeId);
+    const config = await storage.getWhatsAppConfig(storeId || undefined);
     
     if (!config) {
       console.error('WhatsApp configuration not found');
@@ -226,11 +226,11 @@ async function sendWhatsAppMessageByPhoneId(phoneNumber: string, message: string
 }
 
 // Smart WhatsApp sender: uses specific phoneNumberId if available, otherwise uses storeId
-async function sendWhatsAppMessageSmart(phoneNumber: string, message: string, storeId?: number, phoneNumberId?: string) {
+async function sendWhatsAppMessageSmart(phoneNumber: string, message: string, storeId?: number | null, phoneNumberId?: string | null) {
   if (phoneNumberId) {
     return await sendWhatsAppMessageByPhoneId(phoneNumber, message, phoneNumberId);
   } else {
-    return await sendWhatsAppMessage(phoneNumber, message, storeId);
+    return await sendWhatsAppMessage(phoneNumber, message, storeId || undefined);
   }
 }
 
@@ -1231,12 +1231,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/conversations/:id/messages", async (req, res) => {
+  app.post("/api/conversations/:id/messages", async (req: any, res) => {
     try {
       const conversationId = parseInt(req.params.id);
+      const tenantStorage = req.tenantDb ? createTenantStorage(req.tenantDb) : storage;
       
       // Get conversation details to get customer phone number
-      const conversation = await storage.getConversation(conversationId);
+      const conversation = await tenantStorage.getConversation(conversationId);
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
@@ -1255,15 +1256,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If message is from staff, send it to WhatsApp
       if (messageData.senderType === "staff") {
         try {
-          // Send message to WhatsApp
-          const whatsappResult = await sendWhatsAppMessage(conversation.customer.phone, messageData.content);
+          // Get store ID from authenticated user
+          const targetStoreId = req.user?.storeId || null;
+          const targetPhoneNumberId = null; // Will be determined by smart routing
+          
+          // Send message to WhatsApp using smart routing
+          const whatsappResult = await sendWhatsAppMessageSmart(conversation.customer.phone, messageData.content, targetStoreId, targetPhoneNumberId);
           
           // Update message with WhatsApp message ID if successful
           if (whatsappResult && whatsappResult.messages && whatsappResult.messages[0]) {
             messageData.whatsappMessageId = whatsappResult.messages[0].id;
           }
 
-          await storage.addWhatsAppLog({
+          await tenantStorage.addWhatsAppLog({
             type: 'outgoing',
             phoneNumber: conversation.customer.phone,
             messageContent: `Mensaje enviado desde panel web: ${messageData.content.substring(0, 100)}`,
@@ -1277,7 +1282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         } catch (whatsappError) {
           // Log the WhatsApp sending error but still save the message to database
-          await storage.addWhatsAppLog({
+          await tenantStorage.addWhatsAppLog({
             type: 'error',
             phoneNumber: conversation.customer.phone,
             messageContent: `Error enviando mensaje desde panel web: ${messageData.content.substring(0, 100)}`,
@@ -1295,7 +1300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const message = await storage.createMessage(messageData);
+      const message = await tenantStorage.createMessage(messageData);
       res.status(201).json(message);
     } catch (error) {
       console.error("Error creating message:", error);
@@ -1949,8 +1954,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       if (orderItems.length === 0) {
-        await sendWhatsAppMessage(phoneNumber, 
-          "No pude procesar los productos de tu pedido. ¿Podrías enviarlo nuevamente?");
+        await sendWhatsAppMessageSmart(phoneNumber, 
+          "No pude procesar los productos de tu pedido. ¿Podrías enviarlo nuevamente?", storeId, phoneNumberId);
         return;
       }
 
@@ -2176,8 +2181,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       });
 
-      await sendWhatsAppMessage(phoneNumber, 
-        "Hubo un error procesando tu pedido. Por favor intenta nuevamente o contáctanos directamente.");
+      await sendWhatsAppMessageSmart(phoneNumber, 
+        "Hubo un error procesando tu pedido. Por favor intenta nuevamente o contáctanos directamente.", storeId, phoneNumberId);
     }
   }
 
@@ -2792,7 +2797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await sendWhatsAppInteractiveMessage(phoneNumber, menuMessage);
   }
 
-  async function sendLocationRequest(phoneNumber: string) {
+  async function sendLocationRequest(phoneNumber: string, storeId?: number | null, phoneNumberId?: string | null) {
     const locationMessage = 
       "📍 *Necesitamos tu ubicación*\n\n" +
       "Para calcular el costo de entrega exacto, por favor:\n\n" +
@@ -2803,7 +2808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       "Incluye calle, número, colonia y código postal\n\n" +
       "💡 La ubicación GPS nos permite calcular la distancia exacta y darte el precio más preciso.";
 
-    await sendWhatsAppMessage(phoneNumber, locationMessage);
+    await sendWhatsAppMessageSmart(phoneNumber, locationMessage, storeId, phoneNumberId);
   }
 
   async function handleLocationMessage(customer: any, location: any, phoneNumber: string) {
@@ -3044,9 +3049,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (selectedId.startsWith('product_') || selectedId.startsWith('service_')) {
         const productId = parseInt(selectedId.split('_')[1]);
-        await handleProductSelection(customer, conversation, productId, phoneNumber);
+        await handleProductSelection(customer, conversation, productId, phoneNumber, targetStoreId, targetPhoneNumberId);
       } else if (selectedId === 'request_location') {
-        await sendLocationRequest(phoneNumber);
+        await sendLocationRequest(phoneNumber, targetStoreId, targetPhoneNumberId);
       }
     } else if (interactive.type === 'button_reply') {
       const buttonId = interactive.button_reply.id;
@@ -3206,7 +3211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (buttonId === 'confirm_saved_address') {
         await handleSavedAddressConfirmation(customer, phoneNumber);
       } else if (buttonId === 'update_address') {
-        await handleAddressUpdate(customer, phoneNumber);
+        await handleAddressUpdate(customer, phoneNumber, targetStoreId, targetPhoneNumberId);
       }
     }
   }
@@ -3295,7 +3300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Function to handle address update
-  async function handleAddressUpdate(customer: any, phoneNumber: string) {
+  async function handleAddressUpdate(customer: any, phoneNumber: string, storeId?: number | null, phoneNumberId?: string | null) {
     try {
       // Get registration flow to retrieve order data
       const registrationFlow = await storage.getRegistrationFlow(phoneNumber);
@@ -3318,7 +3323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Request location sharing
-      await sendLocationRequest(phoneNumber);
+      await sendLocationRequest(phoneNumber, storeId, phoneNumberId);
 
     } catch (error) {
       await storage.addWhatsAppLog({
@@ -3597,20 +3602,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  async function handleProductSelection(customer: any, conversation: any, productId: number, phoneNumber: string) {
+  async function handleProductSelection(customer: any, conversation: any, productId: number, phoneNumber: string, storeId?: number | null, phoneNumberId?: string | null) {
     const product = await storage.getProduct(productId);
     if (!product) return;
 
     // Check if customer has location for delivery calculation
     if (!customer.latitude || !customer.longitude) {
-      await sendWhatsAppMessage(phoneNumber, 
+      await sendWhatsAppMessageSmart(phoneNumber, 
         `📦 *${product.name}*\n\n` +
         `💰 Precio base: $${parseFloat(product.price).toLocaleString('es-MX')}\n\n` +
         "⚠️ *Necesitamos tu ubicación* para calcular el costo de entrega.\n\n" +
-        "Por favor comparte tu ubicación primero."
+        "Por favor comparte tu ubicación primero.", storeId, phoneNumberId
       );
       
-      setTimeout(() => sendLocationRequest(phoneNumber), 1000);
+      setTimeout(() => sendLocationRequest(phoneNumber, storeId, phoneNumberId), 1000);
       return;
     }
 
