@@ -210,6 +210,24 @@ export function createTenantStorage(tenantDb: any) {
     async addWhatsAppLog(log: any) {
       const [newLog] = await tenantDb.insert(schema.whatsappLogs).values(log).returning();
       return newLog;
+    },
+
+    // Auto Responses
+    async getAllAutoResponses() {
+      return await tenantDb.select().from(schema.autoResponses)
+        .orderBy(desc(schema.autoResponses.createdAt));
+    },
+
+    async getAutoResponseByTrigger(trigger: string) {
+      const [response] = await tenantDb.select().from(schema.autoResponses)
+        .where(eq(schema.autoResponses.trigger, trigger));
+      return response || null;
+    },
+
+    async getActiveAutoResponses() {
+      return await tenantDb.select().from(schema.autoResponses)
+        .where(eq(schema.autoResponses.isActive, true))
+        .orderBy(desc(schema.autoResponses.createdAt));
     }
   };
 }

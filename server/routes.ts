@@ -2483,38 +2483,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return; // Skip processing if no store found
             }
 
-            // IMMEDIATE RESPONSE: Send response using the exact same phoneNumberId (like your example)
-            const responseMessage = "¡Hola! Gracias por contactarnos. Estamos procesando tu mensaje.";
-            
+            // IMMEDIATE RESPONSE: Get welcome auto-response for this specific store
             try {
+              // Connect to the tenant database for this store
+              const tenantStorage = await getTenantDb(targetStoreId);
+              
+              // Get the welcome auto-response for this store
+              const welcomeResponse = await tenantStorage.getAutoResponseByTrigger('welcome');
+              
+              let responseMessage = "¡Hola! Gracias por contactarnos.";
+              let isInteractive = false;
+              let interactiveData = null;
+              
+              if (welcomeResponse && welcomeResponse.isActive) {
+                responseMessage = welcomeResponse.message;
+                isInteractive = welcomeResponse.isInteractive;
+                if (isInteractive && welcomeResponse.interactiveData) {
+                  try {
+                    interactiveData = typeof welcomeResponse.interactiveData === 'string' 
+                      ? JSON.parse(welcomeResponse.interactiveData) 
+                      : welcomeResponse.interactiveData;
+                  } catch (e) {
+                    isInteractive = false;
+                  }
+                }
+              }
+
+              // Send the response using the correct phoneNumberId
+              let response;
               const url = `https://graph.facebook.com/v20.0/${to}/messages`;
               
-              const data = {
-                messaging_product: "whatsapp",
-                to: from,
-                text: { body: responseMessage }
-              };
+              if (isInteractive && interactiveData) {
+                // Send interactive message
+                const data = {
+                  messaging_product: "whatsapp",
+                  to: from,
+                  type: "interactive",
+                  interactive: interactiveData
+                };
+                
+                response = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${storeConfig.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(data),
+                });
+              } else {
+                // Send simple text message
+                const data = {
+                  messaging_product: "whatsapp",
+                  to: from,
+                  text: { body: responseMessage }
+                };
 
-              const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${storeConfig.accessToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data),
-              });
+                response = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${storeConfig.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(data),
+                });
+              }
 
               if (response.ok) {
                 const result = await response.json();
                 await storage.addWhatsAppLog({
                   type: 'outgoing',
                   phoneNumber: from,
-                  messageContent: `✅ RESPUESTA ENVIADA desde phoneNumberId: ${to} (Store ${targetStoreId})`,
+                  messageContent: `✅ RESPUESTA AUTOMÁTICA desde phoneNumberId: ${to} (Store ${targetStoreId}): ${responseMessage.substring(0, 100)}...`,
                   status: 'sent',
                   rawData: JSON.stringify({ 
                     phoneNumberId: to,
                     storeId: targetStoreId,
-                    messageId: result.messages?.[0]?.id
+                    messageId: result.messages?.[0]?.id,
+                    isInteractive: isInteractive
                   })
                 });
               } else {
