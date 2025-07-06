@@ -2486,17 +2486,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // IMMEDIATE RESPONSE: Get welcome auto-response for this specific store
             try {
               // Connect to the tenant database for this store
-              const tenantStorage = await getTenantDb(targetStoreId);
+              const { createTenantStorage } = await import('./tenant-storage');
+              const tenantDb = await getTenantDb(targetStoreId);
+              const tenantStorage = createTenantStorage(tenantDb);
               
               // Get the welcome auto-response for this store
               const welcomeResponse = await tenantStorage.getAutoResponseByTrigger('welcome');
+              
+              await storage.addWhatsAppLog({
+                type: 'system',
+                phoneNumber: from,
+                messageContent: `🔍 Buscando respuesta automática para Store ${targetStoreId}, trigger: welcome`,
+                status: 'info',
+                rawData: JSON.stringify({ 
+                  storeId: targetStoreId,
+                  found: !!welcomeResponse,
+                  isActive: welcomeResponse?.isActive,
+                  hasMessage: !!welcomeResponse?.messageText
+                })
+              });
               
               let responseMessage = "¡Hola! Gracias por contactarnos.";
               let isInteractive = false;
               let interactiveData = null;
               
               if (welcomeResponse && welcomeResponse.isActive) {
-                responseMessage = welcomeResponse.message;
+                responseMessage = welcomeResponse.messageText;
                 isInteractive = welcomeResponse.isInteractive;
                 if (isInteractive && welcomeResponse.interactiveData) {
                   try {
@@ -2553,13 +2568,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 await storage.addWhatsAppLog({
                   type: 'outgoing',
                   phoneNumber: from,
-                  messageContent: `✅ RESPUESTA AUTOMÁTICA desde phoneNumberId: ${to} (Store ${targetStoreId}): ${responseMessage.substring(0, 100)}...`,
+                  messageContent: `✅ AUTO-RESPONSE: ${responseMessage.substring(0, 100)}${responseMessage.length > 100 ? '...' : ''}`,
                   status: 'sent',
                   rawData: JSON.stringify({ 
                     phoneNumberId: to,
                     storeId: targetStoreId,
                     messageId: result.messages?.[0]?.id,
-                    isInteractive: isInteractive
+                    isInteractive: isInteractive,
+                    fullMessage: responseMessage
                   })
                 });
               } else {

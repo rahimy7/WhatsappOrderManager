@@ -220,7 +220,10 @@ export function createTenantStorage(tenantDb: any) {
 
     async getAutoResponseByTrigger(trigger: string) {
       const [response] = await tenantDb.select().from(schema.autoResponses)
-        .where(eq(schema.autoResponses.trigger, trigger));
+        .where(and(
+          eq(schema.autoResponses.trigger, trigger),
+          eq(schema.autoResponses.isActive, true)
+        ));
       return response || null;
     },
 
