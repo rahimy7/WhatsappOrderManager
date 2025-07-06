@@ -4127,19 +4127,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Auto Responses routes
-  app.get("/api/auto-responses", async (req, res) => {
+  app.get("/api/auto-responses", authenticateToken, tenantMiddleware(), async (req: any, res) => {
     try {
-      const responses = await storage.getAllAutoResponses();
+      const tenantStorage = req.tenantStorage || storage;
+      const responses = await tenantStorage.getAllAutoResponses();
       res.json(responses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch auto responses" });
     }
   });
 
-  app.get("/api/auto-responses/:id", async (req, res) => {
+  app.get("/api/auto-responses/:id", authenticateToken, tenantMiddleware(), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      const response = await storage.getAutoResponse(id);
+      const tenantStorage = req.tenantStorage || storage;
+      const response = await tenantStorage.getAutoResponse(id);
       if (!response) {
         return res.status(404).json({ error: "Auto response not found" });
       }
@@ -4149,10 +4151,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auto-responses", async (req, res) => {
+  app.post("/api/auto-responses", authenticateToken, tenantMiddleware(), async (req: any, res) => {
     try {
       const responseData = insertAutoResponseSchema.parse(req.body);
-      const newResponse = await storage.createAutoResponse(responseData);
+      const tenantStorage = req.tenantStorage || storage;
+      const newResponse = await tenantStorage.createAutoResponse(responseData);
       res.status(201).json(newResponse);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -4162,11 +4165,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/auto-responses/:id", async (req, res) => {
+  app.put("/api/auto-responses/:id", authenticateToken, tenantMiddleware(), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const updates = insertAutoResponseSchema.partial().parse(req.body);
-      const updatedResponse = await storage.updateAutoResponse(id, updates);
+      const tenantStorage = req.tenantStorage || storage;
+      const updatedResponse = await tenantStorage.updateAutoResponse(id, updates);
       if (!updatedResponse) {
         return res.status(404).json({ error: "Auto response not found" });
       }
@@ -4179,22 +4183,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/auto-responses/:id", async (req, res) => {
+  app.delete("/api/auto-responses/:id", authenticateToken, tenantMiddleware(), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
-      await storage.deleteAutoResponse(id);
+      const tenantStorage = req.tenantStorage || storage;
+      await tenantStorage.deleteAutoResponse(id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete auto response" });
     }
   });
 
-  app.post("/api/auto-responses/reset-defaults", async (req, res) => {
+  app.post("/api/auto-responses/reset-defaults", authenticateToken, tenantMiddleware(), async (req: any, res) => {
     try {
-      // Clear existing auto responses
-      await storage.clearAllAutoResponses();
+      // Clear existing auto responses for this tenant
+      const tenantStorage = req.tenantStorage || storage;
+      await tenantStorage.clearAllAutoResponses();
       
-      // Re-seed default responses
+      // Re-seed default responses for this tenant
       const { seedAutoResponses } = await import("./seed-auto-responses");
       await seedAutoResponses();
       
