@@ -2361,15 +2361,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // STEP 2: Get tenant-specific storage for the identified store
           let tenantStorage: any;
           try {
-            const { getTenantDb } = await import('./multi-tenant-db.js');
-            tenantStorage = await getTenantDb(targetStoreId);
+            const { getTenantDb } = await import('./multi-tenant-db');
+            const { createTenantStorage } = await import('./tenant-storage');
+            const tenantDb = await getTenantDb(targetStoreId);
+            tenantStorage = createTenantStorage(tenantDb);
             
             await storage.addWhatsAppLog({
               type: 'info',
               phoneNumber: from,
               messageContent: `Conectado a base de datos de tienda ${targetStoreId}`,
               status: 'connected',
-              rawData: JSON.stringify({ storeId: targetStoreId })
+              rawData: JSON.stringify({ 
+                storeId: targetStoreId,
+                tenantStorageType: typeof tenantStorage,
+                hasGetCustomerByPhone: typeof tenantStorage.getCustomerByPhone
+              })
             });
           } catch (error) {
             await storage.addWhatsAppLog({
@@ -3883,8 +3889,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rawData: JSON.stringify(body)
       });
 
-      // Check if it's a WhatsApp API POST request
-      if (body.object === "whatsapp_business_account") {
+      await storage.addWhatsAppLog({
+        type: 'warning',
+        phoneNumber: null,
+        messageContent: `Webhook recibido con object: ${body.object}`,
+        status: body.object ? 'valid' : 'ignored',
+        rawData: JSON.stringify({ object: body.object, hasEntry: !!body.entry })
+      });
+
+      // Check if it's a WhatsApp API POST request OR test webhook
+      if (body.object === "whatsapp_business_account" || body.entry) {
         if (body.entry && body.entry.length > 0) {
           for (const entry of body.entry) {
             await storage.addWhatsAppLog({

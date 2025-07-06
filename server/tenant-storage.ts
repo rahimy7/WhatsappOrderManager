@@ -76,7 +76,16 @@ export function createTenantStorage(tenantDb: any) {
     },
 
     async getCustomerByPhone(phone: string) {
-      const [customer] = await tenantDb.select().from(schema.customers).where(eq(schema.customers.phone, phone));
+      const normalizedPhone = phone.replace(/\D/g, ''); // Remove non-digits
+      const [customer] = await tenantDb.select().from(schema.customers)
+        .where(
+          or(
+            eq(schema.customers.phone, phone),
+            eq(schema.customers.phone, normalizedPhone),
+            eq(schema.customers.phone, `+52${normalizedPhone}`),
+            eq(schema.customers.phone, `+52 ${normalizedPhone.slice(0, 2)} ${normalizedPhone.slice(2, 6)} ${normalizedPhone.slice(6)}`)
+          )
+        );
       return customer || null;
     },
 
@@ -124,7 +133,7 @@ export function createTenantStorage(tenantDb: any) {
     async getMessagesByConversation(conversationId: number) {
       return await tenantDb.select().from(schema.messages)
         .where(eq(schema.messages.conversationId, conversationId))
-        .orderBy(schema.messages.timestamp);
+        .orderBy(schema.messages.createdAt);
     },
 
     async createMessage(messageData: any) {
@@ -158,6 +167,49 @@ export function createTenantStorage(tenantDb: any) {
         averageOrderValue: 0,
         activeTechnicians: 0
       };
+    },
+
+    // Auto Responses
+    async getAutoResponsesByTrigger(trigger: string) {
+      return await tenantDb.select().from(schema.autoResponses)
+        .where(and(
+          eq(schema.autoResponses.trigger, trigger),
+          eq(schema.autoResponses.isActive, true)
+        ))
+        .orderBy(schema.autoResponses.priority);
+    },
+
+    // Customer Registration Flows
+    async getRegistrationFlow(phoneNumber: string) {
+      const [flow] = await tenantDb.select().from(schema.customerRegistrationFlows)
+        .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber));
+      return flow || null;
+    },
+
+    async createRegistrationFlow(flow: any) {
+      const [newFlow] = await tenantDb.insert(schema.customerRegistrationFlows).values(flow).returning();
+      return newFlow;
+    },
+
+    async updateRegistrationFlow(phoneNumber: string, updates: any) {
+      const [updatedFlow] = await tenantDb.update(schema.customerRegistrationFlows)
+        .set(updates)
+        .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber))
+        .returning();
+      return updatedFlow || null;
+    },
+
+    // Conversations by customer
+    async getConversationByCustomerId(customerId: number) {
+      const [conversation] = await tenantDb.select().from(schema.conversations)
+        .where(eq(schema.conversations.customerId, customerId));
+      return conversation || null;
+    },
+
+    // WhatsApp Logs
+    async addWhatsAppLog(log: any) {
+      const [newLog] = await tenantDb.insert(schema.whatsappLogs).values(log).returning();
+      return newLog;
     }
   };
 }
