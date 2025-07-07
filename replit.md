@@ -977,6 +977,12 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Webhook processing ahora identifica correctamente las tiendas y enruta mensajes al schema tenant apropiado
   - Sistema multi-tenant completamente operacional: mensajes WhatsApp se procesan sin error "NO PHONE NUMBER ID"
   - Eliminados logs "EXTRACTED PHONE NUMBER ID: undefined" - sistema ahora detecta phoneNumberId correctamente
+- July 07, 2025. CORRECCIÓN: Error de WebSocket en entorno de desarrollo Replit resuelto:
+  - Agregado manejador global de errores para suprimir errores de WebSocket de Vite HMR en desarrollo
+  - Errores de "localhost:undefined" y conexiones WebSocket fallidas ahora se manejan silenciosamente
+  - Sistema distingue entre errores críticos de aplicación y errores de desarrollo que son seguros de ignorar
+  - Funcionalidad de la aplicación no se ve afectada - solo mejora la experiencia de desarrollo
+  - Console.error reducido para errores de WebSocket del entorno de desarrollo Replit
   - Métodos createOrderItem() agregados al sistema tenant-storage.ts
   - Genera órdenes automáticamente incluso en primera interacción con clientes nuevos
   - Confirmación inmediata vía WhatsApp con detalles completos del pedido
