@@ -252,7 +252,7 @@ export default function SimpleCatalog() {
     const whatsappNumber = (storeConfig as any)?.storeWhatsAppNumber || "5215579096161";
     const storeName = (storeConfig as any)?.storeName || 'Tienda';
 
-    let message = `🛍️ *NUEVO PEDIDO - ${storeName}*\n\n`;
+    let message = `🛍️ *NUEVO PEDIDO*\n\n`;
     
     cart.items.forEach((item, index) => {
       message += `${index + 1}. ${item.product.name}\n`;

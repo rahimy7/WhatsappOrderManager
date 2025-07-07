@@ -628,8 +628,7 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       errorMessage: error.message
     });
     
-    await sendWhatsAppMessageDirect(phoneNumber, 
-      "Hubo un error procesando tu pedido. Nuestro equipo lo revisará manualmente.", storeId);
+    // No enviar mensaje de error al cliente - solo logging interno
   }
 }
 
