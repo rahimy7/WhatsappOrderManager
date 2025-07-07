@@ -163,7 +163,19 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
         
         if (registrationFlow && registrationFlow.currentStep) {
           console.log(`🔄 ACTIVE REGISTRATION FLOW DETECTED - Customer: ${customer.id}, Step: ${registrationFlow.currentStep}`);
-          await handleRegistrationFlow(customer, messageText, registrationFlow, storeMapping.storeId, tenantStorage);
+          
+          // Check if this is an interactive button response
+          let finalMessage = messageText;
+          if (messageType === 'interactive') {
+            // Extract button value from interactive message
+            const interactiveData = value.messages[0].interactive;
+            if (interactiveData?.button_reply?.id) {
+              finalMessage = interactiveData.button_reply.id;
+              console.log(`🔘 INTERACTIVE BUTTON PRESSED: ${finalMessage}`);
+            }
+          }
+          
+          await handleRegistrationFlow(customer, finalMessage, registrationFlow, storeMapping.storeId, tenantStorage);
           return; // Stop processing here - flow handled
         }
 
@@ -787,9 +799,27 @@ async function handleRegistrationFlow(customer: any, messageText: string, flow: 
         break;
         
       case 'collect_contact':
-        collectedData.contactPhone = customer.phone; // Usar el número de WhatsApp por defecto
-        
-        console.log(`✅ CONTACT CONFIRMED: ${customer.phone}`);
+        // Manejar botones interactivos para contacto
+        if (messageText === 'use_current') {
+          collectedData.contactPhone = customer.phone; // Usar el número de WhatsApp actual
+          console.log(`✅ CONTACT CONFIRMED (WhatsApp): ${customer.phone}`);
+        } else if (messageText === 'use_other') {
+          // Solicitar otro número
+          await sendWhatsAppMessageDirect(customer.phone, 
+            "📞 Por favor escribe el número de contacto que prefieres usar (10 dígitos):", storeId);
+          
+          // Cambiar paso para recopilar el número específico
+          await tenantStorage.updateRegistrationFlowStep(
+            customer.id, 
+            'collect_custom_phone', 
+            JSON.stringify(collectedData)
+          );
+          return;
+        } else {
+          // Si es texto directo, asumir que es confirmación del número actual
+          collectedData.contactPhone = customer.phone;
+          console.log(`✅ CONTACT CONFIRMED (default): ${customer.phone}`);
+        }
         
         // Avanzar al siguiente paso
         await tenantStorage.updateRegistrationFlowStep(
@@ -801,11 +831,47 @@ async function handleRegistrationFlow(customer: any, messageText: string, flow: 
         // Enviar opciones de pago
         await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
         break;
+
+      case 'collect_custom_phone':
+        // Validar número de teléfono (10 dígitos)
+        const phoneRegex = /^\d{10}$/;
+        const cleanPhone = messageText.replace(/\D/g, '');
+        
+        if (phoneRegex.test(cleanPhone)) {
+          collectedData.contactPhone = cleanPhone;
+          console.log(`✅ CUSTOM CONTACT SET: ${cleanPhone}`);
+          
+          // Avanzar al siguiente paso
+          await tenantStorage.updateRegistrationFlowStep(
+            customer.id, 
+            'collect_payment', 
+            JSON.stringify(collectedData)
+          );
+          
+          // Enviar opciones de pago
+          await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
+        } else {
+          console.log(`❌ INVALID PHONE: ${messageText}`);
+          await sendWhatsAppMessageDirect(customer.phone, 
+            "Por favor proporciona un número válido de 10 dígitos.", storeId);
+        }
+        break;
         
       case 'collect_payment':
-        collectedData.paymentMethod = messageText.trim();
+        // Manejar botones interactivos para método de pago
+        let paymentMethodText = messageText;
         
-        console.log(`✅ PAYMENT METHOD SELECTED: ${messageText.trim()}`);
+        if (messageText === 'payment_card') {
+          paymentMethodText = 'Tarjeta de Crédito/Débito';
+        } else if (messageText === 'payment_transfer') {
+          paymentMethodText = 'Transferencia Bancaria';
+        } else if (messageText === 'payment_cash') {
+          paymentMethodText = 'Efectivo en entrega';
+        }
+        
+        collectedData.paymentMethod = paymentMethodText;
+        
+        console.log(`✅ PAYMENT METHOD SELECTED: ${paymentMethodText}`);
         
         // Avanzar al paso final
         await tenantStorage.updateRegistrationFlowStep(
@@ -866,7 +932,7 @@ async function completeOrderProcess(customer: any, flow: any, collectedData: any
     });
     
     // Enviar confirmación final usando respuesta automática
-    await sendAutoResponseMessage(customer.phone, 'order_confirmed', storeId, tenantStorage);
+    await sendAutoResponseMessage(customer.phone, 'order_confirmation', storeId, tenantStorage);
     
     // Eliminar el flujo de registro
     await tenantStorage.deleteRegistrationFlow(customer.id);
