@@ -951,6 +951,16 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **PROBLEMA DEL CROSS-ROUTING RESUELTO COMPLETAMENTE**: Mensajes enviados al número correcto según la tienda
   - **RVR SERVICE (Store ID: 4)**: phoneNumberId 667993026397854 (+1 555 655 0331) - Test Number
   - **MASQUESALUD (Store ID: 5)**: phoneNumberId 690329620832620 (+1 809 357 6939) - Production Number
+- July 07, 2025. SISTEMA WHATSAPP AJUSTADO PARA SEGUIR CONFIGURACIÓN DE RESPUESTAS AUTOMÁTICAS:
+  - Modificado procesador WhatsApp para seguir estrictamente las respuestas automáticas configuradas en la página de administración
+  - Sistema mantiene detección inteligente de órdenes del catálogo web para generar pedidos automáticamente
+  - Creada función processConfiguredAutoResponse() que procesa respuestas basándose únicamente en configuración de tienda
+  - Mapeo inteligente de triggers: detecta comandos exactos, botones interactivos y patrones de saludo
+  - Respuestas personalizadas por tienda usando schema tenant separado para cada store
+  - Botones interactivos procesados según configuración JSON en campo menuOptions de auto-respuestas
+  - Fallback a respuesta "welcome" para mensajes no reconocidos o clientes nuevos
+  - Sistema completamente operacional con endpoints /api/store-responses evitando interferencia de Vite
+  - Verificado funcionando: "hola" → mensaje bienvenida, "show_products" → catálogo, órdenes → procesamiento automático
 - July 07, 2025. FLUJO AUTOMÁTICO DE RECOLECCIÓN DE DATOS POST-ORDEN COMPLETAMENTE IMPLEMENTADO:
   - Sistema de flujos de registro mejorado para recopilar datos completos del cliente después de crear órdenes
   - Integración completa con respuestas automáticas configurables para personalización por tienda

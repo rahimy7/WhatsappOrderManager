@@ -233,180 +233,215 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
           return; // Stop processing here - order handled
         }
 
-        // Step 8: Process auto-response based on message content - STORE-SPECIFIC VALIDATION
+        // Step 8: Process message using configured auto-responses - STORE-SPECIFIC VALIDATION
         try {
-          // CRITICAL: Use only tenant schema for store-specific auto-responses
-          let autoResponse = null;
-          const messageTextLower = messageText.toLowerCase().trim();
+          await processConfiguredAutoResponse(messageText, from, customer, tenantStorage, storeMapping);
+        } catch (error) {
+          console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
           
-          // Get auto-responses ONLY from tenant schema (store-specific)
-          const autoResponses = await tenantStorage.getAllAutoResponses();
-          console.log(`🔍 STORE-SPECIFIC AUTO-RESPONSE VALIDATION - Store ${storeMapping.storeId}: Found ${autoResponses.length} tenant auto-responses`);
-          
-          // VALIDATION: Ensure we're only using responses from this specific store's schema
-          if (autoResponses.length === 0) {
-            console.log(`⚠️ WARNING - Store ${storeMapping.storeId}: No auto-responses found in tenant schema ${storeMapping.schema}`);
-          }
-          
-          // Look for exact trigger matches in tenant schema ONLY
-          autoResponse = autoResponses.find((resp: any) => 
-            resp.isActive && resp.trigger.toLowerCase() === messageTextLower
-          );
-          
-          // CRITICAL: Handle button interactions by checking actions
-          if (!autoResponse) {
-            // Check if message matches button actions from menu_options
-            for (const resp of autoResponses) {
-              if (resp.isActive && resp.menuOptions) {
-                try {
-                  const menuOptions = JSON.parse(resp.menuOptions);
-                  const matchingOption = menuOptions.find((option: any) => 
-                    option.action === messageTextLower || option.value === messageTextLower
-                  );
-                  if (matchingOption) {
-                    // Find the auto-response for this action
-                    const actionResponse = autoResponses.find((actionResp: any) => 
-                      actionResp.isActive && actionResp.trigger === matchingOption.action
-                    );
-                    if (actionResponse) {
-                      autoResponse = actionResponse;
-                      console.log(`🔘 BUTTON ACTION DETECTED - Matching "${messageTextLower}" to trigger "${matchingOption.action}"`);
-                      break;
-                    }
-                  }
-                } catch (e) {
-                  // Ignore JSON parse errors
-                }
-              }
-            }
-          }
-          
-          // If no exact match, check for welcome trigger on any first message
-          if (!autoResponse) {
-            autoResponse = autoResponses.find((resp: any) => 
-              resp.isActive && resp.trigger === 'welcome'
-            );
-          }
-
-          // FALLBACK: Only if no programmed responses exist in tenant schema
-          let responseText = null;
-          
-          if (autoResponse) {
-            console.log(`✅ STORE-SPECIFIC AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id}) from schema ${storeMapping.schema}`);
-            console.log(`📝 USING PROGRAMMED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
-            responseText = autoResponse.messageText;
-          } else {
-            console.log(`❌ NO STORE-SPECIFIC AUTO-RESPONSE - Store ${storeMapping.storeId}: No matching trigger for "${messageText}" in tenant schema`);
-            responseText = `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`;
-          }
-
-          // Send response using database configuration
+          // Fallback message
           const { storage } = await import('./storage');
           const config = await storage.getWhatsAppConfig(storeMapping.storeId);
           
-          if (!config) {
-            throw new Error('WhatsApp configuration not found in database');
-          }
-
-          // CRITICAL FIX: Process interactive buttons from auto-response configuration
-          let messagePayload;
-          
-          // Check both camelCase (menuOptions) and snake_case (menu_options) field names
-          const menuOptionsData = autoResponse?.menuOptions || autoResponse?.menu_options;
-          const menuTypeData = autoResponse?.menuType || autoResponse?.menu_type;
-          
-          if (autoResponse && menuOptionsData && menuTypeData === 'buttons') {
-            try {
-              const menuOptions = JSON.parse(menuOptionsData);
-              console.log(`🔘 INTERACTIVE BUTTONS DETECTED - Store ${storeMapping.storeId}: ${menuOptions.length} buttons configured`);
-              
-              // WhatsApp interactive message with buttons
-              messagePayload = {
-                messaging_product: 'whatsapp',
-                to: from,
-                type: 'interactive',
-                interactive: {
-                  type: 'button',
-                  body: {
-                    text: responseText
-                  },
-                  action: {
-                    buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
-                      type: 'reply',
-                      reply: {
-                        id: option.action || option.value || `btn_${index}`,
-                        title: option.label.substring(0, 20) // WhatsApp button title limit
-                      }
-                    }))
-                  }
-                }
-              };
-              console.log(`📤 SENDING INTERACTIVE MESSAGE - Store ${storeMapping.storeId}: ${menuOptions.length} buttons`);
-            } catch (error) {
-              console.log(`⚠️ BUTTON PARSING ERROR - Store ${storeMapping.storeId}: ${error.message}, falling back to text`);
-              messagePayload = {
-                messaging_product: 'whatsapp',
-                to: from,
-                type: 'text',
-                text: { body: responseText }
-              };
-            }
-          } else {
-            // Simple text message
-            console.log(`📤 SENDING TEXT MESSAGE - Store ${storeMapping.storeId}: No buttons configured`);
-            messagePayload = {
+          if (config) {
+            const fallbackPayload = {
               messaging_product: 'whatsapp',
               to: from,
               type: 'text',
-              text: { body: responseText }
+              text: {
+                body: `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`
+              }
             };
-          }
 
-          const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${config.accessToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(messagePayload)
-          });
-
-          const result = await response.json();
-          console.log('WhatsApp API response:', result);
-
-          if (response.ok) {
-            await storage.addWhatsAppLog({
-              type: 'success',
-              phoneNumber: from,
-              messageContent: 'Respuesta enviada exitosamente',
-              status: 'sent',
-              rawData: JSON.stringify(result)
+            const response = await fetch(`https://graph.facebook.com/v21.0/${storeMapping.phoneNumberId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${config.accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(fallbackPayload),
             });
-          } else {
-            throw new Error(`API Error: ${JSON.stringify(result)}`);
+            
+            if (!response.ok) {
+              console.error('❌ FALLBACK MESSAGE FAILED:', await response.text());
+            }
           }
-        } catch (error: any) {
-          console.error('Error sending WhatsApp message:', error);
-          await storage.addWhatsAppLog({
-            type: 'error',
-            phoneNumber: from,
-            messageContent: 'Error enviando respuesta',
-            status: 'error',
-            errorMessage: error.message,
-            rawData: JSON.stringify(error)
-          });
         }
       }
     }
-  } catch (error: any) {
-    console.error('Error in processWhatsAppMessageSimple:', error);
+  } catch (error) {
+    console.error('🚨 CRITICAL ERROR IN WHATSAPP PROCESSOR:', error);
+  }
+}
+
+// New function to process configured auto-responses
+async function processConfiguredAutoResponse(messageText: string, from: string, customer: any, tenantStorage: any, storeMapping: any) {
+  console.log(`🎯 PROCESSING CONFIGURED AUTO-RESPONSE - Store ${storeMapping.storeId}`);
+  
+  // CRITICAL: Use only tenant schema for store-specific auto-responses
+  let autoResponse = null;
+  const messageTextLower = messageText.toLowerCase().trim();
+  
+  // Get auto-responses ONLY from tenant schema (store-specific)
+  const autoResponses = await tenantStorage.getAllAutoResponses();
+  console.log(`🔍 STORE-SPECIFIC AUTO-RESPONSE VALIDATION - Store ${storeMapping.storeId}: Found ${autoResponses.length} tenant auto-responses`);
+  
+  // VALIDATION: Ensure we're only using responses from this specific store's schema
+  if (autoResponses.length === 0) {
+    console.log(`⚠️ WARNING - Store ${storeMapping.storeId}: No auto-responses found in tenant schema ${storeMapping.schema}`);
+    throw new Error('No auto-responses configured for this store');
+  }
+  
+  // Step 1: Look for exact trigger matches in tenant schema ONLY
+  autoResponse = autoResponses.find((resp: any) => 
+    resp.isActive && resp.trigger.toLowerCase() === messageTextLower
+  );
+  
+  // Step 2: Handle button interactions by checking actions
+  if (!autoResponse) {
+    console.log(`🔘 CHECKING BUTTON INTERACTIONS - Message: "${messageTextLower}"`);
+    // Check if message matches button actions from menu_options
+    for (const resp of autoResponses) {
+      if (resp.isActive && resp.menuOptions) {
+        try {
+          const menuOptions = JSON.parse(resp.menuOptions);
+          const matchingOption = menuOptions.find((option: any) => 
+            option.action === messageTextLower || option.value === messageTextLower
+          );
+          if (matchingOption) {
+            // Find the auto-response for this action
+            const actionResponse = autoResponses.find((actionResp: any) => 
+              actionResp.isActive && actionResp.trigger === matchingOption.action
+            );
+            if (actionResponse) {
+              autoResponse = actionResponse;
+              console.log(`🔘 BUTTON ACTION DETECTED - Matching "${messageTextLower}" to trigger "${matchingOption.action}"`);
+              break;
+            }
+          }
+        } catch (e) {
+          console.log(`⚠️ JSON PARSE ERROR for response ${resp.id}:`, e.message);
+        }
+      }
+    }
+  }
+  
+  // Step 3: If no exact match, check common greeting patterns and map to welcome
+  if (!autoResponse) {
+    const greetingPatterns = ['hola', 'hello', 'hi', 'buenos dias', 'buenas tardes', 'menu', 'menú'];
+    const isGreeting = greetingPatterns.some(pattern => messageTextLower.includes(pattern));
+    
+    if (isGreeting) {
+      autoResponse = autoResponses.find((resp: any) => 
+        resp.isActive && resp.trigger === 'welcome'
+      );
+      console.log(`👋 GREETING DETECTED - Using welcome auto-response`);
+    }
+  }
+  
+  // Step 4: If still no match, use welcome as default
+  if (!autoResponse) {
+    autoResponse = autoResponses.find((resp: any) => 
+      resp.isActive && resp.trigger === 'welcome'
+    );
+    console.log(`🔄 NO SPECIFIC MATCH - Using default welcome auto-response`);
+  }
+
+  // Step 5: If auto-response found, send it
+  if (!autoResponse) {
+    console.log(`❌ NO AUTO-RESPONSE CONFIGURED - Store ${storeMapping.storeId}: No matching responses in tenant schema`);
+    throw new Error('No auto-responses configured for this store');
+  }
+
+  console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id})`);
+  console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
+
+  // Step 6: Send response using WhatsApp API
+  const { storage } = await import('./storage');
+  const config = await storage.getWhatsAppConfig(storeMapping.storeId);
+  
+  if (!config) {
+    throw new Error('WhatsApp configuration not found in database');
+  }
+
+  // Step 7: Process interactive buttons from auto-response configuration
+  let messagePayload;
+  
+  // Check both camelCase (menuOptions) and snake_case (menu_options) field names
+  const menuOptionsData = autoResponse?.menuOptions || autoResponse?.menu_options;
+  const menuTypeData = autoResponse?.menuType || autoResponse?.menu_type;
+  
+  if (autoResponse && menuOptionsData && menuTypeData === 'buttons') {
+    try {
+      const menuOptions = JSON.parse(menuOptionsData);
+      console.log(`🔘 INTERACTIVE BUTTONS DETECTED - Store ${storeMapping.storeId}: ${menuOptions.length} buttons configured`);
+      
+      // WhatsApp interactive message with buttons
+      messagePayload = {
+        messaging_product: 'whatsapp',
+        to: from,
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: {
+            text: autoResponse.messageText
+          },
+          action: {
+            buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+              type: 'reply',
+              reply: {
+                id: option.action || option.value || `btn_${index}`,
+                title: option.label.substring(0, 20) // WhatsApp button title limit
+              }
+            }))
+          }
+        }
+      };
+      console.log(`📤 SENDING INTERACTIVE MESSAGE - Store ${storeMapping.storeId}: ${menuOptions.length} buttons`);
+    } catch (error) {
+      console.log(`⚠️ BUTTON PARSING ERROR - Store ${storeMapping.storeId}: ${error.message}, falling back to text`);
+      messagePayload = {
+        messaging_product: 'whatsapp',
+        to: from,
+        type: 'text',
+        text: { body: autoResponse.messageText }
+      };
+    }
+  } else {
+    // Simple text message
+    console.log(`📤 SENDING TEXT MESSAGE - Store ${storeMapping.storeId}: No buttons configured`);
+    messagePayload = {
+      messaging_product: 'whatsapp',
+      to: from,
+      type: 'text',
+      text: { body: autoResponse.messageText }
+    };
+  }
+
+  // Step 8: Send the message via WhatsApp API
+  const response = await fetch(`https://graph.facebook.com/v21.0/${storeMapping.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(messagePayload)
+  });
+
+  const result = await response.json();
+  console.log('📤 WhatsApp API Response:', result);
+
+  if (response.ok) {
+    console.log(`✅ AUTO-RESPONSE SENT SUCCESSFULLY - Store ${storeMapping.storeId}`);
     await storage.addWhatsAppLog({
-      type: 'error',
-      phoneNumber: null,
-      messageContent: 'Error general en procesamiento',
-      status: 'error',
-      errorMessage: error.message
+      type: 'success',
+      phoneNumber: from,
+      messageContent: `Auto-response sent: ${autoResponse.name}`,
+      status: 'sent',
+      rawData: JSON.stringify(result)
     });
+  } else {
+    throw new Error(`WhatsApp API Error: ${JSON.stringify(result)}`);
   }
 }
 
