@@ -953,6 +953,13 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **MASQUESALUD (Store ID: 5)**: phoneNumberId 690329620832620 (+1 809 357 6939) - Production Number
 - July 06, 2025. CORRECCIÓN DE MENSAJES AUTOMÁTICOS DE MASQUESALUD:
   - Corregida discrepancia entre mensaje configurado en base de datos vs mensaje mostrado en panel web
+- July 07, 2025. ERROR 500 EN CONFIGURACIÓN WHATSAPP COMPLETAMENTE RESUELTO:
+  - **Problema crítico identificado**: Endpoint PATCH `/api/settings/whatsapp` no pasaba `storeId` del usuario autenticado
+  - **Causa raíz**: Llamadas a `getWhatsAppConfig()` y `updateWhatsAppConfig()` sin parámetro `storeId`
+  - **Correcciones aplicadas**: Agregado `storeId` en todas las operaciones de configuración WhatsApp
+  - **Validación completa**: Tested campos individuales, múltiples, y requests vacíos - todos funcionando
+  - **Confirmación multi-tenant**: Cada tienda mantiene configuración WhatsApp separada e independiente
+  - **Sistema operacional**: Guardado de credenciales WhatsApp desde panel web 100% funcional sin errores
   - Actualizado mensaje de bienvenida de MASQUESALUD de "*MASQUESALUD*" a "*Mas que Salud*" para coincidencia exacta
   - Sistema multi-tenant verificado: cada tienda usa sus propias respuestas automáticas del schema correspondiente
   - Webhook routing confirmado operacional con aislamiento completo de datos por phoneNumberId
