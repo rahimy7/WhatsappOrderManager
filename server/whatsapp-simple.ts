@@ -178,6 +178,34 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
             resp.isActive && resp.trigger.toLowerCase() === messageTextLower
           );
           
+          // CRITICAL: Handle button interactions by checking actions
+          if (!autoResponse) {
+            // Check if message matches button actions from menu_options
+            for (const resp of autoResponses) {
+              if (resp.isActive && resp.menuOptions) {
+                try {
+                  const menuOptions = JSON.parse(resp.menuOptions);
+                  const matchingOption = menuOptions.find((option: any) => 
+                    option.action === messageTextLower || option.value === messageTextLower
+                  );
+                  if (matchingOption) {
+                    // Find the auto-response for this action
+                    const actionResponse = autoResponses.find((actionResp: any) => 
+                      actionResp.isActive && actionResp.trigger === matchingOption.action
+                    );
+                    if (actionResponse) {
+                      autoResponse = actionResponse;
+                      console.log(`🔘 BUTTON ACTION DETECTED - Matching "${messageTextLower}" to trigger "${matchingOption.action}"`);
+                      break;
+                    }
+                  }
+                } catch (e) {
+                  // Ignore JSON parse errors
+                }
+              }
+            }
+          }
+          
           // If no exact match, check for welcome trigger on any first message
           if (!autoResponse) {
             autoResponse = autoResponses.find((resp: any) => 
