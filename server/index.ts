@@ -89,12 +89,37 @@ apiRouter.post('/auth/login', express.json(), async (req, res) => {
   }
 });
 
-// Mount the API router with highest priority
-app.use('/api', apiRouter);
+// Auth verification endpoint
+apiRouter.get('/auth/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'No token provided' });
+  }
+
+  const token = authHeader.substring(7);
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      id: decoded.id,
+      username: decoded.username,
+      role: decoded.role,
+      storeId: decoded.storeId,
+      level: decoded.level
+    });
+  } catch (error) {
+    res.status(401).json({ success: false, message: 'Invalid token' });
+  }
+});
 
 (async () => {
   try {
     console.log('Starting application...');
+
+    // Mount the API router with highest priority FIRST
+    app.use('/api', apiRouter);
 
 // Schema migration endpoints
 app.post('/api/super-admin/stores/:id/migrate-schema', async (req, res) => {

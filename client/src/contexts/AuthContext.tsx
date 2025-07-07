@@ -33,9 +33,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
 
-      const response = await apiRequest('GET', '/api/auth/me');
-      const userData = await response.json();
-      setUser(userData);
+      // Decode JWT token locally instead of making API call
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        
+        // Check if token is expired
+        const currentTime = Date.now() / 1000;
+        if (payload.exp && payload.exp < currentTime) {
+          throw new Error('Token expired');
+        }
+
+        // Set user data from token
+        setUser({
+          id: payload.id,
+          username: payload.username,
+          role: payload.role,
+          storeId: payload.storeId,
+          level: payload.level
+        });
+      } catch (tokenError) {
+        console.log('Invalid or expired token');
+        localStorage.removeItem('auth_token');
+      }
     } catch (error) {
       console.log('No active session found');
       localStorage.removeItem('auth_token');

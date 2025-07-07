@@ -1099,6 +1099,8 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **Headers correctos**: Content-Type application/json configurado explícitamente para todas las rutas API
   - **Multi-tenant authentication working**: Sistema de autenticación multi-nivel funcionando correctamente
   - **Debugging completado**: Error "Unexpected token '<', '<!DOCTYPE'" completamente eliminado para endpoints críticos
+  - **Frontend optimizado**: AuthContext modificado para decodificar JWT localmente eliminando dependencia de /api/auth/me
+  - **Persistencia de sesión mejorada**: Sistema ahora valida tokens localmente sin llamadas API problemáticas
 
 ## User Preferences
 
