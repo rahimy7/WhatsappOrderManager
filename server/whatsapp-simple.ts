@@ -471,14 +471,80 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       updatedAt: new Date()
     });
 
-    // Create order items in tenant schema
+    // Create order items in tenant schema - find or create products first
     for (const item of orderItems) {
+      let productId = item.productId;
+      
+      // If no productId, try to find product by name or create new one
+      if (!productId) {
+        const existingProducts = await tenantStorage.getAllProducts();
+        
+        // Enhanced product matching logic
+        const existingProduct = existingProducts.find(p => {
+          const productName = p.name.toLowerCase();
+          const itemName = item.name.toLowerCase();
+          
+          // Direct name matching
+          if (productName.includes(itemName) || itemName.includes(productName)) {
+            return true;
+          }
+          
+          // BTU matching for air conditioners
+          const productBTU = productName.match(/(\d+k?)\s*btu/i);
+          const itemBTU = itemName.match(/(\d+k?)\s*btu/i);
+          if (productBTU && itemBTU) {
+            const productBTUValue = productBTU[1].toLowerCase().replace('k', '000');
+            const itemBTUValue = itemBTU[1].toLowerCase().replace('k', '000');
+            
+            if (productBTUValue === itemBTUValue && 
+                (productName.includes('aire') || productName.includes('split') || productName.includes('acondicionado')) &&
+                (itemName.includes('aire') || itemName.includes('acondicionado'))) {
+              return true;
+            }
+          }
+          
+          return false;
+        });
+        
+        if (existingProduct) {
+          productId = existingProduct.id;
+          
+          await storage.addWhatsAppLog({
+            type: 'debug',
+            phoneNumber: phoneNumber,
+            messageContent: `Producto encontrado: "${item.name}" → "${existingProduct.name}" (ID: ${productId})`,
+            status: 'processing'
+          });
+        } else {
+          // Create new product
+          const newProduct = await tenantStorage.createProduct({
+            name: item.name,
+            price: item.price.toString(),
+            category: 'product', // Default category for web catalog items
+            description: `Producto creado automáticamente desde pedido web: ${item.name}`,
+            status: 'active',
+            availability: 'in_stock',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+          
+          productId = newProduct.id;
+          
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: phoneNumber,
+            messageContent: `Nuevo producto creado: "${item.name}" (ID: ${productId})`,
+            status: 'processing'
+          });
+        }
+      }
+
       await tenantStorage.createOrderItem({
         orderId: order.id,
-        productName: item.name,
+        productId: productId,
         quantity: item.quantity,
         unitPrice: item.price.toString(),
-        subtotal: (item.price * item.quantity).toString()
+        totalPrice: (item.price * item.quantity).toString()
       });
     }
 

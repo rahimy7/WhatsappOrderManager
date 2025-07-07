@@ -1,95 +1,73 @@
-// Script to test multi-tenant WhatsApp webhook with auto-responses
-const testWebhook = async (storeType = 'masquesalud') => {
-  try {
-    let webhookData;
-    
-    if (storeType === 'masquesalud') {
-      webhookData = {
-        "object": "whatsapp_business_account",
-        "entry": [{
-          "id": "1438133463993189",
-          "changes": [{
-            "field": "messages", 
-            "value": {
-              "messaging_product": "whatsapp",
-              "metadata": {
-                "display_phone_number": "18093576939",
-                "phone_number_id": "690329620832620"  // MASQUESALUD Store ID: 5
-              },
-              "contacts": [{
-                "profile": {
-                  "name": "Cliente MASQUESALUD"
+/**
+ * Test completo para validar creación automática de órdenes desde catálogo web
+ */
+
+const testMessage = `🛍️ *NUEVO PEDIDO*
+
+📋 *Resumen de tu compra:*
+
+1. PLANTA NATURAL GARDEN POL ZAMIA
+   Cantidad: 1
+   Precio unitario: $714.00
+   Subtotal: $714.00
+
+2. AIRE ACONDICIONADO CETRON MCI24CDBWCC32 (EV/CO) INVERTER 24,000BTU SEER18
+   Cantidad: 1
+   Precio unitario: $49,410.00
+   Subtotal: $49,410.00
+
+*TOTAL: $50,124.00*
+
+Por favor confirma tu pedido y proporciona tu dirección de entrega.`;
+
+// Simular webhook payload de WhatsApp
+const webhookPayload = {
+  object: "whatsapp_business_account",
+  entry: [
+    {
+      id: "766302823222313",
+      changes: [
+        {
+          value: {
+            messaging_product: "whatsapp",
+            metadata: {
+              display_phone_number: "18093576939",
+              phone_number_id: "766302823222313"
+            },
+            messages: [
+              {
+                from: "18494553242",
+                id: "wamid.test123456789",
+                timestamp: "1751914000",
+                text: {
+                  body: testMessage
                 },
-                "wa_id": "525512345678"
-              }],
-              "messages": [{
-                "from": "525512345678",
-                "id": "test_msg_masque_" + Date.now(),
-                "timestamp": Math.floor(Date.now() / 1000).toString(),
-                "text": {
-                  "body": "hola"
-                },
-                "type": "text"
-              }]
-            }
-          }]
-        }]
-      };
-    } else {
-      webhookData = {
-        "object": "whatsapp_business_account",
-        "entry": [{
-          "id": "444239435931422",
-          "changes": [{
-            "field": "messages", 
-            "value": {
-              "messaging_product": "whatsapp",
-              "metadata": {
-                "display_phone_number": "15556550331",
-                "phone_number_id": "667993026397854"  // RVR SERVICE Store ID: 4
-              },
-              "contacts": [{
-                "profile": {
-                  "name": "Cliente RVR"
-                },
-                "wa_id": "525587654321"
-              }],
-              "messages": [{
-                "from": "525587654321",
-                "id": "test_msg_rvr_" + Date.now(),
-                "timestamp": Math.floor(Date.now() / 1000).toString(),
-                "text": {
-                  "body": "hola"
-                },
-                "type": "text"
-              }]
-            }
-          }]
-        }]
-      };
+                type: "text"
+              }
+            ]
+          },
+          field: "messages"
+        }
+      ]
     }
-
-    console.log(`Testing ${storeType.toUpperCase()} store webhook...`);
-    
-    const response = await fetch("http://localhost:5000/webhook", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(webhookData)
-    });
-
-    console.log("Webhook test response:", response.status);
-    console.log("Response text:", await response.text());
-  } catch (error) {
-    console.error("Error testing webhook:", error);
-  }
+  ]
 };
 
-// Test both stores
-console.log("Testing multi-tenant auto-responses...");
-testWebhook('masquesalud').then(() => {
-  setTimeout(() => {
-    testWebhook('rvr');
-  }, 2000);
+console.log('🧪 ENVIANDO WEBHOOK DE PRUEBA PARA ORDEN AUTOMÁTICA...\n');
+
+fetch('https://whats-app-order-manager-rahimy7.replit.app/webhook', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(webhookPayload)
+})
+.then(response => response.text())
+.then(data => {
+  console.log('✅ RESPUESTA DEL WEBHOOK:');
+  console.log(data);
+  console.log('\n🔍 Revisa los logs de WhatsApp en el panel para ver el procesamiento detallado');
+})
+.catch(error => {
+  console.error('❌ ERROR EN WEBHOOK:', error);
 });
