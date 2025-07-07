@@ -234,9 +234,60 @@ export function createTenantStorage(tenantDb: any) {
     },
 
     // WhatsApp Settings
-    async getAllWhatsAppConfigs() {
+    async getAllWhatsAppConfigs(storeId: number) {
       return await tenantDb.select().from(schema.whatsappSettings)
+        .where(eq(schema.whatsappSettings.storeId, storeId))
         .orderBy(desc(schema.whatsappSettings.createdAt));
+    },
+
+    async getWhatsAppConfig(storeId: number) {
+      const configs = await tenantDb.select().from(schema.whatsappSettings)
+        .where(and(
+          eq(schema.whatsappSettings.storeId, storeId),
+          eq(schema.whatsappSettings.isActive, true)
+        ))
+        .orderBy(desc(schema.whatsappSettings.createdAt))
+        .limit(1);
+      return configs[0] || null;
+    },
+
+    async updateWhatsAppConfig(configData: any, storeId: number) {
+      const existingConfigs = await tenantDb.select().from(schema.whatsappSettings)
+        .where(eq(schema.whatsappSettings.storeId, storeId))
+        .limit(1);
+      
+      if (existingConfigs.length > 0) {
+        // Update existing configuration
+        const [updated] = await tenantDb.update(schema.whatsappSettings)
+          .set({
+            accessToken: configData.accessToken,
+            phoneNumberId: configData.phoneNumberId,
+            webhookVerifyToken: configData.webhookVerifyToken,
+            businessAccountId: configData.businessAccountId,
+            appId: configData.appId,
+            isActive: configData.isActive ?? true,
+            updatedAt: new Date()
+          })
+          .where(eq(schema.whatsappSettings.id, existingConfigs[0].id))
+          .returning();
+        return updated;
+      } else {
+        // Create new configuration
+        const [created] = await tenantDb.insert(schema.whatsappSettings)
+          .values({
+            storeId: storeId,
+            accessToken: configData.accessToken,
+            phoneNumberId: configData.phoneNumberId,
+            webhookVerifyToken: configData.webhookVerifyToken,
+            businessAccountId: configData.businessAccountId,
+            appId: configData.appId,
+            isActive: configData.isActive ?? true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          })
+          .returning();
+        return created;
+      }
     }
   };
 }

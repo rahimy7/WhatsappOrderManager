@@ -388,7 +388,7 @@ app.use((req, res, next) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
         req.user = decoded;
         console.log('🔑 JWT Success - User authenticated:', (decoded as any).username, 'storeId:', (decoded as any).storeId);
       } catch (error) {

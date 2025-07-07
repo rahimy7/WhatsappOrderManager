@@ -288,7 +288,7 @@ function authenticateToken(req: any, res: any, next: any) {
     return res.sendStatus(401);
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'default-secret', (err: any, user: any) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'dev-secret', (err: any, user: any) => {
     if (err) return res.sendStatus(403);
     req.user = user;
     next();
@@ -552,7 +552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           level: authUser.level,
           storeId: authUser.storeId
         },
-        process.env.JWT_SECRET || 'default-secret',
+        process.env.JWT_SECRET || 'dev-secret',
         { expiresIn: '24h' }
       );
 
@@ -1443,10 +1443,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PATCH endpoint para actualizaciones parciales de configuración WhatsApp
-  app.patch("/api/settings/whatsapp", async (req, res) => {
+  app.patch("/api/settings/whatsapp", tenantMiddleware(), async (req, res) => {
+    console.log("=== PATCH WHATSAPP CONFIG DEBUG ===");
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    console.log("Auth user:", req.user);
+    
     try {
       const authUser = req.user as AuthUser;
       const storeId = authUser?.storeId;
+      
+      console.log("Extracted storeId:", storeId);
+      
+      if (!storeId) {
+        console.log("ERROR: No storeId found in user");
+        return res.status(400).json({ error: "Store ID not found in user context" });
+      }
 
       // Schema flexible que permite cualquier campo opcional
       const configData = z.object({
@@ -1462,9 +1473,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storeAddress: z.string().optional(),
         storeEmail: z.string().optional(),
       }).parse(req.body);
+      
+      console.log("Parsed config data:", JSON.stringify(configData, null, 2));
 
-      // Obtener la configuración actual con el storeId correcto
-      const currentConfig = await storage.getWhatsAppConfig(storeId);
+      // Usar tenant storage para obtener la configuración correcta
+      const tenantStorage = req.tenantStorage || storage;
+      const currentConfig = await tenantStorage.getWhatsAppConfig(storeId);
       
       // Crear el objeto de actualización con solo los campos modificados
       const updateData: any = {};
@@ -1509,29 +1523,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let config = currentConfig;
       if (Object.keys(updateData).length > 0) {
         if (currentConfig) {
-          // Actualizar configuración existente
+          // Actualizar configuración existente usando tenant storage
           const mergedData = { ...currentConfig, ...updateData, storeId };
-          config = await storage.updateWhatsAppConfig(mergedData);
+          config = await tenantStorage.updateWhatsAppConfig(mergedData, storeId);
         } else {
           // Si no hay configuración, necesitamos todos los campos obligatorios
           if (!updateData.accessToken || !updateData.phoneNumberId) {
             throw new Error('Token y Phone Number ID son requeridos para crear nueva configuración');
           }
           updateData.storeId = storeId;
-          config = await storage.updateWhatsAppConfig(updateData);
+          // Agregar webhook verify token por defecto si no se proporciona
+          if (!updateData.webhookVerifyToken) {
+            updateData.webhookVerifyToken = 'default-verify-token';
+          }
+          config = await tenantStorage.updateWhatsAppConfig(updateData, storeId);
         }
       }
 
+      console.log("Final response config:", config);
+      console.log("SUCCESS: WhatsApp config updated successfully");
+      
       res.json({ 
         success: true, 
         message: `Se actualizaron ${Object.keys(configData).length} campos correctamente`,
         updatedAt: config?.updatedAt || new Date()
       });
     } catch (error) {
+      console.error("=== PATCH WHATSAPP CONFIG ERROR ===");
+      console.error("Error type:", error.constructor.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      
       if (error instanceof z.ZodError) {
+        console.error("Zod validation errors:", error.errors);
         return res.status(400).json({ error: "Datos inválidos", details: error.errors });
       }
-      console.error("Error updating WhatsApp config:", error);
+      
       res.status(500).json({ error: "Error al actualizar la configuración de WhatsApp" });
     }
   });
@@ -5826,7 +5853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: user.role,
           storeId: storeId || user.storeId 
         },
-        process.env.JWT_SECRET || 'fallback-secret',
+        process.env.JWT_SECRET || 'dev-secret',
         { expiresIn: '24h' }
       );
       
@@ -5851,7 +5878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as any;
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as any;
       
       if (decoded.role !== 'super_admin') {
         return res.status(403).json({ error: 'Super admin access required' });

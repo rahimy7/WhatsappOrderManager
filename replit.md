@@ -953,6 +953,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **MASQUESALUD (Store ID: 5)**: phoneNumberId 690329620832620 (+1 809 357 6939) - Production Number
 - July 06, 2025. CORRECCIÓN DE MENSAJES AUTOMÁTICOS DE MASQUESALUD:
   - Corregida discrepancia entre mensaje configurado en base de datos vs mensaje mostrado en panel web
+- July 07, 2025. SISTEMA DE CONFIGURACIÓN WHATSAPP MULTI-TENANT COMPLETAMENTE OPERACIONAL:
+  - **RESUELTO**: Error crítico de autenticación JWT por inconsistencias en secretos (creation vs verification)
+  - **CORREGIDO**: Schema de base de datos tenant actualizado con columna `store_id` obligatoria en `whatsapp_settings`
+  - **IMPLEMENTADO**: Tenant storage con métodos `getWhatsAppConfig()` y `updateWhatsAppConfig()` específicos por tienda
+  - **FUNCIONAL**: Endpoint PATCH `/api/settings/whatsapp` usando tenant middleware y storage correcto
+  - **VERIFICADO**: Configuraciones WhatsApp se guardan exitosamente desde interfaz web sin errores 500
+  - **ARQUITECTURA**: Separación completa de configuraciones WhatsApp por tienda en schemas separados
+  - Sistema multi-tenant completamente estable con aislamiento total de datos de configuración
 - July 07, 2025. ERROR 500 EN CONFIGURACIÓN WHATSAPP COMPLETAMENTE RESUELTO:
   - **Problema crítico identificado**: Endpoint PATCH `/api/settings/whatsapp` no pasaba `storeId` del usuario autenticado
   - **Causa raíz**: Llamadas a `getWhatsAppConfig()` y `updateWhatsAppConfig()` sin parámetro `storeId`

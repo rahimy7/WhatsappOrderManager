@@ -165,7 +165,7 @@ export interface IStorage {
 
   // WhatsApp Settings
   getWhatsAppConfig(storeId?: number | null): Promise<WhatsAppSettings | null>;
-  updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings>;
+  updateWhatsAppConfig(config: InsertWhatsAppSettings, storeId?: number): Promise<WhatsAppSettings>;
   
   // WhatsApp Logs
   getWhatsAppLogs(): Promise<WhatsAppLog[]>;
@@ -1058,7 +1058,7 @@ export class MemStorage implements IStorage {
     };
   }
 
-  async updateWhatsAppConfig(config: any): Promise<any> {
+  async updateWhatsAppConfig(config: any, storeId?: number): Promise<any> {
     const storeKey = config.storeId ? `store_${config.storeId}` : 'default';
     
     if (!this.whatsappConfigByStore) {
@@ -1971,7 +1971,7 @@ export class DatabaseStorage implements IStorage {
         const tenantStorage = createTenantStorage(tenantDb);
         
         // Get the active WhatsApp configuration from tenant storage
-        const configs = await tenantStorage.getAllWhatsAppConfigs();
+        const configs = await tenantStorage.getAllWhatsAppConfigs(storeId);
         const activeConfig = configs.find((config: any) => config.isActive);
         
         if (activeConfig) {
@@ -2004,10 +2004,10 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updateWhatsAppConfig(config: InsertWhatsAppSettings): Promise<WhatsAppSettings> {
+  async updateWhatsAppConfig(config: InsertWhatsAppSettings, storeId?: number): Promise<WhatsAppSettings> {
     // Obtener la configuración activa existente - se debe pasar storeId
-    const storeId = config.storeId;
-    const existingConfig = await this.getWhatsAppConfig(storeId);
+    const targetStoreId = storeId || config.storeId;
+    const existingConfig = await this.getWhatsAppConfig(targetStoreId);
     
     if (existingConfig) {
       // Actualizar la configuración existente
