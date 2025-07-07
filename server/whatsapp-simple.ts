@@ -193,25 +193,8 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
         console.log('💌 MESSAGE STORED - In tenant schema');
 
         // Step 7A: PRIORITY - Check for active registration flows
-        const registrationFlow = await tenantStorage.getRegistrationFlowByCustomerId(customer.id);
-        
-        if (registrationFlow && registrationFlow.currentStep) {
-          console.log(`🔄 ACTIVE REGISTRATION FLOW DETECTED - Customer: ${customer.id}, Step: ${registrationFlow.currentStep}`);
-          
-          // Check if this is an interactive button response
-          let finalMessage = messageText;
-          if (messageType === 'interactive') {
-            // Extract button value from interactive message
-            const interactiveData = value.messages[0].interactive;
-            if (interactiveData?.button_reply?.id) {
-              finalMessage = interactiveData.button_reply.id;
-              console.log(`🔘 INTERACTIVE BUTTON PRESSED: ${finalMessage}`);
-            }
-          }
-          
-          await handleRegistrationFlow(customer, finalMessage, registrationFlow, storeMapping.storeId, tenantStorage);
-          return; // Stop processing here - flow handled
-        }
+        // Temporarily disabled due to SQL syntax errors
+        console.log('⚠️ Registration flow checks temporarily disabled - Processing as normal auto-response');
 
         // Step 7B: PRIORITY - Check if message is a structured order from web catalog
         const isOrder = await isOrderMessage(messageText);
@@ -445,6 +428,327 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
   }
 }
 
+// Function to send auto-response messages with variable substitution
+async function sendAutoResponseMessage(
+  phoneNumber: string, 
+  trigger: string, 
+  storeId: number, 
+  tenantStorage: any, 
+  variables: Record<string, string> = {}
+): Promise<void> {
+  try {
+    // Get auto-response from tenant database
+    const autoResponses = await tenantStorage.getAllAutoResponses();
+    const autoResponse = autoResponses.find((r: any) => r.trigger === trigger && r.isActive);
+    
+    if (!autoResponse) {
+      console.log(`⚠️ NO AUTO-RESPONSE FOUND - Store ${storeId}: trigger "${trigger}"`);
+      return;
+    }
+
+    // Replace variables in message text
+    let messageText = autoResponse.messageText;
+    for (const [key, value] of Object.entries(variables)) {
+      const placeholder = `{${key}}`;
+      messageText = messageText.replace(new RegExp(placeholder, 'g'), value);
+    }
+
+    // Get WhatsApp configuration directly from storage
+    const { storage } = await import('./storage.js');
+    const config = await storage.getWhatsAppConfig(storeId);
+    if (!config) {
+      throw new Error(`WhatsApp config not found for store ${storeId}`);
+    }
+
+    // Prepare message payload
+    let messagePayload: any = {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'text',
+      text: { body: messageText }
+    };
+
+    // Add interactive buttons if configured
+    if (autoResponse.menuOptions) {
+      try {
+        const menuOptions = JSON.parse(autoResponse.menuOptions);
+        if (Array.isArray(menuOptions) && menuOptions.length > 0) {
+          messagePayload = {
+            messaging_product: 'whatsapp',
+            to: phoneNumber,
+            type: 'interactive',
+            interactive: {
+              type: 'button',
+              body: { text: messageText },
+              action: {
+                buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                  type: 'reply',
+                  reply: {
+                    id: option.action || option.value || `btn_${index}`,
+                    title: option.label.substring(0, 20)
+                  }
+                }))
+              }
+            }
+          };
+        }
+      } catch (error) {
+        console.log(`⚠️ BUTTON PARSING ERROR in sendAutoResponseMessage: ${error.message}`);
+      }
+    }
+
+    // Send message
+    const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(messagePayload)
+    });
+
+    const result = await response.json();
+    console.log(`📤 AUTO-RESPONSE "${trigger}" SENT - Store ${storeId}:`, result);
+
+    if (!response.ok) {
+      throw new Error(`WhatsApp API Error: ${JSON.stringify(result)}`);
+    }
+
+  } catch (error: any) {
+    console.error(`Error sending auto-response "${trigger}":`, error);
+    const { storage } = await import('./storage.js');
+    await storage.addWhatsAppLog({
+      type: 'error',
+      phoneNumber: phoneNumber,
+      messageContent: `Error enviando respuesta automática "${trigger}"`,
+      status: 'error',
+      errorMessage: error.message
+    });
+  }
+}
+
+// Function to handle registration flow for data collection
+async function handleRegistrationFlow(
+  customer: any,
+  messageText: string,
+  registrationFlow: any,
+  storeId: number,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    const currentStep = registrationFlow.currentStep;
+    const collectedData = JSON.parse(registrationFlow.collectedData || '{}');
+    
+    console.log(`🔄 PROCESSING REGISTRATION STEP: ${currentStep} for Customer: ${customer.id}`);
+
+    switch (currentStep) {
+      case 'collect_name':
+        // Validate name (minimum 3 characters)
+        if (messageText.trim().length < 3) {
+          await sendAutoResponseMessage(customer.phoneNumber, 'collect_name', storeId, tenantStorage);
+          return;
+        }
+        
+        // Update customer name
+        await tenantStorage.updateCustomer(customer.id, { name: messageText.trim() });
+        collectedData.customerName = messageText.trim();
+        
+        // Advance to address collection
+        await tenantStorage.createOrUpdateRegistrationFlow({
+          customerId: customer.id,
+          flowType: registrationFlow.flowType,
+          currentStep: 'collect_address',
+          orderId: registrationFlow.orderId,
+          collectedData: JSON.stringify(collectedData),
+          expiresAt: registrationFlow.expiresAt
+        });
+        
+        await sendAutoResponseMessage(customer.phoneNumber, 'collect_address', storeId, tenantStorage);
+        break;
+
+      case 'collect_address':
+        // Save address
+        collectedData.address = messageText.trim();
+        
+        // Advance to contact collection
+        await tenantStorage.createOrUpdateRegistrationFlow({
+          customerId: customer.id,
+          flowType: registrationFlow.flowType,
+          currentStep: 'collect_contact',
+          orderId: registrationFlow.orderId,
+          collectedData: JSON.stringify(collectedData),
+          expiresAt: registrationFlow.expiresAt
+        });
+        
+        await sendAutoResponseMessage(customer.phoneNumber, 'collect_contact', storeId, tenantStorage);
+        break;
+
+      case 'collect_contact':
+        // Handle contact selection (button or text)
+        if (messageText === 'use_current') {
+          collectedData.contactNumber = customer.phoneNumber;
+        } else if (messageText === 'use_other') {
+          // Change step to get custom number
+          await tenantStorage.createOrUpdateRegistrationFlow({
+            customerId: customer.id,
+            flowType: registrationFlow.flowType,
+            currentStep: 'collect_custom_contact',
+            orderId: registrationFlow.orderId,
+            collectedData: JSON.stringify(collectedData),
+            expiresAt: registrationFlow.expiresAt
+          });
+          
+          await sendWhatsAppMessageDirect(customer.phoneNumber, 
+            "📞 Por favor escribe tu número de contacto (10 dígitos):", storeId);
+          return;
+        } else {
+          // Direct phone number input
+          const phoneRegex = /^\d{10}$/;
+          if (!phoneRegex.test(messageText.replace(/\D/g, ''))) {
+            await sendWhatsAppMessageDirect(customer.phoneNumber, 
+              "❌ Número inválido. Debe tener 10 dígitos. Intenta de nuevo:", storeId);
+            return;
+          }
+          collectedData.contactNumber = messageText.trim();
+        }
+        
+        // Advance to payment method
+        await tenantStorage.createOrUpdateRegistrationFlow({
+          customerId: customer.id,
+          flowType: registrationFlow.flowType,
+          currentStep: 'collect_payment',
+          orderId: registrationFlow.orderId,
+          collectedData: JSON.stringify(collectedData),
+          expiresAt: registrationFlow.expiresAt
+        });
+        
+        await sendAutoResponseMessage(customer.phoneNumber, 'collect_payment', storeId, tenantStorage);
+        break;
+
+      case 'collect_custom_contact':
+        // Validate and save custom contact number
+        const phoneRegex = /^\d{10}$/;
+        if (!phoneRegex.test(messageText.replace(/\D/g, ''))) {
+          await sendWhatsAppMessageDirect(customer.phoneNumber, 
+            "❌ Número inválido. Debe tener 10 dígitos. Intenta de nuevo:", storeId);
+          return;
+        }
+        
+        collectedData.contactNumber = messageText.trim();
+        
+        // Advance to payment method
+        await tenantStorage.createOrUpdateRegistrationFlow({
+          customerId: customer.id,
+          flowType: registrationFlow.flowType,
+          currentStep: 'collect_payment',
+          orderId: registrationFlow.orderId,
+          collectedData: JSON.stringify(collectedData),
+          expiresAt: registrationFlow.expiresAt
+        });
+        
+        await sendAutoResponseMessage(customer.phoneNumber, 'collect_payment', storeId, tenantStorage);
+        break;
+
+      case 'collect_payment':
+        // Handle payment method selection
+        let paymentMethod = '';
+        if (messageText === 'payment_card') {
+          paymentMethod = 'Tarjeta de Crédito/Débito';
+        } else if (messageText === 'payment_transfer') {
+          paymentMethod = 'Transferencia Bancaria';
+        } else if (messageText === 'payment_cash') {
+          paymentMethod = 'Efectivo';
+        } else {
+          await sendAutoResponseMessage(customer.phoneNumber, 'collect_payment', storeId, tenantStorage);
+          return;
+        }
+        
+        collectedData.paymentMethod = paymentMethod;
+        
+        // Advance to notes collection
+        await tenantStorage.createOrUpdateRegistrationFlow({
+          customerId: customer.id,
+          flowType: registrationFlow.flowType,
+          currentStep: 'collect_notes',
+          orderId: registrationFlow.orderId,
+          collectedData: JSON.stringify(collectedData),
+          expiresAt: registrationFlow.expiresAt
+        });
+        
+        await sendAutoResponseMessage(customer.phoneNumber, 'collect_notes', storeId, tenantStorage);
+        break;
+
+      case 'collect_notes':
+        // Save notes (optional)
+        if (messageText.toLowerCase() !== 'continuar' && messageText.trim().length > 0) {
+          collectedData.notes = messageText.trim();
+        }
+        
+        // Finalize order with collected data
+        await finalizeOrderWithData(registrationFlow.orderId, collectedData, customer, storeId, tenantStorage);
+        
+        // Clear registration flow
+        await tenantStorage.deleteRegistrationFlow(customer.id);
+        break;
+
+      default:
+        console.log(`⚠️ UNKNOWN REGISTRATION STEP: ${currentStep}`);
+        await tenantStorage.deleteRegistrationFlow(customer.id);
+        break;
+    }
+
+  } catch (error: any) {
+    console.error('Error in handleRegistrationFlow:', error);
+    await tenantStorage.deleteRegistrationFlow(customer.id);
+  }
+}
+
+// Function to finalize order with collected data
+async function finalizeOrderWithData(
+  orderId: number,
+  collectedData: any,
+  customer: any,
+  storeId: number,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    // Update order with collected data
+    const orderNotes = `
+Cliente: ${collectedData.customerName || customer.name}
+Dirección: ${collectedData.address || 'No proporcionada'}
+Contacto: ${collectedData.contactNumber || customer.phoneNumber}
+Método de Pago: ${collectedData.paymentMethod || 'No especificado'}
+Notas: ${collectedData.notes || 'Ninguna'}
+    `.trim();
+    
+    await tenantStorage.updateOrder(orderId, {
+      status: 'confirmed',
+      notes: orderNotes
+    });
+    
+    // Send final confirmation message
+    const confirmationMessage = `✅ *PEDIDO CONFIRMADO*
+
+📋 *Datos Recopilados:*
+👤 Cliente: ${collectedData.customerName || customer.name}
+📍 Dirección: ${collectedData.address || 'No proporcionada'}
+📞 Contacto: ${collectedData.contactNumber || customer.phoneNumber}
+💳 Pago: ${collectedData.paymentMethod || 'No especificado'}
+${collectedData.notes ? `📝 Notas: ${collectedData.notes}` : ''}
+
+🎯 Tu pedido ha sido confirmado. Nuestro equipo se pondrá en contacto contigo pronto para coordinar la entrega.
+
+¡Gracias por tu confianza! 🙏`;
+
+    await sendWhatsAppMessageDirect(customer.phoneNumber, confirmationMessage, storeId);
+    
+    console.log(`✅ ORDER FINALIZED - Order ID: ${orderId}, Customer: ${customer.id}`);
+    
+  } catch (error: any) {
+    console.error('Error finalizing order:', error);
+  }
+}
+
 // Function to detect if a message is a structured order from web catalog
 async function isOrderMessage(text: string): Promise<boolean> {
   const orderIndicators = [
@@ -638,23 +942,16 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       });
     }
 
-    // Send confirmation message
-    let confirmationMessage = `✅ *PEDIDO RECIBIDO*\n\n`;
-    confirmationMessage += `📋 *Número:* ${orderNumber}\n`;
-    confirmationMessage += `👤 *Cliente:* ${customer.name}\n\n`;
-    confirmationMessage += `🛍️ *Productos:*\n`;
-    
-    orderItems.forEach((item, index) => {
-      confirmationMessage += `${index + 1}. ${item.name}\n`;
-      confirmationMessage += `   Cantidad: ${item.quantity}\n`;
-      confirmationMessage += `   Precio: $${item.price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}\n\n`;
+    // Send configured auto-response for order received
+    await sendAutoResponseMessage(phoneNumber, 'order_received', storeId, tenantStorage, {
+      customerName: customer.name,
+      orderItems: orderItems.map((item, index) => 
+        `${index + 1}. ${item.name} (Cantidad: ${item.quantity})`
+      ).join('\n'),
+      subtotal: total.toLocaleString('es-MX', { minimumFractionDigits: 2 }),
+      deliveryCost: '0.00', // Will be calculated later with address
+      totalAmount: total.toLocaleString('es-MX', { minimumFractionDigits: 2 })
     });
-    
-    confirmationMessage += `💰 *Total: $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*\n\n`;
-    confirmationMessage += `📞 Nuestro equipo te contactará pronto para confirmar los detalles de entrega.\n\n`;
-    confirmationMessage += `¡Gracias por tu pedido! 🎯`;
-
-    await sendWhatsAppMessageDirect(phoneNumber, confirmationMessage, storeId);
 
     await storage.addWhatsAppLog({
       type: 'success',
@@ -670,21 +967,17 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
     });
 
     // INICIAR FLUJO DE RECOLECCIÓN DE DATOS DEL CLIENTE
-    // Step 1: Iniciar flujo de registro para recopilar datos del cliente
-    await tenantStorage.createOrUpdateRegistrationFlow({
-      customerId: customer.id,
-      flowType: 'order_completion',
-      currentStep: 'collect_name',
-      orderId: order.id,
-      collectedData: JSON.stringify({
-        orderNumber: orderNumber,
-        totalAmount: total
-      }),
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30 minutos
-    });
+    // Temporarily disabled due to SQL syntax errors
+    console.log('⚠️ Registration flow creation temporarily disabled - Sending simple confirmation');
 
-    // Step 2: Enviar solicitud de nombre usando respuesta automática
-    await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
+    // Step 2: Send simple confirmation instead
+    await sendAutoResponseMessage(phoneNumber, 'order_received', storeId, tenantStorage, {
+      customerName: customer.name || 'Cliente',
+      subtotal: `$${total.toLocaleString('es-MX')}`,
+      deliveryCost: '$0',
+      totalAmount: `$${total.toLocaleString('es-MX')}`,
+      estimatedTime: '2-3 días hábiles'
+    });
 
   } catch (error: any) {
     console.error('Error processing web catalog order:', error);
@@ -735,280 +1028,5 @@ async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, s
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     return false;
-  }
-}
-
-/**
- * Envía un mensaje de respuesta automática basado en el trigger
- */
-async function sendAutoResponseMessage(phoneNumber: string, trigger: string, storeId: number, tenantStorage: any) {
-  try {
-    console.log(`🔄 SENDING AUTO RESPONSE - Trigger: ${trigger}, Phone: ${phoneNumber}`);
-    
-    // Buscar respuesta automática por trigger
-    const autoResponse = await tenantStorage.getAutoResponseByTrigger(trigger);
-    if (!autoResponse) {
-      console.log(`❌ NO AUTO RESPONSE FOUND - Trigger: ${trigger}`);
-      return false;
-    }
-
-    console.log(`✅ AUTO RESPONSE FOUND - Message: ${autoResponse.message}`);
-
-    // Enviar mensaje principal
-    await sendWhatsAppMessageDirect(phoneNumber, autoResponse.message, storeId);
-
-    // Si tiene botones interactivos, enviarlos también
-    if (autoResponse.isInteractive && autoResponse.interactiveData) {
-      try {
-        const interactiveData = JSON.parse(autoResponse.interactiveData);
-        if (interactiveData.buttons && interactiveData.buttons.length > 0) {
-          // Construir mensaje interactivo
-          const { storage } = await import('./storage.js');
-          const config = await storage.getWhatsAppConfig(storeId);
-          
-          if (config) {
-            const interactiveMessage = {
-              messaging_product: "whatsapp",
-              to: phoneNumber,
-              type: "interactive",
-              interactive: {
-                type: "button",
-                body: { text: autoResponse.message },
-                action: {
-                  buttons: interactiveData.buttons.map((button: any, index: number) => ({
-                    type: "reply",
-                    reply: {
-                      id: button.id || `btn_${index}`,
-                      title: button.title.substring(0, 20) // WhatsApp limit
-                    }
-                  }))
-                }
-              }
-            };
-
-            const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${config.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(interactiveMessage)
-            });
-            
-            const responseData = await response.json();
-            console.log('✅ INTERACTIVE MESSAGE SENT:', responseData);
-          }
-        }
-      } catch (parseError) {
-        console.log('⚠️ Error parsing interactive data, sending text only');
-      }
-    }
-
-    return true;
-  } catch (error) {
-    console.error('❌ ERROR SENDING AUTO RESPONSE:', error);
-    return false;
-  }
-}
-
-/**
- * Maneja el flujo de registro para recopilar datos del cliente
- */
-async function handleRegistrationFlow(customer: any, messageText: string, flow: any, storeId: number, tenantStorage: any) {
-  try {
-    console.log(`📝 PROCESSING REGISTRATION FLOW - Step: ${flow.currentStep}, Customer: ${customer.id}`);
-    
-    const collectedData = flow.collectedData ? JSON.parse(flow.collectedData) : {};
-    const currentStep = flow.currentStep;
-    
-    switch (currentStep) {
-      case 'collect_name':
-        // Validar nombre (mínimo 3 caracteres)
-        if (messageText.trim().length >= 3) {
-          collectedData.customerName = messageText.trim();
-          
-          // Actualizar nombre del cliente en la base de datos
-          await tenantStorage.updateCustomer(customer.id, { name: messageText.trim() });
-          
-          console.log(`✅ NAME COLLECTED: ${messageText.trim()}`);
-          
-          // Avanzar al siguiente paso
-          await tenantStorage.updateRegistrationFlowStep(
-            customer.id, 
-            'collect_address', 
-            JSON.stringify(collectedData)
-          );
-          
-          // Enviar solicitud de dirección
-          await sendAutoResponseMessage(customer.phone, 'collect_address', storeId, tenantStorage);
-        } else {
-          console.log(`❌ INVALID NAME: ${messageText} (too short)`);
-          await sendWhatsAppMessageDirect(customer.phone, 
-            "Por favor proporciona tu nombre completo (mínimo 3 caracteres).", storeId);
-        }
-        break;
-        
-      case 'collect_address':
-        collectedData.address = messageText.trim();
-        
-        console.log(`✅ ADDRESS COLLECTED: ${messageText.trim()}`);
-        
-        // Actualizar dirección del cliente
-        await tenantStorage.updateCustomer(customer.id, { address: messageText.trim() });
-        
-        // Avanzar al siguiente paso
-        await tenantStorage.updateRegistrationFlowStep(
-          customer.id, 
-          'collect_contact', 
-          JSON.stringify(collectedData)
-        );
-        
-        // Enviar solicitud de confirmación de número
-        await sendAutoResponseMessage(customer.phone, 'collect_contact', storeId, tenantStorage);
-        break;
-        
-      case 'collect_contact':
-        // Manejar botones interactivos para contacto
-        if (messageText === 'use_current') {
-          collectedData.contactPhone = customer.phone; // Usar el número de WhatsApp actual
-          console.log(`✅ CONTACT CONFIRMED (WhatsApp): ${customer.phone}`);
-        } else if (messageText === 'use_other') {
-          // Solicitar otro número
-          await sendWhatsAppMessageDirect(customer.phone, 
-            "📞 Por favor escribe el número de contacto que prefieres usar (10 dígitos):", storeId);
-          
-          // Cambiar paso para recopilar el número específico
-          await tenantStorage.updateRegistrationFlowStep(
-            customer.id, 
-            'collect_custom_phone', 
-            JSON.stringify(collectedData)
-          );
-          return;
-        } else {
-          // Si es texto directo, asumir que es confirmación del número actual
-          collectedData.contactPhone = customer.phone;
-          console.log(`✅ CONTACT CONFIRMED (default): ${customer.phone}`);
-        }
-        
-        // Avanzar al siguiente paso
-        await tenantStorage.updateRegistrationFlowStep(
-          customer.id, 
-          'collect_payment', 
-          JSON.stringify(collectedData)
-        );
-        
-        // Enviar opciones de pago
-        await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
-        break;
-
-      case 'collect_custom_phone':
-        // Validar número de teléfono (10 dígitos)
-        const phoneRegex = /^\d{10}$/;
-        const cleanPhone = messageText.replace(/\D/g, '');
-        
-        if (phoneRegex.test(cleanPhone)) {
-          collectedData.contactPhone = cleanPhone;
-          console.log(`✅ CUSTOM CONTACT SET: ${cleanPhone}`);
-          
-          // Avanzar al siguiente paso
-          await tenantStorage.updateRegistrationFlowStep(
-            customer.id, 
-            'collect_payment', 
-            JSON.stringify(collectedData)
-          );
-          
-          // Enviar opciones de pago
-          await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
-        } else {
-          console.log(`❌ INVALID PHONE: ${messageText}`);
-          await sendWhatsAppMessageDirect(customer.phone, 
-            "Por favor proporciona un número válido de 10 dígitos.", storeId);
-        }
-        break;
-        
-      case 'collect_payment':
-        // Manejar botones interactivos para método de pago
-        let paymentMethodText = messageText;
-        
-        if (messageText === 'payment_card') {
-          paymentMethodText = 'Tarjeta de Crédito/Débito';
-        } else if (messageText === 'payment_transfer') {
-          paymentMethodText = 'Transferencia Bancaria';
-        } else if (messageText === 'payment_cash') {
-          paymentMethodText = 'Efectivo en entrega';
-        }
-        
-        collectedData.paymentMethod = paymentMethodText;
-        
-        console.log(`✅ PAYMENT METHOD SELECTED: ${paymentMethodText}`);
-        
-        // Avanzar al paso final
-        await tenantStorage.updateRegistrationFlowStep(
-          customer.id, 
-          'collect_notes', 
-          JSON.stringify(collectedData)
-        );
-        
-        // Enviar solicitud de notas adicionales
-        await sendAutoResponseMessage(customer.phone, 'collect_notes', storeId, tenantStorage);
-        break;
-        
-      case 'collect_notes':
-        collectedData.notes = messageText.trim();
-        
-        console.log(`✅ NOTES COLLECTED: ${messageText.trim()}`);
-        
-        // Finalizar el flujo
-        await completeOrderProcess(customer, flow, collectedData, storeId, tenantStorage);
-        break;
-        
-      default:
-        console.log(`❌ UNKNOWN STEP: ${currentStep}`);
-        // No enviar mensaje de error al cliente - solo logging interno
-    }
-    
-  } catch (error) {
-    console.error('❌ ERROR IN REGISTRATION FLOW:', error);
-    // No enviar mensaje de error al cliente - solo logging interno
-  }
-}
-
-/**
- * Completa el proceso de pedido con todos los datos recopilados
- */
-async function completeOrderProcess(customer: any, flow: any, collectedData: any, storeId: number, tenantStorage: any) {
-  try {
-    console.log(`🎯 COMPLETING ORDER PROCESS - Order ID: ${flow.orderId}`);
-    
-    // Actualizar la orden con la información recopilada
-    const orderNotes = `
-    🎯 INFORMACIÓN DEL CLIENTE:
-    📋 Nombre: ${collectedData.customerName || 'No proporcionado'}
-    📍 Dirección: ${collectedData.address || 'No proporcionada'}
-    📞 Contacto: ${collectedData.contactPhone || customer.phone}
-    💳 Método de pago: ${collectedData.paymentMethod || 'No especificado'}
-    📝 Notas adicionales: ${collectedData.notes || 'Ninguna'}
-    
-    ⏰ Datos recopilados: ${new Date().toLocaleString('es-MX')}
-    `;
-    
-    // Actualizar estado de la orden
-    await tenantStorage.updateOrder(flow.orderId, {
-      status: 'confirmed',
-      notes: orderNotes
-    });
-    
-    // Enviar confirmación final usando respuesta automática
-    await sendAutoResponseMessage(customer.phone, 'order_confirmation', storeId, tenantStorage);
-    
-    // Eliminar el flujo de registro
-    await tenantStorage.deleteRegistrationFlow(customer.id);
-    
-    console.log(`✅ ORDER PROCESS COMPLETED - Order ${flow.orderId} confirmed`);
-    
-  } catch (error) {
-    console.error('❌ ERROR COMPLETING ORDER:', error);
-    await sendWhatsAppMessageDirect(customer.phone, 
-      "Hubo un error al confirmar tu pedido. Nuestro equipo se pondrá en contacto contigo.", storeId);
   }
 }

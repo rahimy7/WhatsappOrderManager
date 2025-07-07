@@ -258,9 +258,10 @@ export function createTenantStorage(tenantDb: any) {
 
     async getRegistrationFlowByCustomerId(customerId: number) {
       try {
-        const [flow] = await tenantDb.select().from(schema.customerRegistrationFlows)
-          .where(eq(schema.customerRegistrationFlows.customerId, customerId));
-        return flow || null;
+        const result = await tenantDb.execute(
+          sql`SELECT * FROM customer_registration_flows WHERE customer_id = ${customerId} LIMIT 1`
+        );
+        return result.rows[0] || null;
       } catch (error) {
         console.log('Error getting registration flow:', error);
         return null;
@@ -273,38 +274,54 @@ export function createTenantStorage(tenantDb: any) {
     },
 
     async createOrUpdateRegistrationFlow(flowData: any) {
-      // Check if flow exists for this customer
-      const [existingFlow] = await tenantDb
-        .select()
-        .from(schema.customerRegistrationFlows)
-        .where(eq(schema.customerRegistrationFlows.customerId, flowData.customerId));
+      try {
+        // Get customer phone number first
+        const customerResult = await tenantDb.execute(
+          sql`SELECT phone_number FROM customers WHERE id = ${flowData.customerId} LIMIT 1`
+        );
+        
+        if (!customerResult.rows[0]) {
+          throw new Error(`Customer not found: ${flowData.customerId}`);
+        }
+        
+        const phoneNumber = customerResult.rows[0].phone_number;
 
-      if (existingFlow) {
-        // Update existing flow
-        const [updatedFlow] = await tenantDb
-          .update(schema.customerRegistrationFlows)
-          .set({
-            flowType: flowData.flowType,
-            currentStep: flowData.currentStep,
-            orderId: flowData.orderId,
-            collectedData: flowData.collectedData,
-            expiresAt: flowData.expiresAt,
-            updatedAt: new Date()
-          })
-          .where(eq(schema.customerRegistrationFlows.customerId, flowData.customerId))
-          .returning();
-        return updatedFlow;
-      } else {
-        // Create new flow
-        const [newFlow] = await tenantDb
-          .insert(schema.customerRegistrationFlows)
-          .values({
-            ...flowData,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          })
-          .returning();
-        return newFlow;
+        // Check if flow exists
+        const existingResult = await tenantDb.execute(
+          sql`SELECT * FROM customer_registration_flows WHERE customer_id = ${flowData.customerId} LIMIT 1`
+        );
+
+        const collectedDataStr = typeof flowData.collectedData === 'string' 
+          ? flowData.collectedData 
+          : JSON.stringify(flowData.collectedData);
+
+        if (existingResult.rows[0]) {
+          // Update existing flow
+          const updateResult = await tenantDb.execute(
+            sql`UPDATE customer_registration_flows 
+                SET current_step = ${flowData.currentStep},
+                    collected_data = ${collectedDataStr},
+                    requested_service = ${flowData.flowType || 'order_completion'},
+                    expires_at = ${flowData.expiresAt},
+                    is_completed = false,
+                    updated_at = NOW()
+                WHERE customer_id = ${flowData.customerId}
+                RETURNING *`
+          );
+          return updateResult.rows[0];
+        } else {
+          // Create new flow
+          const insertResult = await tenantDb.execute(
+            sql`INSERT INTO customer_registration_flows 
+                (customer_id, phone_number, current_step, collected_data, requested_service, expires_at, is_completed, created_at, updated_at)
+                VALUES (${flowData.customerId}, ${phoneNumber}, ${flowData.currentStep}, ${collectedDataStr}, ${flowData.flowType || 'order_completion'}, ${flowData.expiresAt}, false, NOW(), NOW())
+                RETURNING *`
+          );
+          return insertResult.rows[0];
+        }
+      } catch (error) {
+        console.error('Error in createOrUpdateRegistrationFlow:', error);
+        throw error;
       }
     },
 
@@ -335,9 +352,13 @@ export function createTenantStorage(tenantDb: any) {
     },
 
     async deleteRegistrationFlow(customerId: number) {
-      await tenantDb
-        .delete(schema.customerRegistrationFlows)
-        .where(eq(schema.customerRegistrationFlows.customerId, customerId));
+      try {
+        await tenantDb
+          .delete(schema.customerRegistrationFlows)
+          .where(eq(schema.customerRegistrationFlows.customerId, customerId));
+      } catch (error) {
+        console.error('Error deleting registration flow:', error);
+      }
     },
 
     // Conversations by customer
