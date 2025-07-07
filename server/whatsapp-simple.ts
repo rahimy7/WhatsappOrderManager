@@ -894,14 +894,12 @@ async function handleRegistrationFlow(customer: any, messageText: string, flow: 
         
       default:
         console.log(`❌ UNKNOWN STEP: ${currentStep}`);
-        await sendWhatsAppMessageDirect(customer.phone, 
-          "Hubo un error en el proceso. Por favor vuelve a intentarlo escribiendo 'menu'.", storeId);
+        // No enviar mensaje de error al cliente - solo logging interno
     }
     
   } catch (error) {
     console.error('❌ ERROR IN REGISTRATION FLOW:', error);
-    await sendWhatsAppMessageDirect(customer.phone, 
-      "Hubo un error procesando tu información. Por favor intenta nuevamente.", storeId);
+    // No enviar mensaje de error al cliente - solo logging interno
   }
 }
 
