@@ -1629,6 +1629,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
+  // Helper function to create tenant customer safely
+  async function createTenantCustomer(tenantStorage: any, phoneNumber: string, from: string) {
+    try {
+      await storage.addWhatsAppLog({
+        type: 'debug',
+        phoneNumber: from,
+        messageContent: 'Iniciando creación de cliente en tenant storage',
+        status: 'processing'
+      });
+
+      const customer = await tenantStorage.createCustomer({
+        name: `Cliente ${from.slice(-4)}`,
+        phone: from,
+        whatsappId: from
+      });
+
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: from,
+        messageContent: `Cliente creado exitosamente: ID ${customer.id}`,
+        status: 'processed'
+      });
+
+      return customer;
+    } catch (error) {
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: from,
+        messageContent: 'Error crítico creando cliente en tenant storage',
+        status: 'error',
+        errorMessage: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+  }
+
   // Helper function to send WhatsApp interactive messages
   async function sendWhatsAppInteractiveMessage(phoneNumber: string, message: any) {
     try {
@@ -2824,98 +2860,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 hasGetCustomerByPhone: typeof tenantStorage.getCustomerByPhone
               })
             });
-          } catch (error) {
-            await storage.addWhatsAppLog({
-              type: 'error',
-              phoneNumber: from,
-              messageContent: 'Error conectando a base de datos de tienda',
-              status: 'error',
-              errorMessage: error instanceof Error ? error.message : String(error)
-            });
-            return;
-          }
 
-          // STEP 3: Find or create customer using tenant-specific storage
-          await storage.addWhatsAppLog({
-            type: 'debug',
-            phoneNumber: from,
-            messageContent: `Buscando cliente por teléfono en tienda ${targetStoreId}`,
-            status: 'processing',
-            rawData: JSON.stringify({ phoneNumber: from, storeId: targetStoreId })
-          });
-
-          let customer = await tenantStorage.getCustomerByPhone(from);
-          let isNewCustomer = false;
-          
-          await storage.addWhatsAppLog({
-            type: 'debug',
-            phoneNumber: from,
-            messageContent: `Cliente ${customer ? 'encontrado' : 'no encontrado'}`,
-            status: customer ? 'found' : 'not_found',
-            rawData: JSON.stringify({ 
-              customerId: customer?.id || null,
-              customerName: customer?.name || null
-            })
-          });
-          
-          if (!customer) {
-            // Check if there's an ongoing registration flow
+            // STEP 3: Find or create customer using tenant-specific storage (INSIDE TRY BLOCK)
             await storage.addWhatsAppLog({
               type: 'debug',
               phoneNumber: from,
-              messageContent: 'Verificando flujo de registro existente',
-              status: 'processing'
+              messageContent: `Buscando cliente por teléfono en tienda ${targetStoreId}`,
+              status: 'processing',
+              rawData: JSON.stringify({ phoneNumber: from, storeId: targetStoreId })
             });
 
-            const registrationFlow = await storage.getRegistrationFlow(from);
+            let customer = await tenantStorage.getCustomerByPhone(from);
+            let isNewCustomer = false;
             
-            if (!registrationFlow) {
-              // New customer - create basic customer record and continue with message processing
+            await storage.addWhatsAppLog({
+              type: 'debug',
+              phoneNumber: from,
+              messageContent: `Cliente ${customer ? 'encontrado' : 'no encontrado'}`,
+              status: customer ? 'found' : 'not_found',
+              rawData: JSON.stringify({ 
+                customerId: customer?.id || null,
+                customerName: customer?.name || null
+              })
+            });
+          
+            if (!customer) {
+              // Check if there's an ongoing registration flow
               await storage.addWhatsAppLog({
                 type: 'debug',
                 phoneNumber: from,
-                messageContent: 'Nuevo cliente detectado - creando registro básico',
+                messageContent: 'Verificando flujo de registro existente',
                 status: 'processing'
               });
 
-              // Verificar que tenantStorage esté disponible
-              await storage.addWhatsAppLog({
-                type: 'debug',
-                phoneNumber: from,
-                messageContent: `tenantStorage disponible: ${!!tenantStorage}, tipo: ${typeof tenantStorage}`,
-                status: 'processing'
-              });
-
-              try {
+              const registrationFlow = await storage.getRegistrationFlow(from);
+              
+              if (!registrationFlow) {
+                // New customer - create basic customer record and continue with message processing
                 await storage.addWhatsAppLog({
                   type: 'debug',
                   phoneNumber: from,
-                  messageContent: 'Intentando crear cliente con tenantStorage.createCustomer()',
+                  messageContent: 'Nuevo cliente detectado - creando registro básico',
                   status: 'processing'
                 });
 
-                customer = await tenantStorage.createCustomer({
-                  name: `Cliente ${from.slice(-4)}`, // Temporary name until they order
-                  phone: from,
-                  whatsappId: from
-                }); // Using tenantStorage for multi-tenant architecture
-                
+                // Create customer using available tenantStorage
                 await storage.addWhatsAppLog({
-                  type: 'info',
+                  type: 'debug',
                   phoneNumber: from,
-                  messageContent: `Cliente básico creado: ID ${customer.id}`,
-                  status: 'processed'
+                  messageContent: 'Iniciando llamada a tenantStorage.createCustomer',
+                  status: 'processing'
                 });
-              } catch (createCustomerError) {
-                await storage.addWhatsAppLog({
-                  type: 'error',
-                  phoneNumber: from,
-                  messageContent: 'Error creando cliente en tenant storage',
-                  status: 'error',
-                  errorMessage: createCustomerError instanceof Error ? createCustomerError.message : String(createCustomerError)
-                });
-                return;
-              }
+
+                try {
+                  customer = await tenantStorage.createCustomer({
+                    name: `Cliente ${from.slice(-4)}`,
+                    phone: from,
+                    whatsappId: from
+                  });
+
+                  await storage.addWhatsAppLog({
+                    type: 'info',
+                    phoneNumber: from,
+                    messageContent: `Cliente creado exitosamente: ID ${customer.id}`,
+                    status: 'processed'
+                  });
+                } catch (createError) {
+                  await storage.addWhatsAppLog({
+                    type: 'error',
+                    phoneNumber: from,
+                    messageContent: 'Error específico en createCustomer',
+                    status: 'error',
+                    errorMessage: createError instanceof Error ? createError.message : String(createError)
+                  });
+                  throw createError; // Re-throw para que sea capturado por el catch exterior
+                }
 
               // Mark as new customer and continue processing message
               isNewCustomer = true;
@@ -3017,6 +3036,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: `Mensaje guardado en conversación ${conversation.id}`,
             data: { conversationId: conversation.id, messageId }
           });
+
+          } catch (error) {
+            await storage.addWhatsAppLog({
+              type: 'error',
+              phoneNumber: from,
+              messageContent: 'Error en tenant storage o procesamiento de cliente',
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : String(error)
+            });
+            return;
+          }
           } catch (messageError: any) {
             console.error('❌ ERROR INDIVIDUAL MESSAGE PROCESSING:', messageError);
             console.error('❌ MESSAGE ERROR DETAILS:', messageError.message);
