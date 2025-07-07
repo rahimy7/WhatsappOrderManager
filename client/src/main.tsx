@@ -2,33 +2,45 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Global error handler for unhandled promise rejections (especially WebSocket errors in dev)
+// Comprehensive error handler for development environment issues
 window.addEventListener('unhandledrejection', (event) => {
-  // Check if it's a development WebSocket-related error that we can safely ignore
   const errorMessage = event.reason?.message || '';
   const errorStack = event.reason?.stack || '';
+  const errorName = event.reason?.name || '';
   
-  if (errorMessage.includes('WebSocket') || 
-      errorMessage.includes('wss://') ||
-      errorMessage.includes('localhost:undefined') ||
-      errorStack.includes('@vite/client') ||
-      errorStack.includes('setupWebSocket') ||
-      (event.reason?.name === 'SyntaxError' && errorMessage.includes('invalid'))) {
-    // Silently handle development WebSocket errors
+  // Check if it's a development-related error that we can safely ignore
+  const isDevelopmentError = 
+    errorMessage.includes('WebSocket') || 
+    errorMessage.includes('wss://') ||
+    errorMessage.includes('localhost:undefined') ||
+    errorMessage.includes('The URL') && errorMessage.includes('is invalid') ||
+    errorStack.includes('@vite/client') ||
+    errorStack.includes('setupWebSocket') ||
+    errorStack.includes('fallback') ||
+    errorStack.includes('eruda') ||
+    (errorName === 'SyntaxError' && errorMessage.includes('construct')) ||
+    (errorName === 'DOMException' && errorMessage.includes('WebSocket'));
+  
+  if (isDevelopmentError) {
+    // Completely suppress development-related errors
     event.preventDefault();
     return;
   }
   
-  // Log other unhandled rejections for debugging
-  console.error('Unhandled promise rejection:', event.reason);
+  // Only log genuine application errors
+  console.error('Application error:', event.reason);
 });
 
 // Global error handler for regular errors
 window.addEventListener('error', (event) => {
-  // Ignore WebSocket and Vite development errors
-  if (event.message?.includes('WebSocket') || 
-      event.message?.includes('localhost:undefined') ||
-      event.filename?.includes('@vite/client')) {
+  const isDevelopmentError = 
+    event.message?.includes('WebSocket') || 
+    event.message?.includes('localhost:undefined') ||
+    event.message?.includes('wss://') ||
+    event.filename?.includes('@vite/client') ||
+    event.filename?.includes('eruda');
+    
+  if (isDevelopmentError) {
     event.preventDefault();
     return;
   }
