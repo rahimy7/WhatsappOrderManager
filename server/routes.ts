@@ -2534,12 +2534,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return; // Skip processing if no store found
             }
 
-            // IMMEDIATE RESPONSE: Get welcome auto-response for this specific store
+            // STEP 2: Connect to the tenant database for this specific store
+            let tenantStorage: any;
             try {
-              // Connect to the tenant database for this store
               const { createTenantStorage } = await import('./tenant-storage');
               const tenantDb = await getTenantDb(targetStoreId);
-              const tenantStorage = createTenantStorage(tenantDb);
+              tenantStorage = createTenantStorage(tenantDb);
               
               // Get the welcome auto-response for this store
               const welcomeResponse = await tenantStorage.getAutoResponseByTrigger('welcome');
@@ -2878,18 +2878,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 status: 'processing'
               });
 
-              customer = await storage.createCustomer({
-                name: `Cliente ${from.slice(-4)}`, // Temporary name until they order
-                phone: from,
-                whatsappId: from
-              });
-              
+              // Verificar que tenantStorage esté disponible
               await storage.addWhatsAppLog({
-                type: 'info',
+                type: 'debug',
                 phoneNumber: from,
-                messageContent: `Cliente básico creado: ID ${customer.id}`,
-                status: 'processed'
+                messageContent: `tenantStorage disponible: ${!!tenantStorage}, tipo: ${typeof tenantStorage}`,
+                status: 'processing'
               });
+
+              try {
+                await storage.addWhatsAppLog({
+                  type: 'debug',
+                  phoneNumber: from,
+                  messageContent: 'Intentando crear cliente con tenantStorage.createCustomer()',
+                  status: 'processing'
+                });
+
+                customer = await tenantStorage.createCustomer({
+                  name: `Cliente ${from.slice(-4)}`, // Temporary name until they order
+                  phone: from,
+                  whatsappId: from
+                }); // Using tenantStorage for multi-tenant architecture
+                
+                await storage.addWhatsAppLog({
+                  type: 'info',
+                  phoneNumber: from,
+                  messageContent: `Cliente básico creado: ID ${customer.id}`,
+                  status: 'processed'
+                });
+              } catch (createCustomerError) {
+                await storage.addWhatsAppLog({
+                  type: 'error',
+                  phoneNumber: from,
+                  messageContent: 'Error creando cliente en tenant storage',
+                  status: 'error',
+                  errorMessage: createCustomerError instanceof Error ? createCustomerError.message : String(createCustomerError)
+                });
+                return;
+              }
 
               // Mark as new customer and continue processing message
               isNewCustomer = true;
@@ -2928,11 +2954,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Find existing conversation or create new one
-          const conversations = await storage.getActiveConversations();
+          const conversations = await tenantStorage.getActiveConversations();
           let conversation = conversations.find(c => c.customer.phone === from);
           
           if (!conversation) {
-            conversation = await storage.createConversation({
+            conversation = await tenantStorage.createConversation({
               customerId: customer.id,
               status: "active"
             });
@@ -2947,7 +2973,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Create message in conversation
-          await storage.createMessage({
+          await tenantStorage.createMessage({
             conversationId: conversation.id,
             content: messageText,
             senderId: null, // Customer message

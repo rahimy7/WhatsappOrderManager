@@ -29,12 +29,16 @@ const masquesaludPayload = {
             messages: [
               {
                 from: "525579096161",
-                id: `test_masquesalud_${Date.now()}`,
+                id: `test_masquesalud_interactive_${Date.now()}`,
                 timestamp: Math.floor(Date.now() / 1000).toString(),
-                text: {
-                  body: "hola"
+                interactive: {
+                  type: "button_reply",
+                  button_reply: {
+                    id: "show_products",
+                    title: "Ver Productos"
+                  }
                 },
-                type: "text"
+                type: "interactive"
               }
             ]
           },
