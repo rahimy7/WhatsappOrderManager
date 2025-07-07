@@ -257,9 +257,14 @@ export function createTenantStorage(tenantDb: any) {
     },
 
     async getRegistrationFlowByCustomerId(customerId: number) {
-      const [flow] = await tenantDb.select().from(schema.customerRegistrationFlows)
-        .where(eq(schema.customerRegistrationFlows.customerId, customerId));
-      return flow || null;
+      try {
+        const [flow] = await tenantDb.select().from(schema.customerRegistrationFlows)
+          .where(eq(schema.customerRegistrationFlows.customerId, customerId));
+        return flow || null;
+      } catch (error) {
+        console.log('Error getting registration flow:', error);
+        return null;
+      }
     },
 
     async createRegistrationFlow(flow: any) {
