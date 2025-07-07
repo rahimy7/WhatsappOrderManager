@@ -951,6 +951,11 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **PROBLEMA DEL CROSS-ROUTING RESUELTO COMPLETAMENTE**: Mensajes enviados al número correcto según la tienda
   - **RVR SERVICE (Store ID: 4)**: phoneNumberId 667993026397854 (+1 555 655 0331) - Test Number
   - **MASQUESALUD (Store ID: 5)**: phoneNumberId 690329620832620 (+1 809 357 6939) - Production Number
+- July 06, 2025. CORRECCIÓN DE MENSAJES AUTOMÁTICOS DE MASQUESALUD:
+  - Corregida discrepancia entre mensaje configurado en base de datos vs mensaje mostrado en panel web
+  - Actualizado mensaje de bienvenida de MASQUESALUD de "*MASQUESALUD*" a "*Mas que Salud*" para coincidencia exacta
+  - Sistema multi-tenant verificado: cada tienda usa sus propias respuestas automáticas del schema correspondiente
+  - Webhook routing confirmado operacional con aislamiento completo de datos por phoneNumberId
 - July 06, 2025. CORRECCIÓN CRÍTICA: Referencias de columnas en respuestas automáticas completamente corregidas:
   - **Problema identificado**: Inconsistencias entre nombres de propiedades TypeScript (camelCase) y base de datos (snake_case)
   - **Corrección en whatsapp-simple.ts**: Cambiado resp.is_active a resp.isActive y resp.message_text a resp.messageText
