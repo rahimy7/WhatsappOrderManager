@@ -114,12 +114,138 @@ apiRouter.get('/auth/me', (req, res) => {
   }
 });
 
+// Auto-responses endpoints with high priority (renamed to avoid conflicts)
+apiRouter.get('/store-responses', async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    // Extract user from token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    
+    // Get store-specific auto responses
+    const responses = await storage.getAllAutoResponses();
+    res.setHeader('Content-Type', 'application/json');
+    res.json(responses);
+  } catch (error) {
+    console.error('Error fetching auto-responses:', error);
+    res.status(500).json({ error: 'Failed to fetch auto-responses' });
+  }
+});
+
+apiRouter.post('/store-responses', async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    // Extract user from token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    
+    // Add storeId to the request data
+    const responseData = { ...req.body, storeId: payload.storeId };
+    const response = await storage.createAutoResponse(responseData);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(response);
+  } catch (error) {
+    console.error('Error creating auto-response:', error);
+    res.status(500).json({ error: 'Failed to create auto-response' });
+  }
+});
+
+apiRouter.put('/store-responses/:id', async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    // Extract user from token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    
+    const id = parseInt(req.params.id);
+    const response = await storage.updateAutoResponse(id, req.body, payload.storeId);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(response);
+  } catch (error) {
+    console.error('Error updating auto-response:', error);
+    res.status(500).json({ error: 'Failed to update auto-response' });
+  }
+});
+
+apiRouter.delete('/store-responses/:id', async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    // Extract user from token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    
+    const id = parseInt(req.params.id);
+    await storage.deleteAutoResponse(id, payload.storeId);
+    res.setHeader('Content-Type', 'application/json');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting auto-response:', error);
+    res.status(500).json({ error: 'Failed to delete auto-response' });
+  }
+});
+
+apiRouter.post('/store-responses/reset-defaults', async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    // Extract user from token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    
+    await storage.resetAutoResponsesToDefault(payload.storeId);
+    res.setHeader('Content-Type', 'application/json');
+    res.json({ success: true, message: 'Auto-responses reset to defaults' });
+  } catch (error) {
+    console.error('Error resetting auto-responses:', error);
+    res.status(500).json({ error: 'Failed to reset auto-responses' });
+  }
+});
+
+// Mount the API router with highest priority BEFORE any async configuration
+app.use('/api', apiRouter);
+
 (async () => {
   try {
     console.log('Starting application...');
-
-    // Mount the API router with highest priority FIRST
-    app.use('/api', apiRouter);
 
 // Schema migration endpoints
 app.post('/api/super-admin/stores/:id/migrate-schema', async (req, res) => {

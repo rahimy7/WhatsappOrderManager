@@ -165,16 +165,16 @@ export default function AutoResponsesPage() {
 
   // Fetch auto responses
   const { data: responses, isLoading } = useQuery<AutoResponse[]>({
-    queryKey: ["/api/auto-responses"],
+    queryKey: ["/api/store-responses"],
   });
 
   // Create response mutation
   const createResponseMutation = useMutation({
     mutationFn: async (data: Partial<InsertAutoResponse>) => {
-      return apiRequest("POST", "/api/auto-responses", data);
+      return apiRequest("POST", "/api/store-responses", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/store-responses"] });
       setIsDialogOpen(false);
       resetForm();
       toast({
@@ -187,10 +187,10 @@ export default function AutoResponsesPage() {
   // Update response mutation
   const updateResponseMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertAutoResponse>) => {
-      return apiRequest("PUT", `/api/auto-responses/${id}`, data);
+      return apiRequest("PUT", `/api/store-responses/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/store-responses"] });
       setIsDialogOpen(false);
       resetForm();
       toast({
@@ -203,10 +203,10 @@ export default function AutoResponsesPage() {
   // Delete response mutation
   const deleteResponseMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/auto-responses/${id}`);
+      return apiRequest("DELETE", `/api/store-responses/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/store-responses"] });
       toast({
         title: "Respuesta eliminada",
         description: "La configuración se ha eliminado correctamente.",
@@ -217,10 +217,10 @@ export default function AutoResponsesPage() {
   // Toggle active status mutation
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
-      return apiRequest("PUT", `/api/auto-responses/${id}`, { isActive });
+      return apiRequest("PUT", `/api/store-responses/${id}`, { isActive });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/store-responses"] });
       toast({
         title: "Estado actualizado",
         description: "El estado de la respuesta se ha actualizado correctamente.",
@@ -231,10 +231,10 @@ export default function AutoResponsesPage() {
   // Reset to defaults mutation
   const resetToDefaultsMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/auto-responses/reset-defaults");
+      return apiRequest("POST", "/api/store-responses/reset-defaults");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/store-responses"] });
       toast({
         title: "Valores restaurados",
         description: "Se han restaurado las respuestas automáticas por defecto.",
