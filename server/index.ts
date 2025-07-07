@@ -11,6 +11,18 @@ import { eq } from "drizzle-orm";
 
 const app = express();
 
+// CRITICAL: Define API routes FIRST before any middleware to prevent Vite interference
+app.get('/api/health', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 (async () => {
   try {
     console.log('Starting application...');
@@ -354,6 +366,14 @@ app.get('/api/super-admin/stores/validate-all', async (req, res) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// CRITICAL: API Route interceptor middleware - MUST be before Vite setup
+app.use('/api', (req, res, next) => {
+  // Mark this as an API route to prevent Vite interference
+  req.isApiRoute = true;
+  res.setHeader('Content-Type', 'application/json');
+  next();
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -425,41 +445,15 @@ app.use((req, res, next) => {
     return tenantMiddleware()(req, res, next);
   });
 
-  // IMPORTANT: Register routes AFTER applying middleware
+  // Note: Primary health route defined at top of file to prevent Vite interference
+
+  // IMPORTANT: Register ALL routes BEFORE Vite setup
   const server = await registerRoutes(app);
   
   // Register multi-tenant user management routes
   registerUserManagementRoutes(app);
 
-  // Seed default auto responses and assignment rules
-  try {
-    console.log('Starting seed process...');
-    // await seedAutoResponses();
-    // await seedAssignmentRules();
-    console.log('Seed process completed.');
-  } catch (error) {
-    console.error('Error during seeding:', error);
-    // Continue without seeding if there's an error
-  }
-
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
-
-  // VALIDACIÓN ESPECÍFICA PARA TIENDAS MIGRADAS
+  // VALIDACIÓN ESPECÍFICA PARA TIENDAS MIGRADAS - moved before Vite
   app.get('/api/super-admin/stores/:id/validate-migration', async (req, res) => {
     try {
       const storeId = parseInt(req.params.id);
@@ -532,6 +526,33 @@ app.use((req, res, next) => {
       });
     }
   });
+
+  // Seed default auto responses and assignment rules
+  try {
+    console.log('Starting seed process...');
+    // await seedAutoResponses();
+    // await seedAssignmentRules();
+    console.log('Seed process completed.');
+  } catch (error) {
+    console.error('Error during seeding:', error);
+    // Continue without seeding if there's an error
+  }
+
+  // Error handling middleware
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+
+    res.status(status).json({ message });
+    throw err;
+  });
+
+  // Setup Vite AFTER all routes are configured
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
+  }
 
   // ALWAYS serve the app on port 5000
   // this serves both the API and the client.

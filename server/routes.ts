@@ -42,7 +42,10 @@ function authenticateToken(req: any, res: any, next: any) {
   });
 }
 
-export async function registerRoutes(app: Express, storage: IStorage): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<any> {
+  // Import storage dynamically to avoid dependency issues
+  const { DatabaseStorage } = await import('./storage.js');
+  const storage = new DatabaseStorage();
   // Multi-tenant WhatsApp message processing function
   async function processWhatsAppMessage(value: any) {
     console.log('🎯 PROCESSWHATSAPPMESSAGE - Iniciando procesamiento');
@@ -115,6 +118,8 @@ export async function registerRoutes(app: Express, storage: IStorage): Promise<S
       }
     }
   });
+
+  // Health endpoint is defined in index.ts to prevent Vite middleware interference
 
   // Routes registered successfully - server managed by index.ts
   return app as any;

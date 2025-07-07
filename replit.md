@@ -1091,6 +1091,14 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **Development experience**: Consola del navegador ahora limpia sin interrupciones por errores de infraestructura
   - **Sistema verificado**: API funcionando (200), WhatsApp webhooks procesando, login operacional
   - **Arquitectura estable**: Servidor puerto 5000, multi-tenant routing, auto-responses activas
+- July 07, 2025. CRÍTICO: ERROR JSON PARSING COMPLETAMENTE RESUELTO:
+  - **Problema identificado**: Vite middleware interceptaba rutas API causando respuestas HTML en lugar de JSON
+  - **Solución arquitectónica**: Definición de rutas API al inicio del archivo antes de todos los middlewares
+  - **Vite bypass exitoso**: API routes ahora procesan correctamente sin interferencia del catch-all middleware
+  - **Headers correctos**: Content-Type application/json configurado explícitamente para todas las rutas API
+  - **Sistema completamente funcional**: /api/health devuelve JSON válido con datos reales del servidor
+  - **Multi-tenant operacional**: Todas las funcionalidades principales funcionando sin errores de parsing
+  - **Debugging completado**: Error "Unexpected token '<', '<!DOCTYPE'" completamente eliminado
 
 ## User Preferences
 
