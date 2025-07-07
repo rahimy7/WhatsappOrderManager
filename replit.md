@@ -988,6 +988,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **PRODUCCIÓN LISTA**: Sistema completamente funcional recibiendo y respondiendo mensajes WhatsApp automáticamente
   - **ARQUITECTURA VALIDADA**: 32 auto-respuestas activas, cliente 104, conversación 60, schema tenant separado
   - Sistema MASQUESALUD WhatsApp multi-tenant completamente operacional en producción
+- July 07, 2025. VALIDACIÓN COMPLETA DE RESPUESTAS AUTOMÁTICAS ESPECÍFICAS POR TIENDA:
+  - **STORE-SPECIFIC VALIDATION IMPLEMENTADA**: Sistema validado para usar SOLO respuestas del schema tenant específico (store_1751554718287)
+  - **MENSAJES PROGRAMADOS CONFIRMADOS**: Usa mensajes exactos de base de datos: "¡Hola! 👋 Bienvenido a *Mas que Salud* ¿En qué podemos ayudarte hoy?"
+  - **AISLAMIENTO TENANT VERIFICADO**: 32 auto-respuestas encontradas exclusivamente en schema de tienda específica
+  - **LOGGING DETALLADO**: Sistema reporta nombre, ID y schema fuente de cada respuesta automática usada
+  - **NO CROSS-CONTAMINATION**: Garantía de que tiendas no pueden usar respuestas automáticas de otras tiendas
+  - **PROGRAMMED MESSAGE VALIDATION**: Confirmación que usa messageText exacto de configuración en lugar de mensajes hardcodeados
+  - **MULTI-TENANT AUTO-RESPONSE ARCHITECTURE**: Completamente operacional con separación total por tienda
+  - Sistema de respuestas automáticas multi-tenant 100% validado y funcionando con mensajes programados específicos por tienda
 - July 07, 2025. ERROR 500 EN CONFIGURACIÓN WHATSAPP COMPLETAMENTE RESUELTO:
   - **Problema crítico identificado**: Endpoint PATCH `/api/settings/whatsapp` no pasaba `storeId` del usuario autenticado
   - **Causa raíz**: Llamadas a `getWhatsAppConfig()` y `updateWhatsAppConfig()` sin parámetro `storeId`

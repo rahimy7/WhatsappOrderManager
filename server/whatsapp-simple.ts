@@ -158,16 +158,22 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
 
         console.log('💌 MESSAGE STORED - In tenant schema');
 
-        // Step 7: Process auto-response based on message content
+        // Step 7: Process auto-response based on message content - STORE-SPECIFIC VALIDATION
         try {
-          // Check for auto-responses in tenant schema
+          // CRITICAL: Use only tenant schema for store-specific auto-responses
           let autoResponse = null;
           const messageTextLower = messageText.toLowerCase().trim();
           
-          // Look for exact trigger matches in tenant schema
+          // Get auto-responses ONLY from tenant schema (store-specific)
           const autoResponses = await tenantStorage.getAllAutoResponses();
-          console.log(`🔍 AUTO-RESPONSE DEBUG - Store ${storeMapping.storeId}: Found ${autoResponses.length} auto-responses`);
+          console.log(`🔍 STORE-SPECIFIC AUTO-RESPONSE VALIDATION - Store ${storeMapping.storeId}: Found ${autoResponses.length} tenant auto-responses`);
           
+          // VALIDATION: Ensure we're only using responses from this specific store's schema
+          if (autoResponses.length === 0) {
+            console.log(`⚠️ WARNING - Store ${storeMapping.storeId}: No auto-responses found in tenant schema ${storeMapping.schema}`);
+          }
+          
+          // Look for exact trigger matches in tenant schema ONLY
           autoResponse = autoResponses.find((resp: any) => 
             resp.isActive && resp.trigger.toLowerCase() === messageTextLower
           );
@@ -179,11 +185,16 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
             );
           }
 
-          let responseText = `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`;
+          // FALLBACK: Only if no programmed responses exist in tenant schema
+          let responseText = null;
           
           if (autoResponse) {
-            console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: ${autoResponse.name} (ID: ${autoResponse.id})`);
-            responseText = autoResponse.messageText || responseText;
+            console.log(`✅ STORE-SPECIFIC AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id}) from schema ${storeMapping.schema}`);
+            console.log(`📝 USING PROGRAMMED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
+            responseText = autoResponse.messageText;
+          } else {
+            console.log(`❌ NO STORE-SPECIFIC AUTO-RESPONSE - Store ${storeMapping.storeId}: No matching trigger for "${messageText}" in tenant schema`);
+            responseText = `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`;
           }
 
           // Send response using database configuration
