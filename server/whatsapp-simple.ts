@@ -53,6 +53,8 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
           
           // Look for exact trigger matches
           const autoResponses = await storage.getAllAutoResponses();
+          console.log(`🔍 AUTO-RESPONSE DEBUG - Store ${storeId}: Found ${autoResponses.length} auto-responses`);
+          
           autoResponse = autoResponses.find((resp: any) => 
             resp.isActive && resp.trigger.toLowerCase() === messageTextLower
           );
@@ -67,6 +69,8 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
           let responseText = `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`;
           
           if (autoResponse) {
+            console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeId}: ${autoResponse.name} (ID: ${autoResponse.id})`);
+            console.log(`📝 MESSAGE PREVIEW - Store ${storeId}: ${autoResponse.messageText.substring(0, 50)}...`);
             responseText = autoResponse.messageText || responseText;
           }
 
