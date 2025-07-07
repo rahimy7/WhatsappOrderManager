@@ -30,13 +30,20 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
 export async function processWhatsAppMessageSimple(value: any): Promise<void> {
   try {
     console.log('🎯 MULTI-TENANT PROCESSOR - Processing webhook');
+    console.log('📦 WEBHOOK PAYLOAD:', JSON.stringify(value, null, 2));
     
-    // Step 1: Extract phoneNumberId from webhook metadata
-    const phoneNumberId = value.metadata?.phone_number_id;
+    // Step 1: Extract phoneNumberId from webhook metadata (correct structure)
+    const phoneNumberId = value.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
     console.log('📱 EXTRACTED PHONE NUMBER ID:', phoneNumberId);
     
     if (!phoneNumberId) {
       console.log('❌ NO PHONE NUMBER ID - Skipping processing');
+      console.log('🔍 DEBUGGING - Available data structure:');
+      console.log('Entry length:', value.entry?.length);
+      console.log('Changes length:', value.entry?.[0]?.changes?.length);
+      console.log('Value exists:', !!value.entry?.[0]?.changes?.[0]?.value);
+      console.log('Metadata exists:', !!value.entry?.[0]?.changes?.[0]?.value?.metadata);
+      console.log('Full metadata:', JSON.stringify(value.entry?.[0]?.changes?.[0]?.value?.metadata));
       return;
     }
     
@@ -56,8 +63,11 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
     
     console.log('✅ STORE FOUND - Store ID:', storeMapping.storeId, 'Schema:', storeMapping.schema);
     
-    if (value.messages && value.messages.length > 0) {
-      for (const message of value.messages) {
+    // Step 3: Extract messages from the correct webhook structure
+    const messages = value.entry?.[0]?.changes?.[0]?.value?.messages;
+    
+    if (messages && messages.length > 0) {
+      for (const message of messages) {
         const from = message.from;
         const messageId = message.id;
         const messageType = message.type;
