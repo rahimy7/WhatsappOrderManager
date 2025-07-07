@@ -659,7 +659,8 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       phoneNumber: phoneNumber,
       messageContent: 'Error procesando pedido desde catálogo web',
       status: 'error',
-      errorMessage: error.message
+      errorMessage: error.message,
+      timestamp: new Date()
     });
     
     // No enviar mensaje de error al cliente - solo logging interno
