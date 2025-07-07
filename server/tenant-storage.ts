@@ -65,6 +65,33 @@ export function createTenantStorage(tenantDb: any) {
       await tenantDb.delete(schema.products).where(eq(schema.products.id, id));
     },
 
+    // Categories
+    async getAllCategories() {
+      return await tenantDb.select().from(schema.categories).orderBy(schema.categories.name);
+    },
+
+    async getCategoryById(id: number) {
+      const [category] = await tenantDb.select().from(schema.categories).where(eq(schema.categories.id, id));
+      return category || null;
+    },
+
+    async createCategory(categoryData: any) {
+      const [category] = await tenantDb.insert(schema.categories).values(categoryData).returning();
+      return category;
+    },
+
+    async updateCategory(id: number, categoryData: any) {
+      const [category] = await tenantDb.update(schema.categories)
+        .set(categoryData)
+        .where(eq(schema.categories.id, id))
+        .returning();
+      return category;
+    },
+
+    async deleteCategory(id: number) {
+      await tenantDb.delete(schema.categories).where(eq(schema.categories.id, id));
+    },
+
     // Customers
     async getAllCustomers() {
       return await tenantDb.select().from(schema.customers).orderBy(desc(schema.customers.lastContact));

@@ -5203,7 +5203,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Shopping Cart API - REMOVED: Duplicate endpoint, using the proper one below
+  // ============================================================================
+  // PUBLIC CATALOG ENDPOINTS (MULTI-TENANT)
+  // ============================================================================
+  
+  // Public endpoint to get products for a specific store
+  app.get("/api/public/stores/:storeId/products", async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.storeId);
+      
+      // Get tenant database for the store
+      const tenantDb = await getTenantDb(storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
+      
+      // Get products from tenant schema
+      const products = await tenantStorage.getAllProducts();
+      
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching public store products:", error);
+      res.status(500).json({ error: "Error fetching products" });
+    }
+  });
+  
+  // Public endpoint to get categories for a specific store
+  app.get("/api/public/stores/:storeId/categories", async (req, res) => {
+    try {
+      const storeId = parseInt(req.params.storeId);
+      
+      // Get tenant database for the store
+      const tenantDb = await getTenantDb(storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
+      
+      // Get categories from tenant schema
+      const categories = await tenantStorage.getAllCategories();
+      
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching public store categories:", error);
+      res.status(500).json({ error: "Error fetching categories" });
+    }
+  });
+
+  // ============================================================================
+  // SHOPPING CART ENDPOINTS
+  // ============================================================================
 
   app.post("/api/cart", async (req, res) => {
     try {

@@ -21,9 +21,24 @@ const formatCurrency = (amount: string | number) => {
 export default function SimpleCatalog() {
   const { toast } = useToast();
   
+  // Obtener storeId de la URL
+  const [storeId, setStoreId] = useState<number | null>(null);
+  
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const storeParam = urlParams.get('store');
+    if (storeParam) {
+      setStoreId(parseInt(storeParam));
+    } else {
+      // Fallback: usar tienda por defecto (MASQUESALUD)
+      setStoreId(5);
+    }
+  }, []);
+  
   // Obtener configuración de la tienda
   const { data: storeConfig } = useQuery({
     queryKey: ["/api/settings/store"],
+    enabled: !!storeId
   });
   
   // Session ID único para el carrito
@@ -101,14 +116,16 @@ export default function SimpleCatalog() {
     localStorage.setItem(`cart_${sessionId}`, JSON.stringify(cart));
   }, [cart, sessionId]);
 
-  // Obtener productos
+  // Obtener productos específicos de la tienda
   const { data: products = [], isLoading: loadingProducts } = useQuery({
-    queryKey: ["/api/products"],
+    queryKey: [`/api/public/stores/${storeId}/products`],
+    enabled: !!storeId
   });
 
-  // Obtener categorías
+  // Obtener categorías específicas de la tienda
   const { data: categories = [], isLoading: loadingCategories } = useQuery({
-    queryKey: ["/api/categories"],
+    queryKey: [`/api/public/stores/${storeId}/categories`],
+    enabled: !!storeId
   });
 
   // Función para agregar al carrito
