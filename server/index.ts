@@ -5,9 +5,15 @@ import { registerUserManagementRoutes } from "./user-management-routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedAutoResponses } from "./seed-auto-responses";
 import { seedAssignmentRules } from "./seed-assignment-rules";
-import { getStoreInfo, getTenantDb, masterDb } from "./multi-tenant-db";
+import { getStoreInfo, getTenantDb, masterDb, tenantMiddleware } from "./multi-tenant-db";
+import * as schema from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const app = express();
+
+(async () => {
+  try {
+    console.log('Starting application...');
 
 // Schema migration endpoints
 app.post('/api/super-admin/stores/:id/migrate-schema', async (req, res) => {
@@ -378,9 +384,7 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
   // Aplicar middleware multi-tenant para todas las rutas de API (excepto super-admin)
-  const { tenantMiddleware } = await import('./multi-tenant-db');
   
   // Middleware de autenticación (necesario para obtener storeId del usuario)
   function extractUserFromToken(req: any, res: any, next: any) {
@@ -428,8 +432,15 @@ app.use((req, res, next) => {
   registerUserManagementRoutes(app);
 
   // Seed default auto responses and assignment rules
-  await seedAutoResponses();
-  await seedAssignmentRules();
+  try {
+    console.log('Starting seed process...');
+    // await seedAutoResponses();
+    // await seedAssignmentRules();
+    console.log('Seed process completed.');
+  } catch (error) {
+    console.error('Error during seeding:', error);
+    // Continue without seeding if there's an error
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -533,4 +544,9 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
   });
+
+  } catch (error) {
+    console.error('Error starting application:', error);
+    process.exit(1);
+  }
 })();

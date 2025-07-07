@@ -1,4 +1,4 @@
-import { Pool } from '@neondatabase/serverless';
+import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { eq } from 'drizzle-orm';
 import ws from "ws";
@@ -6,8 +6,7 @@ import * as schema from "@shared/schema";
 import { VirtualStore } from "@shared/schema";
 
 // Configurar WebSocket para Neon
-// @ts-ignore
-globalThis.WebSocket = ws;
+neonConfig.webSocketConstructor = ws;
 
 // Cache de conexiones de base de datos por tienda
 const dbConnections = new Map<number, any>();
