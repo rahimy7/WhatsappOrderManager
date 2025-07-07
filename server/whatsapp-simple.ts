@@ -205,20 +205,67 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
             throw new Error('WhatsApp configuration not found in database');
           }
 
+          // CRITICAL FIX: Process interactive buttons from auto-response configuration
+          let messagePayload;
+          
+          // Check both camelCase (menuOptions) and snake_case (menu_options) field names
+          const menuOptionsData = autoResponse?.menuOptions || autoResponse?.menu_options;
+          const menuTypeData = autoResponse?.menuType || autoResponse?.menu_type;
+          
+          if (autoResponse && menuOptionsData && menuTypeData === 'buttons') {
+            try {
+              const menuOptions = JSON.parse(menuOptionsData);
+              console.log(`🔘 INTERACTIVE BUTTONS DETECTED - Store ${storeMapping.storeId}: ${menuOptions.length} buttons configured`);
+              
+              // WhatsApp interactive message with buttons
+              messagePayload = {
+                messaging_product: 'whatsapp',
+                to: from,
+                type: 'interactive',
+                interactive: {
+                  type: 'button',
+                  body: {
+                    text: responseText
+                  },
+                  action: {
+                    buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                      type: 'reply',
+                      reply: {
+                        id: option.action || option.value || `btn_${index}`,
+                        title: option.label.substring(0, 20) // WhatsApp button title limit
+                      }
+                    }))
+                  }
+                }
+              };
+              console.log(`📤 SENDING INTERACTIVE MESSAGE - Store ${storeMapping.storeId}: ${menuOptions.length} buttons`);
+            } catch (error) {
+              console.log(`⚠️ BUTTON PARSING ERROR - Store ${storeMapping.storeId}: ${error.message}, falling back to text`);
+              messagePayload = {
+                messaging_product: 'whatsapp',
+                to: from,
+                type: 'text',
+                text: { body: responseText }
+              };
+            }
+          } else {
+            // Simple text message
+            console.log(`📤 SENDING TEXT MESSAGE - Store ${storeMapping.storeId}: No buttons configured`);
+            messagePayload = {
+              messaging_product: 'whatsapp',
+              to: from,
+              type: 'text',
+              text: { body: responseText }
+            };
+          }
+
           const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${config.accessToken}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: from,
-              type: 'text',
-              text: {
-                body: responseText
-              }
-            })
+            body: JSON.stringify(messagePayload)
           });
 
           const result = await response.json();
