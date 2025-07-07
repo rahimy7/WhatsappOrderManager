@@ -15,7 +15,7 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
         storeName: 'MASQUESALUD',
         schema: 'store_1751554718287',
         phoneNumberId: phoneNumberId,
-        accessToken: 'EAAKHVoxT6IUBPJP7S8ENQZAaCGiOLXg7B1ijZBlhsmhcP15xJNetXx63l8hvzUPsFKgCYxel9JN22Y7b3rkgiPSFlnsnM6JFM7tFM1f6wsUUCrGZBBsNjfQZCte4qcZBjAZCOpjJFtT50G8qaxjDK6gZBosZAnOLUIYQ5j1xgKnCMcFA3BZCma6d0PpnGdUcj7qDNe5hGRWLDNuzZBZCy2rUzCT1DeFQUV8iG3O88Bj25e4Vfb6grT4ckZAYbc6qEQyYFwZDZD'
+        accessToken: 'EAAKHVoxT6IUBPOlZAnR1swyf3ZArSBBSF65ko7LUodPkvtDklaqAxf5FD5oJwWYGSKMmNBWZAULbIlWXDHZBKqHZCYflyckZB9nqVIZAAnPR5qat4cWIZBFtUSFDZBGt6inS45BFqwKWnzVZB0RvPUyNTow7lJOWvf6ECAuC6ZBqfSZCXoZAuqQiMN0di7wRFeCk79hZCtyAZDZD'
       };
     }
     
