@@ -121,12 +121,45 @@ export function createTenantStorage(tenantDb: any) {
       return conversation;
     },
 
+    async getConversationByCustomerPhone(phone: string) {
+      // First normalize the phone number
+      const normalizedPhone = phone.replace(/\D/g, '');
+      
+      // Find customer first
+      const [customer] = await tenantDb.select().from(schema.customers)
+        .where(
+          or(
+            eq(schema.customers.phone, phone),
+            eq(schema.customers.phone, normalizedPhone),
+            eq(schema.customers.phone, `+52${normalizedPhone}`),
+            eq(schema.customers.phone, `52${normalizedPhone}`)
+          )
+        )
+        .limit(1);
+
+      if (!customer) return null;
+
+      // Then find conversation for this customer
+      const [conversation] = await tenantDb.select().from(schema.conversations)
+        .where(eq(schema.conversations.customerId, customer.id))
+        .limit(1);
+
+      return conversation || null;
+    },
+
     async updateConversation(id: number, conversationData: any) {
       const [conversation] = await tenantDb.update(schema.conversations)
         .set(conversationData)
         .where(eq(schema.conversations.id, id))
         .returning();
       return conversation;
+    },
+
+    // Auto-responses
+    async getAllAutoResponses() {
+      return await tenantDb.select().from(schema.autoResponses)
+        .where(eq(schema.autoResponses.isActive, true))
+        .orderBy(schema.autoResponses.id);
     },
 
     // Messages

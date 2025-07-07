@@ -8,7 +8,7 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
     console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
     
     // Check if it's MASQUESALUD phoneNumberId
-    if (phoneNumberId === '690329620832620') {
+    if (phoneNumberId === '766302823222313') {
       console.log(`🎯 MATCH FOUND - MASQUESALUD Store (ID: 5) has phoneNumberId: ${phoneNumberId}`);
       return {
         storeId: 5,
