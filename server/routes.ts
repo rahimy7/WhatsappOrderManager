@@ -1485,6 +1485,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (configData.metaAppId !== undefined) {
         updateData.appId = configData.metaAppId;
       }
+      // Note: metaAppSecret is not stored in database for security reasons
+      // if (configData.metaAppSecret !== undefined) {
+      //   updateData.appSecret = configData.metaAppSecret;
+      // }
 
       // Actualizar configuración de tienda si se proporcionan campos de tienda
       const storeConfigFields = ['storeWhatsAppNumber', 'storeName', 'storeAddress', 'storeEmail'];
