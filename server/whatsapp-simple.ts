@@ -186,11 +186,18 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
             responseText = autoResponse.messageText || responseText;
           }
 
-          // Send response using store's WhatsApp configuration
-          const response = await fetch(`https://graph.facebook.com/v21.0/${storeMapping.phoneNumberId}/messages`, {
+          // Send response using database configuration
+          const { storage } = await import('./storage');
+          const config = await storage.getWhatsAppConfig(storeMapping.storeId);
+          
+          if (!config) {
+            throw new Error('WhatsApp configuration not found in database');
+          }
+
+          const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${storeMapping.accessToken}`,
+              'Authorization': `Bearer ${config.accessToken}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
