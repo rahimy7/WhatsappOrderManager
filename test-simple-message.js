@@ -16,7 +16,7 @@ function createSimpleMessagePayload(messageText) {
               "messaging_product": "whatsapp",
               "metadata": {
                 "display_phone_number": "18093576939",
-                "phone_number_id": "766302823222313"
+                "phone_number_id": "690329620832620"
               },
               "contacts": [
                 {

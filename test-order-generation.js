@@ -108,7 +108,7 @@ const total = products.reduce((sum, item) => sum + (item.price * item.quantity),
 console.log(`\n💰 TOTAL CALCULADO: $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`);
 
 console.log('\n=== CONFIGURACIÓN DE PRUEBA ===');
-console.log('📞 Phone Number ID (MASQUESALUD): 766302823222313');
+console.log('📞 Phone Number ID (MASQUESALUD): 690329620832620');
 console.log('🏪 Store ID: 5');
 console.log('🗃️ Schema: store_1751554718287');
 console.log('📱 Número de prueba: +1 809 357 6939');

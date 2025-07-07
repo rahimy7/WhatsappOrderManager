@@ -968,6 +968,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - Funciones isOrderMessage() y parseOrderFromMessage() detectan mensajes con formato "🛍️ *NUEVO PEDIDO*"
   - Procesamiento prioritario: detección de pedidos antes que respuestas automáticas estándar
   - Función processWebCatalogOrderSimple() crea órdenes directamente en tenant storage
+- July 07, 2025. CRÍTICO: Corrección de bugs principales del sistema WhatsApp multi-tenant:
+  - **BUG PRINCIPAL RESUELTO**: Corregido mapeo incorrecto de phoneNumberId en findStoreByPhoneNumberId()
+  - Actualizado phoneNumberId correcto para MASQUESALUD: 690329620832620 (anteriormente tenía 766302823222313)
+  - Agregado soporte para RVR SERVICE con phoneNumberId: 667993026397854
+  - Agregada compatibilidad backward para phoneNumberId legacy (766302823222313) que redirige a MASQUESALUD
+  - Corregidos archivos de test que usaban phoneNumberId obsoleto: test-simple-message.js, test-webhook.js, test-order-generation.js
+  - Webhook processing ahora identifica correctamente las tiendas y enruta mensajes al schema tenant apropiado
+  - Sistema multi-tenant completamente operacional: mensajes WhatsApp se procesan sin error "NO PHONE NUMBER ID"
+  - Eliminados logs "EXTRACTED PHONE NUMBER ID: undefined" - sistema ahora detecta phoneNumberId correctamente
   - Métodos createOrderItem() agregados al sistema tenant-storage.ts
   - Genera órdenes automáticamente incluso en primera interacción con clientes nuevos
   - Confirmación inmediata vía WhatsApp con detalles completos del pedido

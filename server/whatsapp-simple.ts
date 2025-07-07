@@ -2,20 +2,44 @@
 import { storage } from './storage.js';
 import { createTenantStorage } from './tenant-storage.js';
 
-// Hardcoded approach for MASQUESALUD store specifically
+// Multi-tenant phone number ID mapping for both stores
 async function findStoreByPhoneNumberId(phoneNumberId: string) {
   try {
     console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
     
     // Check if it's MASQUESALUD phoneNumberId
-    if (phoneNumberId === '766302823222313') {
+    if (phoneNumberId === '690329620832620') {
       console.log(`🎯 MATCH FOUND - MASQUESALUD Store (ID: 5) has phoneNumberId: ${phoneNumberId}`);
       return {
         storeId: 5,
         storeName: 'MASQUESALUD',
         schema: 'store_1751554718287',
         phoneNumberId: phoneNumberId,
-        accessToken: 'EAAKHVoxT6IUBPOlZAnR1swyf3ZArSBBSF65ko7LUodPkvtDklaqAxf5FD5oJwWYGSKMmNBWZAULbIlWXDHZBKqHZCYflyckZB9nqVIZAAnPR5qat4cWIZBFtUSFDZBGt6inS45BFqwKWnzVZB0RvPUyNTow7lJOWvf6ECAuC6ZBqfSZCXoZAuqQiMN0di7wRFeCk79hZCtyAZDZD'
+        accessToken: 'EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD'
+      };
+    }
+    
+    // Check if it's RVR SERVICE phoneNumberId
+    if (phoneNumberId === '667993026397854') {
+      console.log(`🎯 MATCH FOUND - RVR SERVICE Store (ID: 4) has phoneNumberId: ${phoneNumberId}`);
+      return {
+        storeId: 4,
+        storeName: 'RVR SERVICE',
+        schema: 'store_1751248005649',
+        phoneNumberId: phoneNumberId,
+        accessToken: 'EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD'
+      };
+    }
+    
+    // Check for legacy/test phone number ID (backward compatibility)
+    if (phoneNumberId === '766302823222313') {
+      console.log(`🎯 LEGACY MATCH - Using old phoneNumberId ${phoneNumberId}, mapping to MASQUESALUD Store (ID: 5)`);
+      return {
+        storeId: 5,
+        storeName: 'MASQUESALUD',
+        schema: 'store_1751554718287',
+        phoneNumberId: '690329620832620', // Use current production phone number ID
+        accessToken: 'EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD'
       };
     }
     
