@@ -11,8 +11,11 @@ import { eq } from "drizzle-orm";
 
 const app = express();
 
-// CRITICAL: Define API routes FIRST before any middleware to prevent Vite interference
-app.get('/api/health', (req, res) => {
+// CRITICAL: Create a high-priority router for API endpoints
+const apiRouter = express.Router();
+
+// Health endpoint
+apiRouter.get('/health', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.status(200).json({ 
     status: 'ok', 
@@ -22,6 +25,72 @@ app.get('/api/health', (req, res) => {
     environment: process.env.NODE_ENV || 'development'
   });
 });
+
+// Login endpoint
+apiRouter.post('/auth/login', express.json(), async (req, res) => {
+  try {
+    const { authenticateUser } = await import('./multi-tenant-auth.js');
+    const { username, password, companyId, storeId } = req.body;
+    
+    // Convert companyId to storeId for compatibility
+    const targetStoreId = storeId || companyId;
+    
+    const user = await authenticateUser(username, password, targetStoreId);
+    
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Credenciales inválidas' 
+      });
+    }
+
+    // Validate store access if storeId is provided
+    if (targetStoreId && user.level !== 'global') {
+      if (!user.storeId || user.storeId !== parseInt(targetStoreId)) {
+        return res.status(403).json({
+          success: false,
+          code: 'STORE_ACCESS_DENIED',
+          message: 'No tienes acceso a esta tienda'
+        });
+      }
+    }
+
+    const jwt = await import('jsonwebtoken');
+    const token = jwt.default.sign(
+      { 
+        id: user.id, 
+        username: user.username, 
+        role: user.role,
+        storeId: user.storeId,
+        level: user.level
+      },
+      process.env.JWT_SECRET || 'dev-secret',
+      { expiresIn: '24h' }
+    );
+
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        storeId: user.storeId,
+        level: user.level
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Mount the API router with highest priority
+app.use('/api', apiRouter);
 
 (async () => {
   try {
