@@ -2,6 +2,26 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
+// Override WebSocket to prevent invalid URL construction in development
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  const OriginalWebSocket = window.WebSocket;
+  window.WebSocket = class extends OriginalWebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      // Fix invalid WebSocket URLs in development
+      if (typeof url === 'string' && url.includes('localhost:undefined')) {
+        const correctedUrl = url.replace('localhost:undefined', `${window.location.hostname}:${window.location.port}`);
+        super(correctedUrl, protocols);
+        return;
+      }
+      if (typeof url === 'string' && url.includes('wss://localhost:undefined')) {
+        // Skip WebSocket creation for invalid URLs
+        throw new Error('Skipping invalid WebSocket URL');
+      }
+      super(url, protocols);
+    }
+  };
+}
+
 // Comprehensive error handler for development environment issues
 window.addEventListener('unhandledrejection', (event) => {
   const errorMessage = event.reason?.message || '';
@@ -14,12 +34,14 @@ window.addEventListener('unhandledrejection', (event) => {
     errorMessage.includes('wss://') ||
     errorMessage.includes('localhost:undefined') ||
     errorMessage.includes('The URL') && errorMessage.includes('is invalid') ||
+    errorMessage.includes('Skipping invalid WebSocket URL') ||
     errorStack.includes('@vite/client') ||
     errorStack.includes('setupWebSocket') ||
     errorStack.includes('fallback') ||
     errorStack.includes('eruda') ||
     (errorName === 'SyntaxError' && errorMessage.includes('construct')) ||
-    (errorName === 'DOMException' && errorMessage.includes('WebSocket'));
+    (errorName === 'DOMException' && errorMessage.includes('WebSocket')) ||
+    (errorName === 'Error' && errorMessage.includes('Skipping invalid'));
   
   if (isDevelopmentError) {
     // Completely suppress development-related errors
@@ -37,6 +59,7 @@ window.addEventListener('error', (event) => {
     event.message?.includes('WebSocket') || 
     event.message?.includes('localhost:undefined') ||
     event.message?.includes('wss://') ||
+    event.message?.includes('Skipping invalid') ||
     event.filename?.includes('@vite/client') ||
     event.filename?.includes('eruda');
     
