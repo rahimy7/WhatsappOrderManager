@@ -158,7 +158,16 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
 
         console.log('💌 MESSAGE STORED - In tenant schema');
 
-        // Step 7: PRIORITY - Check if message is a structured order from web catalog
+        // Step 7A: PRIORITY - Check for active registration flows
+        const registrationFlow = await tenantStorage.getRegistrationFlowByCustomerId(customer.id);
+        
+        if (registrationFlow && registrationFlow.currentStep) {
+          console.log(`🔄 ACTIVE REGISTRATION FLOW DETECTED - Customer: ${customer.id}, Step: ${registrationFlow.currentStep}`);
+          await handleRegistrationFlow(customer, messageText, registrationFlow, storeMapping.storeId, tenantStorage);
+          return; // Stop processing here - flow handled
+        }
+
+        // Step 7B: PRIORITY - Check if message is a structured order from web catalog
         const isOrder = await isOrderMessage(messageText);
         
         if (isOrder) {
@@ -579,6 +588,23 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       })
     });
 
+    // INICIAR FLUJO DE RECOLECCIÓN DE DATOS DEL CLIENTE
+    // Step 1: Iniciar flujo de registro para recopilar datos del cliente
+    await tenantStorage.createOrUpdateRegistrationFlow({
+      customerId: customer.id,
+      flowType: 'order_completion',
+      currentStep: 'collect_name',
+      orderId: order.id,
+      collectedData: JSON.stringify({
+        orderNumber: orderNumber,
+        totalAmount: total
+      }),
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30 minutos
+    });
+
+    // Step 2: Enviar solicitud de nombre usando respuesta automática
+    await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
+
   } catch (error: any) {
     console.error('Error processing web catalog order:', error);
     const { storage } = await import('./storage.js');
@@ -628,5 +654,228 @@ async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, s
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
     return false;
+  }
+}
+
+/**
+ * Envía un mensaje de respuesta automática basado en el trigger
+ */
+async function sendAutoResponseMessage(phoneNumber: string, trigger: string, storeId: number, tenantStorage: any) {
+  try {
+    console.log(`🔄 SENDING AUTO RESPONSE - Trigger: ${trigger}, Phone: ${phoneNumber}`);
+    
+    // Buscar respuesta automática por trigger
+    const autoResponse = await tenantStorage.getAutoResponseByTrigger(trigger);
+    if (!autoResponse) {
+      console.log(`❌ NO AUTO RESPONSE FOUND - Trigger: ${trigger}`);
+      return false;
+    }
+
+    console.log(`✅ AUTO RESPONSE FOUND - Message: ${autoResponse.message}`);
+
+    // Enviar mensaje principal
+    await sendWhatsAppMessageDirect(phoneNumber, autoResponse.message, storeId);
+
+    // Si tiene botones interactivos, enviarlos también
+    if (autoResponse.isInteractive && autoResponse.interactiveData) {
+      try {
+        const interactiveData = JSON.parse(autoResponse.interactiveData);
+        if (interactiveData.buttons && interactiveData.buttons.length > 0) {
+          // Construir mensaje interactivo
+          const { storage } = await import('./storage.js');
+          const config = await storage.getWhatsAppConfig(storeId);
+          
+          if (config) {
+            const interactiveMessage = {
+              messaging_product: "whatsapp",
+              to: phoneNumber,
+              type: "interactive",
+              interactive: {
+                type: "button",
+                body: { text: autoResponse.message },
+                action: {
+                  buttons: interactiveData.buttons.map((button: any, index: number) => ({
+                    type: "reply",
+                    reply: {
+                      id: button.id || `btn_${index}`,
+                      title: button.title.substring(0, 20) // WhatsApp limit
+                    }
+                  }))
+                }
+              }
+            };
+
+            const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${config.accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(interactiveMessage)
+            });
+            
+            const responseData = await response.json();
+            console.log('✅ INTERACTIVE MESSAGE SENT:', responseData);
+          }
+        }
+      } catch (parseError) {
+        console.log('⚠️ Error parsing interactive data, sending text only');
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ ERROR SENDING AUTO RESPONSE:', error);
+    return false;
+  }
+}
+
+/**
+ * Maneja el flujo de registro para recopilar datos del cliente
+ */
+async function handleRegistrationFlow(customer: any, messageText: string, flow: any, storeId: number, tenantStorage: any) {
+  try {
+    console.log(`📝 PROCESSING REGISTRATION FLOW - Step: ${flow.currentStep}, Customer: ${customer.id}`);
+    
+    const collectedData = flow.collectedData ? JSON.parse(flow.collectedData) : {};
+    const currentStep = flow.currentStep;
+    
+    switch (currentStep) {
+      case 'collect_name':
+        // Validar nombre (mínimo 3 caracteres)
+        if (messageText.trim().length >= 3) {
+          collectedData.customerName = messageText.trim();
+          
+          // Actualizar nombre del cliente en la base de datos
+          await tenantStorage.updateCustomer(customer.id, { name: messageText.trim() });
+          
+          console.log(`✅ NAME COLLECTED: ${messageText.trim()}`);
+          
+          // Avanzar al siguiente paso
+          await tenantStorage.updateRegistrationFlowStep(
+            customer.id, 
+            'collect_address', 
+            JSON.stringify(collectedData)
+          );
+          
+          // Enviar solicitud de dirección
+          await sendAutoResponseMessage(customer.phone, 'collect_address', storeId, tenantStorage);
+        } else {
+          console.log(`❌ INVALID NAME: ${messageText} (too short)`);
+          await sendWhatsAppMessageDirect(customer.phone, 
+            "Por favor proporciona tu nombre completo (mínimo 3 caracteres).", storeId);
+        }
+        break;
+        
+      case 'collect_address':
+        collectedData.address = messageText.trim();
+        
+        console.log(`✅ ADDRESS COLLECTED: ${messageText.trim()}`);
+        
+        // Actualizar dirección del cliente
+        await tenantStorage.updateCustomer(customer.id, { address: messageText.trim() });
+        
+        // Avanzar al siguiente paso
+        await tenantStorage.updateRegistrationFlowStep(
+          customer.id, 
+          'collect_contact', 
+          JSON.stringify(collectedData)
+        );
+        
+        // Enviar solicitud de confirmación de número
+        await sendAutoResponseMessage(customer.phone, 'collect_contact', storeId, tenantStorage);
+        break;
+        
+      case 'collect_contact':
+        collectedData.contactPhone = customer.phone; // Usar el número de WhatsApp por defecto
+        
+        console.log(`✅ CONTACT CONFIRMED: ${customer.phone}`);
+        
+        // Avanzar al siguiente paso
+        await tenantStorage.updateRegistrationFlowStep(
+          customer.id, 
+          'collect_payment', 
+          JSON.stringify(collectedData)
+        );
+        
+        // Enviar opciones de pago
+        await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
+        break;
+        
+      case 'collect_payment':
+        collectedData.paymentMethod = messageText.trim();
+        
+        console.log(`✅ PAYMENT METHOD SELECTED: ${messageText.trim()}`);
+        
+        // Avanzar al paso final
+        await tenantStorage.updateRegistrationFlowStep(
+          customer.id, 
+          'collect_notes', 
+          JSON.stringify(collectedData)
+        );
+        
+        // Enviar solicitud de notas adicionales
+        await sendAutoResponseMessage(customer.phone, 'collect_notes', storeId, tenantStorage);
+        break;
+        
+      case 'collect_notes':
+        collectedData.notes = messageText.trim();
+        
+        console.log(`✅ NOTES COLLECTED: ${messageText.trim()}`);
+        
+        // Finalizar el flujo
+        await completeOrderProcess(customer, flow, collectedData, storeId, tenantStorage);
+        break;
+        
+      default:
+        console.log(`❌ UNKNOWN STEP: ${currentStep}`);
+        await sendWhatsAppMessageDirect(customer.phone, 
+          "Hubo un error en el proceso. Por favor vuelve a intentarlo escribiendo 'menu'.", storeId);
+    }
+    
+  } catch (error) {
+    console.error('❌ ERROR IN REGISTRATION FLOW:', error);
+    await sendWhatsAppMessageDirect(customer.phone, 
+      "Hubo un error procesando tu información. Por favor intenta nuevamente.", storeId);
+  }
+}
+
+/**
+ * Completa el proceso de pedido con todos los datos recopilados
+ */
+async function completeOrderProcess(customer: any, flow: any, collectedData: any, storeId: number, tenantStorage: any) {
+  try {
+    console.log(`🎯 COMPLETING ORDER PROCESS - Order ID: ${flow.orderId}`);
+    
+    // Actualizar la orden con la información recopilada
+    const orderNotes = `
+    🎯 INFORMACIÓN DEL CLIENTE:
+    📋 Nombre: ${collectedData.customerName || 'No proporcionado'}
+    📍 Dirección: ${collectedData.address || 'No proporcionada'}
+    📞 Contacto: ${collectedData.contactPhone || customer.phone}
+    💳 Método de pago: ${collectedData.paymentMethod || 'No especificado'}
+    📝 Notas adicionales: ${collectedData.notes || 'Ninguna'}
+    
+    ⏰ Datos recopilados: ${new Date().toLocaleString('es-MX')}
+    `;
+    
+    // Actualizar estado de la orden
+    await tenantStorage.updateOrder(flow.orderId, {
+      status: 'confirmed',
+      notes: orderNotes
+    });
+    
+    // Enviar confirmación final usando respuesta automática
+    await sendAutoResponseMessage(customer.phone, 'order_confirmed', storeId, tenantStorage);
+    
+    // Eliminar el flujo de registro
+    await tenantStorage.deleteRegistrationFlow(customer.id);
+    
+    console.log(`✅ ORDER PROCESS COMPLETED - Order ${flow.orderId} confirmed`);
+    
+  } catch (error) {
+    console.error('❌ ERROR COMPLETING ORDER:', error);
+    await sendWhatsAppMessageDirect(customer.phone, 
+      "Hubo un error al confirmar tu pedido. Nuestro equipo se pondrá en contacto contigo.", storeId);
   }
 }

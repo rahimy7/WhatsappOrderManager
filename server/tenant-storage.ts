@@ -249,10 +249,16 @@ export function createTenantStorage(tenantDb: any) {
         .orderBy(schema.autoResponses.priority);
     },
 
-    // Customer Registration Flows
+    // Customer Registration Flows - Enhanced for order completion
     async getRegistrationFlow(phoneNumber: string) {
       const [flow] = await tenantDb.select().from(schema.customerRegistrationFlows)
         .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber));
+      return flow || null;
+    },
+
+    async getRegistrationFlowByCustomerId(customerId: number) {
+      const [flow] = await tenantDb.select().from(schema.customerRegistrationFlows)
+        .where(eq(schema.customerRegistrationFlows.customerId, customerId));
       return flow || null;
     },
 
@@ -261,12 +267,72 @@ export function createTenantStorage(tenantDb: any) {
       return newFlow;
     },
 
+    async createOrUpdateRegistrationFlow(flowData: any) {
+      // Check if flow exists for this customer
+      const [existingFlow] = await tenantDb
+        .select()
+        .from(schema.customerRegistrationFlows)
+        .where(eq(schema.customerRegistrationFlows.customerId, flowData.customerId));
+
+      if (existingFlow) {
+        // Update existing flow
+        const [updatedFlow] = await tenantDb
+          .update(schema.customerRegistrationFlows)
+          .set({
+            flowType: flowData.flowType,
+            currentStep: flowData.currentStep,
+            orderId: flowData.orderId,
+            collectedData: flowData.collectedData,
+            expiresAt: flowData.expiresAt,
+            updatedAt: new Date()
+          })
+          .where(eq(schema.customerRegistrationFlows.customerId, flowData.customerId))
+          .returning();
+        return updatedFlow;
+      } else {
+        // Create new flow
+        const [newFlow] = await tenantDb
+          .insert(schema.customerRegistrationFlows)
+          .values({
+            ...flowData,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          })
+          .returning();
+        return newFlow;
+      }
+    },
+
     async updateRegistrationFlow(phoneNumber: string, updates: any) {
       const [updatedFlow] = await tenantDb.update(schema.customerRegistrationFlows)
         .set(updates)
         .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber))
         .returning();
       return updatedFlow || null;
+    },
+
+    async updateRegistrationFlowStep(customerId: number, newStep: string, newData?: any) {
+      const updates: any = {
+        currentStep: newStep,
+        updatedAt: new Date()
+      };
+
+      if (newData) {
+        updates.collectedData = newData;
+      }
+
+      const [updatedFlow] = await tenantDb
+        .update(schema.customerRegistrationFlows)
+        .set(updates)
+        .where(eq(schema.customerRegistrationFlows.customerId, customerId))
+        .returning();
+      return updatedFlow;
+    },
+
+    async deleteRegistrationFlow(customerId: number) {
+      await tenantDb
+        .delete(schema.customerRegistrationFlows)
+        .where(eq(schema.customerRegistrationFlows.customerId, customerId));
     },
 
     // Conversations by customer
