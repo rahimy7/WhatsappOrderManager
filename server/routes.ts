@@ -1445,6 +1445,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PATCH endpoint para actualizaciones parciales de configuración WhatsApp
   app.patch("/api/settings/whatsapp", async (req, res) => {
     try {
+      const authUser = req.user as AuthUser;
+      const storeId = authUser?.storeId;
+
       // Schema flexible que permite cualquier campo opcional
       const configData = z.object({
         metaAppId: z.string().optional(),
@@ -1460,8 +1463,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storeEmail: z.string().optional(),
       }).parse(req.body);
 
-      // Obtener la configuración actual
-      const currentConfig = await storage.getWhatsAppConfig();
+      // Obtener la configuración actual con el storeId correcto
+      const currentConfig = await storage.getWhatsAppConfig(storeId);
       
       // Crear el objeto de actualización con solo los campos modificados
       const updateData: any = {};
@@ -1503,13 +1506,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (Object.keys(updateData).length > 0) {
         if (currentConfig) {
           // Actualizar configuración existente
-          const mergedData = { ...currentConfig, ...updateData };
+          const mergedData = { ...currentConfig, ...updateData, storeId };
           config = await storage.updateWhatsAppConfig(mergedData);
         } else {
           // Si no hay configuración, necesitamos todos los campos obligatorios
-          if (!updateData.whatsappToken || !updateData.phoneNumberId) {
+          if (!updateData.accessToken || !updateData.phoneNumberId) {
             throw new Error('Token y Phone Number ID son requeridos para crear nueva configuración');
           }
+          updateData.storeId = storeId;
           config = await storage.updateWhatsAppConfig(updateData);
         }
       }
