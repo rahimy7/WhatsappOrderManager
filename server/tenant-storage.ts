@@ -38,6 +38,16 @@ export function createTenantStorage(tenantDb: any) {
       await tenantDb.delete(schema.orders).where(eq(schema.orders.id, id));
     },
 
+    // Order Items
+    async createOrderItem(orderItemData: any) {
+      const [orderItem] = await tenantDb.insert(schema.orderItems).values(orderItemData).returning();
+      return orderItem;
+    },
+
+    async getOrderItems(orderId: number) {
+      return await tenantDb.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId));
+    },
+
     // Products
     async getAllProducts() {
       return await tenantDb.select().from(schema.products).orderBy(desc(schema.products.createdAt));

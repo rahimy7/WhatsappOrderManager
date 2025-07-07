@@ -158,7 +158,27 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
 
         console.log('💌 MESSAGE STORED - In tenant schema');
 
-        // Step 7: Process auto-response based on message content - STORE-SPECIFIC VALIDATION
+        // Step 7: PRIORITY - Check if message is a structured order from web catalog
+        const isOrder = await isOrderMessage(messageText);
+        
+        if (isOrder) {
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: 'Mensaje de pedido detectado desde catálogo web - PRIMERA CONVERSACIÓN',
+            status: 'processing',
+            rawData: JSON.stringify({ 
+              customerId: customer.id,
+              messageLength: messageText.length,
+              storeId: storeMapping.storeId
+            })
+          });
+
+          await processWebCatalogOrderSimple(customer, from, messageText, storeMapping.storeId, storeMapping.phoneNumberId, tenantStorage);
+          return; // Stop processing here - order handled
+        }
+
+        // Step 8: Process auto-response based on message content - STORE-SPECIFIC VALIDATION
         try {
           // CRITICAL: Use only tenant schema for store-specific auto-responses
           let autoResponse = null;
@@ -332,5 +352,215 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
       status: 'error',
       errorMessage: error.message
     });
+  }
+}
+
+// Function to detect if a message is a structured order from web catalog
+async function isOrderMessage(text: string): Promise<boolean> {
+  const orderIndicators = [
+    '🛍️ *NUEVO PEDIDO',
+    'NUEVO PEDIDO',
+    'Cantidad:',
+    'Precio unitario:',
+    'Subtotal:',
+    '*TOTAL:',
+    'confirma tu pedido'
+  ];
+  
+  const indicatorCount = orderIndicators.reduce((count, indicator) => {
+    return count + (text.includes(indicator) ? 1 : 0);
+  }, 0);
+  
+  return indicatorCount >= 3; // At least 3 indicators to be considered an order
+}
+
+// Function to parse order items from catalog message
+function parseOrderFromMessage(orderText: string): Array<{name: string, quantity: number, price: number, productId?: number}> {
+  const items: Array<{name: string, quantity: number, price: number, productId?: number}> = [];
+  
+  try {
+    const lines = orderText.split('\n');
+    let currentItem: any = null;
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // Check if this line starts a new product (number followed by period)
+      if (/^\d+\.\s/.test(trimmedLine)) {
+        // Save previous item if exists
+        if (currentItem && currentItem.name && currentItem.quantity && currentItem.price) {
+          items.push(currentItem);
+        }
+        
+        // Start new item
+        currentItem = {
+          name: trimmedLine.replace(/^\d+\.\s/, ''),
+          quantity: 0,
+          price: 0
+        };
+      }
+      // Check for quantity line
+      else if (trimmedLine.startsWith('Cantidad:') && currentItem) {
+        const quantity = parseInt(trimmedLine.replace('Cantidad:', '').trim());
+        if (!isNaN(quantity)) {
+          currentItem.quantity = quantity;
+        }
+      }
+      // Check for unit price line
+      else if (trimmedLine.startsWith('Precio unitario:') && currentItem) {
+        const priceMatch = trimmedLine.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+        if (priceMatch) {
+          const price = parseFloat(priceMatch[1].replace(/,/g, ''));
+          if (!isNaN(price)) {
+            currentItem.price = price;
+          }
+        }
+      }
+    }
+    
+    // Don't forget the last item
+    if (currentItem && currentItem.name && currentItem.quantity && currentItem.price) {
+      items.push(currentItem);
+    }
+    
+  } catch (error) {
+    console.error('Error parsing order message:', error);
+  }
+  
+  return items;
+}
+
+// Simplified order processing for tenant storage
+async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, orderText: string, storeId: number, phoneNumberId: string, tenantStorage: any) {
+  try {
+    const { storage } = await import('./storage.js');
+    
+    await storage.addWhatsAppLog({
+      type: 'info',
+      phoneNumber: phoneNumber,
+      messageContent: 'Iniciando procesamiento de pedido desde catálogo web (SIMPLE)',
+      status: 'processing',
+      rawData: JSON.stringify({ 
+        customerId: customer.id,
+        messageLength: orderText.length,
+        storeId: storeId
+      })
+    });
+
+    // Parse the order message to extract products
+    const orderItems = parseOrderFromMessage(orderText);
+    
+    if (orderItems.length === 0) {
+      await sendWhatsAppMessageDirect(phoneNumber, 
+        "No pude procesar los productos de tu pedido. ¿Podrías enviarlo nuevamente?", storeId);
+      return;
+    }
+
+    // Create order in tenant system
+    const orderNumber = `ORD-${Date.now()}`;
+    const total = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // Create order in tenant schema
+    const order = await tenantStorage.createOrder({
+      orderNumber: orderNumber,
+      customerId: customer.id,
+      totalAmount: total.toString(),
+      status: 'pending',
+      notes: `Pedido generado automáticamente desde catálogo web.\nTotal: $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Create order items in tenant schema
+    for (const item of orderItems) {
+      await tenantStorage.createOrderItem({
+        orderId: order.id,
+        productName: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price.toString(),
+        subtotal: (item.price * item.quantity).toString()
+      });
+    }
+
+    // Send confirmation message
+    let confirmationMessage = `✅ *PEDIDO RECIBIDO*\n\n`;
+    confirmationMessage += `📋 *Número:* ${orderNumber}\n`;
+    confirmationMessage += `👤 *Cliente:* ${customer.name}\n\n`;
+    confirmationMessage += `🛍️ *Productos:*\n`;
+    
+    orderItems.forEach((item, index) => {
+      confirmationMessage += `${index + 1}. ${item.name}\n`;
+      confirmationMessage += `   Cantidad: ${item.quantity}\n`;
+      confirmationMessage += `   Precio: $${item.price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}\n\n`;
+    });
+    
+    confirmationMessage += `💰 *Total: $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*\n\n`;
+    confirmationMessage += `📞 Nuestro equipo te contactará pronto para confirmar los detalles de entrega.\n\n`;
+    confirmationMessage += `¡Gracias por tu pedido! 🎯`;
+
+    await sendWhatsAppMessageDirect(phoneNumber, confirmationMessage, storeId);
+
+    await storage.addWhatsAppLog({
+      type: 'success',
+      phoneNumber: phoneNumber,
+      messageContent: `Pedido ${orderNumber} creado exitosamente con ${orderItems.length} productos`,
+      status: 'completed',
+      rawData: JSON.stringify({ 
+        orderId: order.id,
+        orderNumber: orderNumber,
+        total: total,
+        itemsCount: orderItems.length
+      })
+    });
+
+  } catch (error: any) {
+    console.error('Error processing web catalog order:', error);
+    const { storage } = await import('./storage.js');
+    await storage.addWhatsAppLog({
+      type: 'error',
+      phoneNumber: phoneNumber,
+      messageContent: 'Error procesando pedido desde catálogo web',
+      status: 'error',
+      errorMessage: error.message
+    });
+    
+    await sendWhatsAppMessageDirect(phoneNumber, 
+      "Hubo un error procesando tu pedido. Nuestro equipo lo revisará manualmente.", storeId);
+  }
+}
+
+// Direct WhatsApp message sending
+async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, storeId: number) {
+  try {
+    const { storage } = await import('./storage.js');
+    const config = await storage.getWhatsAppConfig(storeId);
+    
+    if (!config) {
+      throw new Error('WhatsApp configuration not found');
+    }
+
+    const messagePayload = {
+      messaging_product: 'whatsapp',
+      to: phoneNumber,
+      type: 'text',
+      text: { body: message }
+    };
+
+    const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(messagePayload)
+    });
+
+    const result = await response.json();
+    console.log('WhatsApp message sent:', result);
+
+    return response.ok;
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error);
+    return false;
   }
 }
