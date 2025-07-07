@@ -1963,19 +1963,39 @@ export class DatabaseStorage implements IStorage {
   // WhatsApp Settings with PostgreSQL - Now store-specific
   async getWhatsAppConfig(storeId?: number | null): Promise<WhatsAppSettings | null> {
     if (storeId) {
-      // Get configuration specific to the store
-      const [config] = await db.select().from(whatsappSettings)
-        .where(
-          and(
-            eq(whatsappSettings.storeId, storeId),
-            eq(whatsappSettings.isActive, true)
-          )
-        )
-        .orderBy(desc(whatsappSettings.createdAt));
-      
-      return config || null;
+      // Get configuration from tenant schema for specific store
+      try {
+        const { getTenantDb } = await import('./multi-tenant-db');
+        const { createTenantStorage } = await import('./tenant-storage');
+        const tenantDb = await getTenantDb(storeId);
+        const tenantStorage = createTenantStorage(tenantDb);
+        
+        // Get the active WhatsApp configuration from tenant storage
+        const configs = await tenantStorage.getAllWhatsAppConfigs();
+        const activeConfig = configs.find((config: any) => config.isActive);
+        
+        if (activeConfig) {
+          return {
+            id: activeConfig.id,
+            accessToken: activeConfig.accessToken,
+            phoneNumberId: activeConfig.phoneNumberId,
+            webhookVerifyToken: activeConfig.webhookVerifyToken,
+            businessAccountId: activeConfig.businessAccountId,
+            appId: activeConfig.appId,
+            isActive: activeConfig.isActive,
+            storeId: storeId,
+            createdAt: activeConfig.createdAt,
+            updatedAt: activeConfig.updatedAt
+          };
+        }
+        
+        return null;
+      } catch (error) {
+        console.error(`Error getting WhatsApp config for store ${storeId}:`, error);
+        return null;
+      }
     } else {
-      // Fallback: get any active configuration for super admin
+      // Fallback: get any active configuration for super admin from global table
       const [config] = await db.select().from(whatsappSettings)
         .where(eq(whatsappSettings.isActive, true))
         .orderBy(desc(whatsappSettings.createdAt));

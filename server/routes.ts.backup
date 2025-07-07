@@ -2508,6 +2508,581 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return;
   }
 
+            console.log('🔍 VERIFICACIÓN FINAL - targetStoreId:', targetStoreId, 'storeConfig:', !!storeConfig);
+            
+            await storage.addWhatsAppLog({
+              type: 'info',
+              phoneNumber: from,
+              messageContent: `Enrutamiento: ${to} → Tienda ID: ${targetStoreId || 'No encontrada'}`,
+              status: targetStoreId ? 'routed' : 'unrouted',
+              rawData: JSON.stringify({ 
+                from, 
+                to, 
+                targetStoreId, 
+                hasStoreConfig: !!storeConfig 
+              })
+            });
+
+            console.log('🎯 STORE ROUTING COMPLETED - StoreId:', targetStoreId, 'Config found:', !!storeConfig);
+
+            if (!targetStoreId) {
+              await storage.addWhatsAppLog({
+                type: 'warning',
+                phoneNumber: from,
+                messageContent: `No se encontró tienda para el número ${to}`,
+                status: 'failed',
+                rawData: JSON.stringify({ availableStores: 2 }) // Known: 2 active stores
+              });
+              return; // Skip processing if no store found
+            }
+
+            // STEP 2: Connect to the tenant database for this specific store
+            let tenantStorage: any;
+            try {
+              const { createTenantStorage } = await import('./tenant-storage');
+              const tenantDb = await getTenantDb(targetStoreId);
+              tenantStorage = createTenantStorage(tenantDb);
+              
+              // Get the welcome auto-response for this store
+              const welcomeResponse = await tenantStorage.getAutoResponseByTrigger('welcome');
+              
+              await storage.addWhatsAppLog({
+                type: 'system',
+                phoneNumber: from,
+                messageContent: `🔧 FLOW: welcomeResponse obtenido`,
+                status: 'info',
+                rawData: JSON.stringify({ 
+                  exists: !!welcomeResponse,
+                  responseId: welcomeResponse?.id,
+                  isActive: welcomeResponse?.isActive,
+                  hasMenuOptions: !!welcomeResponse?.menuOptions,
+                  menuType: welcomeResponse?.menuType,
+                  messageText: welcomeResponse?.messageText?.substring(0, 50) + '...'
+                })
+              });
+              
+              await storage.addWhatsAppLog({
+                type: 'system',
+                phoneNumber: from,
+                messageContent: `🔍 Buscando respuesta automática para Store ${targetStoreId}, trigger: welcome`,
+                status: 'info',
+                rawData: JSON.stringify({ 
+                  storeId: targetStoreId,
+                  found: !!welcomeResponse,
+                  isActive: welcomeResponse?.isActive,
+                  hasMessage: !!welcomeResponse?.messageText,
+                  menuOptions: welcomeResponse?.menuOptions,
+                  menuType: welcomeResponse?.menuType,
+                  responseKeys: welcomeResponse ? Object.keys(welcomeResponse) : []
+                })
+              });
+              
+              let responseMessage = "¡Hola! Gracias por contactarnos.";
+              let isInteractive = false;
+              let interactiveData = null;
+              
+              if (welcomeResponse && (welcomeResponse.isActive || welcomeResponse.is_active)) {
+                responseMessage = welcomeResponse.messageText;
+                
+                // DEBUG: Log exact values
+                await storage.addWhatsAppLog({
+                  type: 'system',
+                  phoneNumber: from,
+                  messageContent: `🔧 DEBUG: Verificando condiciones`,
+                  status: 'info',
+                  rawData: JSON.stringify({ 
+                    hasMenuOptions: !!welcomeResponse.menuOptions,
+                    menuOptionsValue: welcomeResponse.menuOptions,
+                    menuType: welcomeResponse.menuType,
+                    menuTypeCheck: welcomeResponse.menuType === 'buttons',
+                    bothConditions: !!welcomeResponse.menuOptions && welcomeResponse.menuType === 'buttons'
+                  })
+                });
+                
+                // Check if this response has menu options for interactive buttons
+                if (welcomeResponse.menuOptions && welcomeResponse.menuType === 'buttons') {
+                  isInteractive = true;
+                  try {
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🔧 DEBUG: Procesando menuOptions`,
+                      status: 'info',
+                      rawData: JSON.stringify({ 
+                        menuOptionsType: typeof welcomeResponse.menuOptions,
+                        menuOptionsRaw: welcomeResponse.menuOptions,
+                        menuType: welcomeResponse.menuType
+                      })
+                    });
+
+                    const menuOptions = typeof welcomeResponse.menuOptions === 'string' 
+                      ? JSON.parse(welcomeResponse.menuOptions) 
+                      : welcomeResponse.menuOptions;
+
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🔧 DEBUG: Después del parsing`,
+                      status: 'info',
+                      rawData: JSON.stringify({ 
+                        parsedMenuOptions: menuOptions,
+                        isArray: Array.isArray(menuOptions),
+                        optionsLength: menuOptions ? menuOptions.length : 0
+                      })
+                    });
+                    
+                    // Convert menu options to WhatsApp interactive format
+                    interactiveData = {
+                      type: "button",
+                      body: {
+                        text: responseMessage
+                      },
+                      action: {
+                        buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
+                          type: "reply",
+                          reply: {
+                            id: option.action || option.value,
+                            title: option.label.substring(0, 20) // WhatsApp limit
+                          }
+                        }))
+                      }
+                    };
+
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🔧 DEBUG: interactiveData creado`,
+                      status: 'info',
+                      rawData: JSON.stringify({ 
+                        interactiveData,
+                        isInteractive,
+                        willSendInteractive: isInteractive && interactiveData
+                      })
+                    });
+                  } catch (e) {
+                    await storage.addWhatsAppLog({
+                      type: 'system',
+                      phoneNumber: from,
+                      messageContent: `🚨 ERROR en procesamiento de botones`,
+                      status: 'error',
+                      rawData: JSON.stringify({ 
+                        error: e instanceof Error ? e.message : String(e),
+                        stack: e instanceof Error ? e.stack : undefined
+                      })
+                    });
+                    isInteractive = false;
+                  }
+                }
+              }
+
+              // Send the response using the correct phoneNumberId
+              let response;
+              const url = `https://graph.facebook.com/v20.0/${to}/messages`;
+              
+              if (isInteractive && interactiveData) {
+                // Send interactive message
+                const data = {
+                  messaging_product: "whatsapp",
+                  to: from,
+                  type: "interactive",
+                  interactive: interactiveData
+                };
+                
+                response = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${storeConfig.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(data),
+                });
+              } else {
+                // Send simple text message
+                const data = {
+                  messaging_product: "whatsapp",
+                  to: from,
+                  text: { body: responseMessage }
+                };
+
+                response = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${storeConfig.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(data),
+                });
+              }
+
+              if (response.ok) {
+                const result = await response.json();
+                await storage.addWhatsAppLog({
+                  type: 'outgoing',
+                  phoneNumber: from,
+                  messageContent: `✅ AUTO-RESPONSE: ${responseMessage.substring(0, 100)}${responseMessage.length > 100 ? '...' : ''}`,
+                  status: 'sent',
+                  rawData: JSON.stringify({ 
+                    phoneNumberId: to,
+                    storeId: targetStoreId,
+                    messageId: result.messages?.[0]?.id,
+                    isInteractive: isInteractive,
+                    fullMessage: responseMessage,
+                    interactiveData: isInteractive ? interactiveData : null,
+                    sentFormat: isInteractive ? 'interactive' : 'text'
+                  })
+                });
+              } else {
+                const errorText = await response.text();
+                await storage.addWhatsAppLog({
+                  type: 'error',
+                  phoneNumber: from,
+                  messageContent: `❌ Error enviando respuesta desde ${to}`,
+                  status: 'error',
+                  errorMessage: errorText
+                });
+              }
+            } catch (error) {
+              await storage.addWhatsAppLog({
+                type: 'error',
+                phoneNumber: from,
+                messageContent: `❌ Error enviando respuesta desde ${to}`,
+                status: 'error',
+                errorMessage: error.toString()
+              });
+            }
+
+            // Skip the complex processing and continue to next message
+            continue;
+
+          } catch (error) {
+            await storage.addWhatsAppLog({
+              type: 'error',
+              phoneNumber: from,
+              messageContent: 'Error identificando tienda de destino',
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : String(error)
+            });
+            return;
+          }
+          
+          let messageText = '';
+          if (messageType === 'text') {
+            messageText = message.text.body;
+          } else if (messageType === 'image') {
+            messageText = `[Imagen recibida] ${message.image.caption || ''}`;
+          } else if (messageType === 'document') {
+            messageText = `[Documento recibido] ${message.document.filename || ''}`;
+          } else if (messageType === 'location') {
+            // Handle location messages
+            const location = message.location;
+            messageText = location.name || location.address || 
+              `Ubicación GPS: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+          } else if (messageType === 'interactive') {
+            // Handle interactive messages (buttons, lists)
+            if (message.interactive.type === 'button_reply') {
+              messageText = `[Botón seleccionado] ${message.interactive.button_reply.title}`;
+            } else if (message.interactive.type === 'list_reply') {
+              messageText = `[Lista seleccionada] ${message.interactive.list_reply.title}`;
+            } else {
+              messageText = `[Mensaje interactivo] ${message.interactive.type}`;
+            }
+          } else {
+            messageText = `[${messageType}] Mensaje no soportado`;
+          }
+
+          // Log the received message
+          await storage.addWhatsAppLog({
+            type: 'incoming',
+            phoneNumber: from,
+            messageContent: `Mensaje recibido de ${from}`,
+            messageId: messageId,
+            status: 'received',
+            rawData: JSON.stringify({
+              from,
+              messageId,
+              timestamp,
+              messageType,
+              content: messageText,
+              rawMessage: message
+            })
+          });
+
+          // STEP 2: Get tenant-specific storage for the identified store
+          let tenantStorage: any;
+          try {
+            const { getTenantDb } = await import('./multi-tenant-db');
+            const { createTenantStorage } = await import('./tenant-storage');
+            const tenantDb = await getTenantDb(targetStoreId);
+            tenantStorage = createTenantStorage(tenantDb);
+            
+            await storage.addWhatsAppLog({
+              type: 'info',
+              phoneNumber: from,
+              messageContent: `Conectado a base de datos de tienda ${targetStoreId}`,
+              status: 'connected',
+              rawData: JSON.stringify({ 
+                storeId: targetStoreId,
+                tenantStorageType: typeof tenantStorage,
+                hasGetCustomerByPhone: typeof tenantStorage.getCustomerByPhone
+              })
+            });
+
+            // STEP 2.5: Process interactive messages FIRST (before customer lookup)
+            if (messageType === 'interactive' && message.interactive?.button_reply?.id) {
+              const buttonId = message.interactive.button_reply.id;
+              
+              await storage.addWhatsAppLog({
+                type: 'info',
+                phoneNumber: from,
+                messageContent: `Button pressed: ${buttonId}`,
+                status: 'received',
+                rawData: JSON.stringify({ 
+                  buttonId,
+                  interactiveType: message.interactive.type 
+                })
+              });
+
+              // Process the button directly using tenant storage
+              const { processAutoResponse } = await import('./whatsapp-simple');
+              const processed = await processAutoResponse(buttonId, from, targetPhoneNumberId, tenantStorage);
+              
+              if (processed) {
+                await storage.addWhatsAppLog({
+                  type: 'info',
+                  phoneNumber: from,
+                  messageContent: `Respuesta automática enviada para botón: ${buttonId}`,
+                  status: 'processed'
+                });
+                return; // Exit early after processing button
+              }
+            }
+
+            // STEP 3: Find or create customer using tenant-specific storage (INSIDE TRY BLOCK)
+            await storage.addWhatsAppLog({
+              type: 'debug',
+              phoneNumber: from,
+              messageContent: `Buscando cliente por teléfono en tienda ${targetStoreId}`,
+              status: 'processing',
+              rawData: JSON.stringify({ phoneNumber: from, storeId: targetStoreId })
+            });
+
+            let customer = await tenantStorage.getCustomerByPhone(from);
+            let isNewCustomer = false;
+            
+            await storage.addWhatsAppLog({
+              type: 'debug',
+              phoneNumber: from,
+              messageContent: `Cliente ${customer ? 'encontrado' : 'no encontrado'}`,
+              status: customer ? 'found' : 'not_found',
+              rawData: JSON.stringify({ 
+                customerId: customer?.id || null,
+                customerName: customer?.name || null
+              })
+            });
+          
+            if (!customer) {
+              // Check if there's an ongoing registration flow
+              await storage.addWhatsAppLog({
+                type: 'debug',
+                phoneNumber: from,
+                messageContent: 'Verificando flujo de registro existente',
+                status: 'processing'
+              });
+
+              const registrationFlow = await storage.getRegistrationFlow(from);
+              
+              if (!registrationFlow) {
+                // New customer - create basic customer record and continue with message processing
+                await storage.addWhatsAppLog({
+                  type: 'debug',
+                  phoneNumber: from,
+                  messageContent: 'Nuevo cliente detectado - creando registro básico',
+                  status: 'processing'
+                });
+
+                // Create customer using available tenantStorage
+                await storage.addWhatsAppLog({
+                  type: 'debug',
+                  phoneNumber: from,
+                  messageContent: 'Iniciando llamada a tenantStorage.createCustomer',
+                  status: 'processing'
+                });
+
+                try {
+                  customer = await tenantStorage.createCustomer({
+                    name: `Cliente ${from.slice(-4)}`,
+                    phone: from,
+                    whatsappId: from
+                  });
+
+                  await storage.addWhatsAppLog({
+                    type: 'info',
+                    phoneNumber: from,
+                    messageContent: `Cliente creado exitosamente: ID ${customer.id}`,
+                    status: 'processed'
+                  });
+                } catch (createError) {
+                  await storage.addWhatsAppLog({
+                    type: 'error',
+                    phoneNumber: from,
+                    messageContent: 'Error específico en createCustomer',
+                    status: 'error',
+                    errorMessage: createError instanceof Error ? createError.message : String(createError)
+                  });
+                  throw createError; // Re-throw para que sea capturado por el catch exterior
+                }
+
+              // Mark as new customer and continue processing message
+              isNewCustomer = true;
+            } else {
+              // Handle registration flow
+              await storage.addWhatsAppLog({
+                type: 'debug',
+                phoneNumber: from,
+                messageContent: 'Procesando flujo de registro existente',
+                status: 'processing',
+                rawData: JSON.stringify({ step: registrationFlow.currentStep })
+              });
+              await handleRegistrationFlow(from, messageText, registrationFlow);
+              return;
+            }
+          } else {
+            // Existing customer - check for active registration flow first
+            const registrationFlow = await storage.getRegistrationFlow(from);
+            
+            if (registrationFlow) {
+              // Handle registration flow for existing customer
+              await handleRegistrationFlow(from, messageText, registrationFlow);
+              return;
+            }
+            
+            // Check if name is generic (needs completion)
+            if (customer.name.startsWith('Cliente ')) {
+              isNewCustomer = true;
+              await storage.addWhatsAppLog({
+                type: 'debug',
+                phoneNumber: from,
+                messageContent: 'Cliente existente necesita completar registro',
+                status: 'processing'
+              });
+            }
+          }
+
+          // Find existing conversation or create new one
+          const conversations = await tenantStorage.getActiveConversations();
+          let conversation = conversations.find(c => c.customer.phone === from);
+          
+          if (!conversation) {
+            conversation = await tenantStorage.createConversation({
+              customerId: customer.id,
+              status: "active"
+            });
+            
+            await storage.addWhatsAppLog({
+              type: 'info',
+              phoneNumber: from,
+              messageContent: `Nueva conversación creada para ${from}`,
+              status: 'success',
+              rawData: JSON.stringify({ conversationId: conversation.id, customerId: customer.id })
+            });
+          }
+
+          // Create message in conversation
+          await tenantStorage.createMessage({
+            conversationId: conversation.id,
+            content: messageText,
+            senderId: null, // Customer message
+            senderType: "customer",
+            whatsappMessageId: messageId,
+            messageType: messageType
+          });
+
+          // Handle interactive messages (buttons) BEFORE text processing
+          if (messageType === 'interactive') {
+            await handleInteractiveMessage(customer, conversation, message.interactive, from, targetStoreId, targetPhoneNumberId);
+            return; // Don't process further as text message
+          }
+
+          // Handle location messages
+          if (messageType === 'location') {
+            await handleLocationMessage(customer, message.location, from, targetPhoneNumberId);
+            return; // Don't process further as text message
+          }
+
+          // PRIORITY CHECK: Handle active registration flows BEFORE processing as regular conversation
+          const activeRegistrationFlow = await storage.getRegistrationFlow(from);
+          
+          if (activeRegistrationFlow) {
+            await handleRegistrationFlow(from, messageText, activeRegistrationFlow, targetPhoneNumberId);
+            return; // Don't process as regular conversation
+          }
+
+          // Process customer message and respond (for text messages)
+          console.log('🔄 ABOUT TO CALL PROCESSCUSTOMERMESSAGE with:', { 
+            customerId: customer?.id, 
+            conversationId: conversation?.id, 
+            messageType: message.type,
+            storeId: targetStoreId
+          });
+          await processCustomerMessage(customer, conversation, message, from, isNewCustomer, targetStoreId, targetPhoneNumberId);
+          console.log('✅ PROCESSCUSTOMERMESSAGE COMPLETED');
+
+          await storage.addWhatsAppLog({
+            type: 'info',
+            message: `Mensaje guardado en conversación ${conversation.id}`,
+            data: { conversationId: conversation.id, messageId }
+          });
+
+          } catch (error) {
+            await storage.addWhatsAppLog({
+              type: 'error',
+              phoneNumber: from,
+              messageContent: 'Error en tenant storage o procesamiento de cliente',
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : String(error)
+            });
+            return;
+          }
+        }
+      }
+
+      // Process status updates (message delivery, read receipts)
+      if (value.statuses && value.statuses.length > 0) {
+        for (const status of value.statuses) {
+          await storage.addWhatsAppLog({
+            type: 'info',
+            message: `Estado de mensaje actualizado: ${status.status}`,
+            data: {
+              messageId: status.id,
+              status: status.status,
+              timestamp: status.timestamp,
+              recipient: status.recipient_id
+            }
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error("Error detallado en processWhatsAppMessage:", error);
+      
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: null,
+        messageContent: 'Error procesando mensaje de WhatsApp',
+        status: 'error',
+        errorMessage: error.message || error.toString(),
+        rawData: JSON.stringify({ 
+          error: error.message || error.toString(),
+          stack: error.stack || 'No stack trace',
+          value: value,
+          errorType: typeof error,
+          errorName: error.name || 'Unknown error'
+        })
+      });
+    }
+  }
+
+  // Function to process customer messages and respond with menu/orders
+
   async function sendProductMenu(phoneNumber: string) {
     const products = await storage.getAllProducts();
     const productItems = products.filter(p => p.category === 'product').slice(0, 5);

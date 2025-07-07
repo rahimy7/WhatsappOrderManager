@@ -231,6 +231,12 @@ export function createTenantStorage(tenantDb: any) {
       return await tenantDb.select().from(schema.autoResponses)
         .where(eq(schema.autoResponses.isActive, true))
         .orderBy(desc(schema.autoResponses.createdAt));
+    },
+
+    // WhatsApp Settings
+    async getAllWhatsAppConfigs() {
+      return await tenantDb.select().from(schema.whatsappSettings)
+        .orderBy(desc(schema.whatsappSettings.createdAt));
     }
   };
 }
