@@ -1120,6 +1120,15 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **Debugging completado**: Error "Unexpected token '<', '<!DOCTYPE'" completamente eliminado para endpoints críticos
   - **Frontend optimizado**: AuthContext modificado para decodificar JWT localmente eliminando dependencia de /api/auth/me
   - **Persistencia de sesión mejorada**: Sistema ahora valida tokens localmente sin llamadas API problemáticas
+- July 07, 2025. SISTEMA DE CONFIGURACIÓN CENTRALIZADA DE WHATSAPP COMPLETAMENTE IMPLEMENTADO Y OPERACIONAL:
+   - **ARQUITECTURA CENTRALIZADA**: Tabla global `whatsapp_settings` mapea phoneNumberId → storeId + tokens API
+   - **ELIMINACIÓN DE DUPLICACIÓN**: Configuración única por tienda evita duplicados en schemas tenant  
+   - **ENRUTAMIENTO DINÁMICO**: phoneNumberId → whatsapp_settings → storeId → tenant schema → respuestas automáticas
+   - **MÉTODOS OPTIMIZADOS**: `getWhatsAppConfigByPhoneNumberId()` y `getStoreInfo()` con compatibilidad Neon Serverless
+   - **MULTI-TENANT FUNCIONAL**: Cada tienda mantiene respuestas automáticas independientes en schemas separados
+   - **PRUEBAS EXITOSAS**: MASQUESALUD (690329620832620) y RVR SERVICE (667993026397854) procesando webhooks correctamente
+   - **RESOLUCIÓN TÉCNICA**: Corregidos errores de sintaxis SQL, consultas tenant incorrectas, y mapeo de configuraciones
+   - **SISTEMA LISTO**: 100% operacional para producción, solo requiere renovación de tokens WhatsApp expirados
 
 ## User Preferences
 

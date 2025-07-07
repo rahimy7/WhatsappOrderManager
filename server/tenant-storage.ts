@@ -397,17 +397,15 @@ export function createTenantStorage(tenantDb: any) {
 
     // WhatsApp Settings
     async getAllWhatsAppConfigs(storeId: number) {
+      // In tenant schema, whatsapp_settings don't have store_id column as all data is store-specific
       return await tenantDb.select().from(schema.whatsappSettings)
-        .where(eq(schema.whatsappSettings.storeId, storeId))
         .orderBy(desc(schema.whatsappSettings.createdAt));
     },
 
     async getWhatsAppConfig(storeId: number) {
+      // In tenant schema, whatsapp_settings don't have store_id column as all data is store-specific
       const configs = await tenantDb.select().from(schema.whatsappSettings)
-        .where(and(
-          eq(schema.whatsappSettings.storeId, storeId),
-          eq(schema.whatsappSettings.isActive, true)
-        ))
+        .where(eq(schema.whatsappSettings.isActive, true))
         .orderBy(desc(schema.whatsappSettings.createdAt))
         .limit(1);
       return configs[0] || null;

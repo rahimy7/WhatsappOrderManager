@@ -165,6 +165,7 @@ export interface IStorage {
 
   // WhatsApp Settings
   getWhatsAppConfig(storeId?: number | null): Promise<WhatsAppSettings | null>;
+  getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppSettings | null>;
   updateWhatsAppConfig(config: InsertWhatsAppSettings, storeId?: number): Promise<WhatsAppSettings>;
   
   // WhatsApp Logs
@@ -252,6 +253,7 @@ export interface IStorage {
   
   // Virtual Stores Management
   getAllStores(): Promise<VirtualStore[]>;
+  getStoreInfo(storeId: number): Promise<VirtualStore | null>;
 }
 
 export class MemStorage implements IStorage {
@@ -1058,6 +1060,20 @@ export class MemStorage implements IStorage {
     };
   }
 
+  async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<any> {
+    // Search through all stored configs for matching phoneNumberId
+    if (!this.whatsappConfigByStore) {
+      return null;
+    }
+    
+    for (const [storeKey, config] of this.whatsappConfigByStore.entries()) {
+      if (config.whatsappPhoneNumberId === phoneNumberId || config.phoneNumberId === phoneNumberId) {
+        return config;
+      }
+    }
+    return null;
+  }
+
   async updateWhatsAppConfig(config: any, storeId?: number): Promise<any> {
     const storeKey = config.storeId ? `store_${config.storeId}` : 'default';
     
@@ -1267,6 +1283,11 @@ export class MemStorage implements IStorage {
   async getAllStores(): Promise<VirtualStore[]> {
     // Return empty array for in-memory storage
     return [];
+  }
+  
+  async getStoreInfo(storeId: number): Promise<VirtualStore | null> {
+    // MemStorage doesn't support virtual stores
+    return null;
   }
 }
 
@@ -2001,6 +2022,22 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(whatsappSettings.createdAt));
       
       return config || null;
+    }
+  }
+
+  async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppSettings | null> {
+    try {
+      const [config] = await db.select().from(whatsappSettings)
+        .where(and(
+          eq(whatsappSettings.phoneNumberId, phoneNumberId),
+          eq(whatsappSettings.isActive, true)
+        ))
+        .orderBy(desc(whatsappSettings.createdAt));
+      
+      return config || null;
+    } catch (error) {
+      console.error('Error getting WhatsApp config by phoneNumberId:', error);
+      return null;
     }
   }
 
@@ -2940,6 +2977,27 @@ export class DatabaseStorage implements IStorage {
   // Virtual Stores Management
   async getAllStores(): Promise<VirtualStore[]> {
     return await db.select().from(virtualStores).orderBy(virtualStores.name);
+  }
+  
+  async getStoreInfo(storeId: number): Promise<VirtualStore | null> {
+    const [store] = await db.select().from(virtualStores).where(eq(virtualStores.id, storeId));
+    return store || null;
+  }
+  
+  async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppSettings | null> {
+    try {
+      // Sanitize phoneNumberId to prevent SQL injection
+      const sanitizedPhoneNumberId = phoneNumberId.replace(/[^0-9]/g, '');
+      
+      // Use Drizzle ORM approach without problematic syntax
+      const configs = await db.select().from(whatsappSettings);
+      const config = configs.find(c => c.phoneNumberId === phoneNumberId);
+      
+      return config || null;
+    } catch (error) {
+      console.error('Error querying WhatsApp config by phone number ID:', error);
+      return null;
+    }
   }
 }
 

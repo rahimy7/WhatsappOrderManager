@@ -2,48 +2,54 @@
 import { storage } from './storage.js';
 import { createTenantStorage } from './tenant-storage.js';
 
-// Multi-tenant phone number ID mapping for both stores
+// Dynamic multi-tenant configuration lookup using global whatsapp_settings table
 async function findStoreByPhoneNumberId(phoneNumberId: string) {
   try {
     console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
     
-    // Check if it's MASQUESALUD phoneNumberId
-    if (phoneNumberId === '690329620832620') {
-      console.log(`🎯 MATCH FOUND - MASQUESALUD Store (ID: 5) has phoneNumberId: ${phoneNumberId}`);
-      return {
-        storeId: 5,
-        storeName: 'MASQUESALUD',
-        schema: 'store_1751554718287',
-        phoneNumberId: phoneNumberId,
-        accessToken: 'EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD'
-      };
+    // Query the global whatsapp_settings table to find store configuration
+    const whatsappConfig = await storage.getWhatsAppConfigByPhoneNumberId(phoneNumberId);
+    
+    if (whatsappConfig) {
+      // Get store information from virtual_stores table
+      const storeInfo = await storage.getStoreInfo(whatsappConfig.storeId);
+      
+      if (storeInfo) {
+        console.log(`🎯 DYNAMIC MATCH - Store: ${storeInfo.name} (ID: ${storeInfo.id})`);
+        
+        // Extract schema from databaseUrl (format: store_XXXXXXXXXXXX)
+        const schemaMatch = storeInfo.databaseUrl?.match(/store_\d+/);
+        const schema = schemaMatch ? schemaMatch[0] : `store_${storeInfo.id}`;
+        
+        return {
+          storeId: storeInfo.id,
+          storeName: storeInfo.name,
+          schema: schema,
+          phoneNumberId: whatsappConfig.phoneNumberId,
+          accessToken: whatsappConfig.accessToken,
+          businessAccountId: whatsappConfig.businessAccountId,
+          webhookVerifyToken: whatsappConfig.webhookVerifyToken,
+          isActive: whatsappConfig.isActive,
+          whatsappConfig: whatsappConfig // Include full configuration for API calls
+        };
+      }
     }
     
-    // Check if it's RVR SERVICE phoneNumberId
-    if (phoneNumberId === '667993026397854') {
-      console.log(`🎯 MATCH FOUND - RVR SERVICE Store (ID: 4) has phoneNumberId: ${phoneNumberId}`);
-      return {
-        storeId: 4,
-        storeName: 'RVR SERVICE',
-        schema: 'store_1751248005649',
-        phoneNumberId: phoneNumberId,
-        accessToken: 'EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD'
-      };
-    }
-    
-    // Check for legacy/test phone number ID (backward compatibility)
+    // Legacy fallback for testing - will be removed when all stores migrate to database config
     if (phoneNumberId === '766302823222313') {
-      console.log(`🎯 LEGACY MATCH - Using old phoneNumberId ${phoneNumberId}, mapping to MASQUESALUD Store (ID: 5)`);
+      console.log(`🎯 LEGACY FALLBACK - Testing phoneNumberId ${phoneNumberId}, mapping to MASQUESALUD Store (ID: 5)`);
       return {
         storeId: 5,
         storeName: 'MASQUESALUD',
         schema: 'store_1751554718287',
-        phoneNumberId: '690329620832620', // Use current production phone number ID
+        phoneNumberId: '690329620832620',
         accessToken: 'EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD'
       };
     }
     
+    console.log('❌ NO STORE FOUND - phoneNumberId not configured in database:', phoneNumberId);
     return null;
+    
   } catch (error) {
     console.error('🚨 ERROR FINDING STORE:', error);
     return null;
@@ -222,9 +228,8 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
         } catch (error) {
           console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
           
-          // Fallback message
-          const { storage } = await import('./storage');
-          const config = await storage.getWhatsAppConfig(storeMapping.storeId);
+          // Fallback message using global configuration
+          const config = storeMapping.whatsappConfig;
           
           if (config) {
             const fallbackPayload = {
@@ -339,12 +344,11 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
   console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id})`);
   console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
 
-  // Step 6: Send response using WhatsApp API
-  const { storage } = await import('./storage');
-  const config = await storage.getWhatsAppConfig(storeMapping.storeId);
+  // Step 6: Use global WhatsApp configuration already obtained
+  const config = storeMapping.whatsappConfig;
   
   if (!config) {
-    throw new Error('WhatsApp configuration not found in database');
+    throw new Error('WhatsApp configuration not found in store mapping');
   }
 
   // Step 7: Process interactive buttons from auto-response configuration
@@ -453,7 +457,7 @@ async function sendAutoResponseMessage(
       messageText = messageText.replace(new RegExp(placeholder, 'g'), value);
     }
 
-    // Get WhatsApp configuration directly from storage
+    // Get WhatsApp configuration for the specific store
     const { storage } = await import('./storage.js');
     const config = await storage.getWhatsAppConfig(storeId);
     if (!config) {

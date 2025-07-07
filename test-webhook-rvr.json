@@ -1,0 +1,31 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "444239435931422",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15556550331",
+              "phone_number_id": "667993026397854"
+            },
+            "messages": [
+              {
+                "from": "18494553242",
+                "id": "wamid.test350",
+                "timestamp": "1751926300",
+                "text": {
+                  "body": "hola RVR service"
+                },
+                "type": "text"
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}
