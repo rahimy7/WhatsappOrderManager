@@ -11,20 +11,15 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
     const { eq } = await import('drizzle-orm');
     const schema = await import('../shared/schema.js');
     
-    // Direct mapping to store configurations for independent storage
+    // Direct mapping to store configurations for proven functionality
     const storeConfigurations = {
-      // MASQUESALUD Store - Independent configuration
-      '690329620832620': {
+      // MASQUESALUD Store - Production configuration
+      '766302823222313': {
         storeId: 5,
         storeName: 'MASQUESALUD',
         schema: 'store_1751554718287'
       },
-      '766302823222313': {
-        storeId: 5,
-        storeName: 'MASQUESALUD', 
-        schema: 'store_1751554718287'
-      },
-      // RVR SERVICE Store - Independent configuration  
+      // RVR SERVICE Store - Production configuration  
       '667993026397854': {
         storeId: 4,
         storeName: 'RVR SERVICE',
@@ -33,37 +28,37 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
     };
     
     const storeConfig = storeConfigurations[phoneNumberId];
-    if (storeConfig) {
-      console.log(`🎯 PHONE NUMBER MATCH - Store: ${storeConfig.storeName} (ID: ${storeConfig.storeId})`);
-      
-      // CRITICAL: Verify this store is authorized to respond to messages
-      // Check if store has configured a WhatsApp number for receiving messages
-      const storeSettings = await masterDb.select({
-        storeWhatsAppNumber: schema.storeSettings.storeWhatsAppNumber
-      })
-      .from(schema.storeSettings)
-      .where(eq(schema.storeSettings.storeId, storeConfig.storeId))
-      .limit(1);
-      
-      if (storeSettings.length > 0 && storeSettings[0].storeWhatsAppNumber) {
-        console.log(`✅ STORE AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} responds to: ${storeSettings[0].storeWhatsAppNumber}`);
-        return {
-          storeId: storeConfig.storeId,
-          storeName: storeConfig.storeName,
-          schema: storeConfig.schema,
-          phoneNumberId: phoneNumberId,
-          responseNumber: storeSettings[0].storeWhatsAppNumber,
-          requiresTenantConfig: true
-        };
-      } else {
-        console.log(`❌ STORE NOT AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} has no response number configured`);
-        console.log(`💡 SUGGESTION: Configure WhatsApp response number in store settings for ${storeConfig.storeName}`);
-        return null;
-      }
+    if (!storeConfig) {
+      console.log('❌ NO STORE CONFIGURED - phoneNumberId not in configuration map:', phoneNumberId);
+      return null;
     }
     
-    console.log('❌ NO STORE FOUND - phoneNumberId not configured:', phoneNumberId);
-    return null;
+    console.log(`🎯 PHONE NUMBER MATCH - Store: ${storeConfig.storeName} (ID: ${storeConfig.storeId})`);
+    
+    // CRITICAL: Verify this store is authorized to respond to messages
+    // Check if store has configured a WhatsApp number for receiving messages
+    const storeSettings = await masterDb.select({
+      storeWhatsAppNumber: schema.storeSettings.storeWhatsAppNumber
+    })
+    .from(schema.storeSettings)
+    .where(eq(schema.storeSettings.storeId, storeConfig.storeId))
+    .limit(1);
+    
+    if (storeSettings.length > 0 && storeSettings[0].storeWhatsAppNumber) {
+      console.log(`✅ STORE AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} responds to: ${storeSettings[0].storeWhatsAppNumber}`);
+      return {
+        storeId: storeConfig.storeId,
+        storeName: storeConfig.storeName,
+        schema: storeConfig.schema,
+        phoneNumberId: phoneNumberId,
+        responseNumber: storeSettings[0].storeWhatsAppNumber,
+        requiresTenantConfig: true
+      };
+    } else {
+      console.log(`❌ STORE NOT AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} has no response number configured`);
+      console.log(`💡 SUGGESTION: Configure WhatsApp response number in store settings for ${storeConfig.storeName}`);
+      return null;
+    }
     
   } catch (error) {
     console.error('🚨 ERROR FINDING STORE:', error);
@@ -359,15 +354,16 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
   console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id})`);
   console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
 
-  // Step 6: Get WhatsApp configuration from tenant schema (independent for each store)
-  const tenantWhatsAppConfig = await tenantStorage.getTenantWhatsAppConfig();
+  // Step 6: Get WhatsApp configuration from global database (centralized configurations)
+  const { storage } = await import('./storage.js');
+  const globalWhatsAppConfig = await storage.getWhatsAppConfig(storeMapping.storeId);
   
-  if (!tenantWhatsAppConfig) {
-    console.log(`❌ NO WHATSAPP CONFIG FOUND - Store ${storeMapping.storeId}: Please configure WhatsApp API in store settings`);
-    throw new Error('WhatsApp configuration not found in tenant schema. Please configure WhatsApp API in store settings.');
+  if (!globalWhatsAppConfig) {
+    console.log(`❌ NO WHATSAPP CONFIG FOUND - Store ${storeMapping.storeId}: Please configure WhatsApp API in global settings`);
+    throw new Error('WhatsApp configuration not found in global database. Please configure WhatsApp API in store settings.');
   }
   
-  console.log(`✅ TENANT WHATSAPP CONFIG LOADED - Store ${storeMapping.storeId}: phoneNumberId ${tenantWhatsAppConfig.phoneNumberId}`);
+  console.log(`✅ GLOBAL WHATSAPP CONFIG LOADED - Store ${storeMapping.storeId}: phoneNumberId ${globalWhatsAppConfig.phoneNumberId}`);
 
   // Step 7: Process interactive buttons from auto-response configuration
   let messagePayload;
@@ -423,13 +419,13 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
     };
   }
 
-  // Step 8: Send the message via WhatsApp API using tenant configuration
-  console.log('📤 SENDING MESSAGE WITH TENANT CONFIG - Store', storeMapping.storeId, 'phoneNumberId:', tenantWhatsAppConfig.phoneNumberId);
+  // Step 8: Send the message via WhatsApp API using global configuration
+  console.log('📤 SENDING MESSAGE WITH GLOBAL CONFIG - Store', storeMapping.storeId, 'phoneNumberId:', globalWhatsAppConfig.phoneNumberId);
   
-  const response = await fetch(`https://graph.facebook.com/v21.0/${tenantWhatsAppConfig.phoneNumberId}/messages`, {
+  const response = await fetch(`https://graph.facebook.com/v21.0/${globalWhatsAppConfig.phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${tenantWhatsAppConfig.accessToken}`,
+      'Authorization': `Bearer ${globalWhatsAppConfig.accessToken}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(messagePayload)

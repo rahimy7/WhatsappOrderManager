@@ -1,0 +1,71 @@
+ Estás usando un solo usuario (System User) con un solo token, y tienes dos números configurados en el mismo WABA.
+👉 Esto es correcto y totalmente válido para manejar múltiples números si y solo si:
+
+Tu backend distingue claramente los mensajes según el phone_number_id que llega al webhook.
+
+Cada respuesta que envías a los clientes usa el phone_number_id correcto en el POST a la API.
+
+🚨 ¿Por qué se te están cruzando las respuestas?
+Muy probablemente porque tu backend:
+
+Está enviando las respuestas con el mismo phone_number_id a todos, sin verificar cuál número fue el que recibió el mensaje.
+
+O estás asociando el mensaje al cliente incorrecto porque no estás filtrando por el número emisor real.
+
+📌 ¿Necesitas un token por tienda o por número?
+NO es necesario tener un token por tienda, siempre que:
+
+Todos los números estén dentro del mismo WABA
+
+Y que tu backend administre correctamente los flujos separados
+
+Pero si estás teniendo muchos problemas de mezcla, entonces sí podrías considerar:
+
+✅ Opción 1: Corregir tu backend para separar bien cada conversación por phone_number_id (recomendado)
+✅ Opción 2: Tener 1 WABA por tienda, con su propio número, token y webhook (más costoso y complejo, pero más aislado)
+
+✅ ¿Qué debes verificar ahora mismo?
+En tu webhook (cuando recibes el mensaje), ¿estás capturando el metadata.phone_number_id?
+
+¿Estás respondiendo con el mismo número que recibió el mensaje?
+Ejemplo correcto:
+
+json
+Copiar
+Editar
+POST https://graph.facebook.com/v19.0/<phone_number_id>/messages
+{
+  "messaging_product": "whatsapp",
+  "to": "cliente_id",
+  "text": { "body": "Hola desde la tienda correcta" }
+}
+¿Tienes una tabla o mapa en tu base de datos que diga:
+
+phone_number_id	tienda_id	nombre
+123456789012345	tienda01	Zapatería
+987654321098765	tienda02	Electrónica
+
+Y usas esa lógica para enrutar todo?
+
+🧠 Recomendación
+Si no necesitas facturación separada ni aislamiento legal por tienda, usa un solo token y WABA, pero separa correctamente los flujos en backend.
+
+👉 Si quieres, te puedo revisar tu lógica de respuesta y ayudarte a:
+
+Detectar si estás usando el phone_number_id correcto en cada envío
+
+Corregirlo para que las respuestas nunca se crucen
+
+¿Te gustaría que veamos el código que estás usando para responder desde la API?
+
+
+
+
+
+
+
+
+
+Preguntar a ChatGPT
+
+

@@ -1984,33 +1984,23 @@ export class DatabaseStorage implements IStorage {
   // WhatsApp Settings with PostgreSQL - Now store-specific
   async getWhatsAppConfig(storeId?: number | null): Promise<WhatsAppSettings | null> {
     if (storeId) {
-      // Get configuration from tenant schema for specific store
+      // Get configuration from global table for specific store
       try {
-        const { getTenantDb } = await import('./multi-tenant-db');
-        const { createTenantStorage } = await import('./tenant-storage');
-        const tenantDb = await getTenantDb(storeId);
-        const tenantStorage = createTenantStorage(tenantDb);
+        console.log(`🔍 SEARCHING WHATSAPP CONFIG - For store ID: ${storeId}`);
+        const [config] = await db.select().from(whatsappSettings)
+          .where(and(
+            eq(whatsappSettings.storeId, storeId),
+            eq(whatsappSettings.isActive, true)
+          ))
+          .limit(1);
         
-        // Get the active WhatsApp configuration from tenant storage
-        const configs = await tenantStorage.getAllWhatsAppConfigs(storeId);
-        const activeConfig = configs.find((config: any) => config.isActive);
-        
-        if (activeConfig) {
-          return {
-            id: activeConfig.id,
-            accessToken: activeConfig.accessToken,
-            phoneNumberId: activeConfig.phoneNumberId,
-            webhookVerifyToken: activeConfig.webhookVerifyToken,
-            businessAccountId: activeConfig.businessAccountId,
-            appId: activeConfig.appId,
-            isActive: activeConfig.isActive,
-            storeId: storeId,
-            createdAt: activeConfig.createdAt,
-            updatedAt: activeConfig.updatedAt
-          };
+        if (config) {
+          console.log(`✅ WHATSAPP CONFIG FOUND - Store ${storeId}: phoneNumberId ${config.phoneNumberId}`);
+          return config;
+        } else {
+          console.log(`❌ NO WHATSAPP CONFIG - Store ${storeId}: No active configuration found in global database`);
+          return null;
         }
-        
-        return null;
       } catch (error) {
         console.error(`Error getting WhatsApp config for store ${storeId}:`, error);
         return null;
