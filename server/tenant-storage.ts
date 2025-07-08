@@ -412,8 +412,9 @@ export function createTenantStorage(tenantDb: any) {
     },
 
     async updateWhatsAppConfig(configData: any, storeId: number) {
+      // In tenant schema, all data is store-specific, no need for storeId filter
       const existingConfigs = await tenantDb.select().from(schema.whatsappSettings)
-        .where(eq(schema.whatsappSettings.storeId, storeId))
+        .where(eq(schema.whatsappSettings.isActive, true))
         .limit(1);
       
       if (existingConfigs.length > 0) {
@@ -432,10 +433,9 @@ export function createTenantStorage(tenantDb: any) {
           .returning();
         return updated;
       } else {
-        // Create new configuration
+        // Create new configuration in tenant schema (no storeId needed)
         const [created] = await tenantDb.insert(schema.whatsappSettings)
           .values({
-            storeId: storeId,
             accessToken: configData.accessToken,
             phoneNumberId: configData.phoneNumberId,
             webhookVerifyToken: configData.webhookVerifyToken,
@@ -448,6 +448,15 @@ export function createTenantStorage(tenantDb: any) {
           .returning();
         return created;
       }
+    },
+
+    // Método para obtener configuración WhatsApp específica de la tienda desde tenant schema
+    async getTenantWhatsAppConfig() {
+      const configs = await tenantDb.select().from(schema.whatsappSettings)
+        .where(eq(schema.whatsappSettings.isActive, true))
+        .orderBy(desc(schema.whatsappSettings.createdAt))
+        .limit(1);
+      return configs[0] || null;
     }
   };
 }

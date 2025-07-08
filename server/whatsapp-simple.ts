@@ -2,52 +2,47 @@
 import { storage } from './storage.js';
 import { createTenantStorage } from './tenant-storage.js';
 
-// Dynamic multi-tenant configuration lookup using global whatsapp_settings table
+// Independent store configuration lookup - each store manages its own WhatsApp config in tenant schema
 async function findStoreByPhoneNumberId(phoneNumberId: string) {
   try {
     console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
     
-    // Query the global whatsapp_settings table to find store configuration
-    const whatsappConfig = await storage.getWhatsAppConfigByPhoneNumberId(phoneNumberId);
-    
-    if (whatsappConfig) {
-      // Get store information from virtual_stores table
-      const storeInfo = await storage.getStoreInfo(whatsappConfig.storeId);
-      
-      if (storeInfo) {
-        console.log(`🎯 DYNAMIC MATCH - Store: ${storeInfo.name} (ID: ${storeInfo.id})`);
-        
-        // Extract schema from databaseUrl (format: store_XXXXXXXXXXXX)
-        const schemaMatch = storeInfo.databaseUrl?.match(/store_\d+/);
-        const schema = schemaMatch ? schemaMatch[0] : `store_${storeInfo.id}`;
-        
-        return {
-          storeId: storeInfo.id,
-          storeName: storeInfo.name,
-          schema: schema,
-          phoneNumberId: whatsappConfig.phoneNumberId,
-          accessToken: whatsappConfig.accessToken,
-          businessAccountId: whatsappConfig.businessAccountId,
-          webhookVerifyToken: whatsappConfig.webhookVerifyToken,
-          isActive: whatsappConfig.isActive,
-          whatsappConfig: whatsappConfig // Include full configuration for API calls
-        };
-      }
-    }
-    
-    // Legacy fallback for testing - will be removed when all stores migrate to database config
-    if (phoneNumberId === '766302823222313') {
-      console.log(`🎯 LEGACY FALLBACK - Testing phoneNumberId ${phoneNumberId}, mapping to MASQUESALUD Store (ID: 5)`);
-      return {
+    // Direct mapping to store configurations for independent storage
+    const storeConfigurations = {
+      // MASQUESALUD Store - Independent configuration
+      '690329620832620': {
         storeId: 5,
         storeName: 'MASQUESALUD',
-        schema: 'store_1751554718287',
-        phoneNumberId: '690329620832620',
-        accessToken: 'EAAKHVoxT6IUBPDCXf3uokdOCFlyGVwWd5l0jAPX5w4NBqmHmKal9AZBgyfAxT6r9EQjRL3o5vD6wKHlAfiI8eK4tCBP7x6FV4KydN2XxWZBPSe9DwWyBjIqwbuvyalv3HBbAyzjiBPiaJPxylS8x8yTUgrqbmfdHj9L8Cxq03VKZBC7EUD3eLZCL1M6iYbB20tCXqUG8zLjgLW8j3KGZB9Rs8C7Dc2bHBlMeQOCHDVsqOXSRme6jvvhvq9FAbkgZDZD'
+        schema: 'store_1751554718287'
+      },
+      '766302823222313': {
+        storeId: 5,
+        storeName: 'MASQUESALUD', 
+        schema: 'store_1751554718287'
+      },
+      // RVR SERVICE Store - Independent configuration  
+      '667993026397854': {
+        storeId: 4,
+        storeName: 'RVR SERVICE',
+        schema: 'store_1751248005649'
+      }
+    };
+    
+    const storeConfig = storeConfigurations[phoneNumberId];
+    if (storeConfig) {
+      console.log(`🎯 INDEPENDENT STORE MATCH - Store: ${storeConfig.storeName} (ID: ${storeConfig.storeId})`);
+      
+      // Return basic store mapping - tenant configuration will be loaded from independent schema
+      return {
+        storeId: storeConfig.storeId,
+        storeName: storeConfig.storeName,
+        schema: storeConfig.schema,
+        phoneNumberId: phoneNumberId,
+        requiresTenantConfig: true // Flag indicating this needs tenant-specific WhatsApp config
       };
     }
     
-    console.log('❌ NO STORE FOUND - phoneNumberId not configured in database:', phoneNumberId);
+    console.log('❌ NO STORE FOUND - phoneNumberId not configured:', phoneNumberId);
     return null;
     
   } catch (error) {
@@ -344,12 +339,15 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
   console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id})`);
   console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
 
-  // Step 6: Use global WhatsApp configuration already obtained
-  const config = storeMapping.whatsappConfig;
+  // Step 6: Get WhatsApp configuration from tenant schema (independent for each store)
+  const tenantWhatsAppConfig = await tenantStorage.getTenantWhatsAppConfig();
   
-  if (!config) {
-    throw new Error('WhatsApp configuration not found in store mapping');
+  if (!tenantWhatsAppConfig) {
+    console.log(`❌ NO WHATSAPP CONFIG FOUND - Store ${storeMapping.storeId}: Please configure WhatsApp API in store settings`);
+    throw new Error('WhatsApp configuration not found in tenant schema. Please configure WhatsApp API in store settings.');
   }
+  
+  console.log(`✅ TENANT WHATSAPP CONFIG LOADED - Store ${storeMapping.storeId}: phoneNumberId ${tenantWhatsAppConfig.phoneNumberId}`);
 
   // Step 7: Process interactive buttons from auto-response configuration
   let messagePayload;
@@ -405,11 +403,13 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
     };
   }
 
-  // Step 8: Send the message via WhatsApp API
-  const response = await fetch(`https://graph.facebook.com/v21.0/${storeMapping.phoneNumberId}/messages`, {
+  // Step 8: Send the message via WhatsApp API using tenant configuration
+  console.log('📤 SENDING MESSAGE WITH TENANT CONFIG - Store', storeMapping.storeId, 'phoneNumberId:', tenantWhatsAppConfig.phoneNumberId);
+  
+  const response = await fetch(`https://graph.facebook.com/v21.0/${tenantWhatsAppConfig.phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${config.accessToken}`,
+      'Authorization': `Bearer ${tenantWhatsAppConfig.accessToken}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(messagePayload)
