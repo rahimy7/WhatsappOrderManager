@@ -11,13 +11,21 @@
               "display_phone_number": "15556550331",
               "phone_number_id": "667993026397854"
             },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Cliente RVR"
+                },
+                "wa_id": "9876543210"
+              }
+            ],
             "messages": [
               {
-                "from": "18494553242",
-                "id": "wamid.test350",
-                "timestamp": "1751926300",
+                "from": "9876543210",
+                "id": "wamid.rvr123",
+                "timestamp": "1704067300",
                 "text": {
-                  "body": "hola RVR service"
+                  "body": "menu"
                 },
                 "type": "text"
               }
