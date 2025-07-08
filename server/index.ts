@@ -240,6 +240,192 @@ apiRouter.post('/store-responses/reset-defaults', async (req, res) => {
   }
 });
 
+// Super Admin WhatsApp Management endpoints
+apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const configs = await storage.getAllWhatsAppConfigs();
+    const stores = await storage.getAllVirtualStores();
+    
+    // Enrich configs with store names
+    const enrichedConfigs = configs.map(config => ({
+      ...config,
+      storeName: stores.find(store => store.id === config.storeId)?.name || `Tienda ${config.storeId}`
+    }));
+    
+    res.json(enrichedConfigs);
+  } catch (error) {
+    console.error("Error getting WhatsApp configs:", error);
+    res.status(500).json({ error: "Error al obtener configuraciones de WhatsApp" });
+  }
+});
+
+apiRouter.post('/super-admin/whatsapp-configs', express.json(), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const { z } = await import('zod');
+    const configData = z.object({
+      storeId: z.number(),
+      accessToken: z.string().min(1, "Token de acceso requerido"),
+      phoneNumberId: z.string().min(1, "Phone Number ID requerido"),
+      webhookVerifyToken: z.string().min(1, "Webhook verify token requerido"),
+      businessAccountId: z.string().optional(),
+      appId: z.string().optional(),
+      isActive: z.boolean().default(true)
+    }).parse(req.body);
+
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    const config = await storage.updateWhatsAppConfig(configData, configData.storeId);
+    res.json({ success: true, config });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: "Datos de configuración inválidos", details: error.errors });
+    }
+    console.error("Error creating WhatsApp config:", error);
+    res.status(500).json({ error: "Error al crear configuración de WhatsApp" });
+  }
+});
+
+apiRouter.put('/super-admin/whatsapp-configs/:id', express.json(), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const id = parseInt(req.params.id);
+    const { z } = await import('zod');
+    const configData = z.object({
+      storeId: z.number(),
+      accessToken: z.string().min(1, "Token de acceso requerido"),
+      phoneNumberId: z.string().min(1, "Phone Number ID requerido"),
+      webhookVerifyToken: z.string().min(1, "Webhook verify token requerido"),
+      businessAccountId: z.string().optional(),
+      appId: z.string().optional(),
+      isActive: z.boolean().default(true)
+    }).parse(req.body);
+
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    const config = await storage.updateWhatsAppConfigById(id, configData);
+    res.json({ success: true, config });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: "Datos de configuración inválidos", details: error.errors });
+    }
+    console.error("Error updating WhatsApp config:", error);
+    res.status(500).json({ error: "Error al actualizar configuración de WhatsApp" });
+  }
+});
+
+apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const id = parseInt(req.params.id);
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    const success = await storage.deleteWhatsAppConfig(id);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "Configuración no encontrada" });
+    }
+  } catch (error) {
+    console.error("Error deleting WhatsApp config:", error);
+    res.status(500).json({ error: "Error al eliminar configuración de WhatsApp" });
+  }
+});
+
+apiRouter.post('/super-admin/whatsapp-test', express.json(), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const { storeId, phoneNumberId } = req.body;
+    
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    const config = await storage.getWhatsAppConfig(storeId);
+    
+    if (!config) {
+      return res.json({
+        success: false,
+        error: "NO_CONFIG",
+        message: "No se encontró configuración de WhatsApp para esta tienda"
+      });
+    }
+
+    // Validar campos obligatorios
+    const missingFields = [];
+    if (!config.accessToken) missingFields.push("accessToken");
+    if (!config.phoneNumberId) missingFields.push("phoneNumberId");
+    
+    if (missingFields.length > 0) {
+      return res.json({
+        success: false,
+        error: "MISSING_CREDENTIALS",
+        message: "Faltan credenciales obligatorias",
+        missingFields
+      });
+    }
+
+    // Test básico de configuración
+    res.json({
+      success: true,
+      message: "Configuración válida",
+      details: {
+        storeId,
+        phoneNumberId: config.phoneNumberId,
+        hasToken: !!config.accessToken,
+        isActive: config.isActive
+      }
+    });
+  } catch (error) {
+    console.error("Error testing WhatsApp connection:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: "TEST_ERROR",
+      message: "Error al probar la conexión" 
+    });
+  }
+});
+
+apiRouter.get('/super-admin/stores', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    const stores = await storage.getAllVirtualStores();
+    res.json(stores);
+  } catch (error) {
+    console.error("Error getting virtual stores:", error);
+    res.status(500).json({ error: "Error al obtener tiendas virtuales" });
+  }
+});
+
 // Mount the API router with highest priority BEFORE any async configuration
 app.use('/api', apiRouter);
 

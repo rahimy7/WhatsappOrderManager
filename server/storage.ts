@@ -172,6 +172,14 @@ export interface IStorage {
   getWhatsAppLogs(): Promise<WhatsAppLog[]>;
   addWhatsAppLog(log: InsertWhatsAppLog): Promise<WhatsAppLog>;
   
+  // WhatsApp Settings - Central Management
+  getAllWhatsAppConfigs(): Promise<WhatsAppSettings[]>;
+  updateWhatsAppConfigById(id: number, config: Partial<InsertWhatsAppSettings>): Promise<WhatsAppSettings>;
+  deleteWhatsAppConfig(id: number): Promise<boolean>;
+
+  // Virtual Stores Management
+  getAllVirtualStores(): Promise<VirtualStore[]>;
+  
   // Auto Responses
   getAllAutoResponses(): Promise<AutoResponse[]>;
   getAutoResponse(id: number): Promise<AutoResponse | undefined>;
@@ -1107,6 +1115,70 @@ export class MemStorage implements IStorage {
       this.whatsappLogs = this.whatsappLogs.slice(-100);
     }
     return logEntry;
+  }
+
+  // WhatsApp Central Management - MemStorage implementations
+  async getAllWhatsAppConfigs(): Promise<WhatsAppSettings[]> {
+    const configs = Array.from(this.whatsappConfigByStore.values());
+    return configs.map((config, index) => ({
+      ...config,
+      id: config.id || index + 1,
+      createdAt: config.createdAt || new Date(),
+      updatedAt: config.updatedAt || new Date()
+    }));
+  }
+
+  async updateWhatsAppConfigById(id: number, config: Partial<InsertWhatsAppSettings>): Promise<WhatsAppSettings> {
+    // Find and update the config
+    for (const [key, existingConfig] of this.whatsappConfigByStore.entries()) {
+      if (existingConfig.id === id) {
+        const updatedConfig = {
+          ...existingConfig,
+          ...config,
+          id,
+          updatedAt: new Date()
+        };
+        this.whatsappConfigByStore.set(key, updatedConfig);
+        return updatedConfig;
+      }
+    }
+    throw new Error(`WhatsApp config with ID ${id} not found`);
+  }
+
+  async deleteWhatsAppConfig(id: number): Promise<boolean> {
+    for (const [key, config] of this.whatsappConfigByStore.entries()) {
+      if (config.id === id) {
+        this.whatsappConfigByStore.delete(key);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async getAllVirtualStores(): Promise<VirtualStore[]> {
+    // Return mock data for MemStorage
+    return [
+      {
+        id: 4,
+        name: "RVR SERVICE",
+        description: "Servicios de refrigeración y aire acondicionado",
+        domain: "rvr-service.local",
+        isActive: true,
+        schema: "store_1751248005649",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 5,
+        name: "MASQUESALUD",
+        description: "Servicios de salud integral",
+        domain: "masquesalud.local",
+        isActive: true,
+        schema: "store_1751554718287",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ];
   }
 
   // Notification stubs - not used since we're using DatabaseStorage
@@ -2987,6 +3059,56 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error querying WhatsApp config by phone number ID:', error);
       return null;
+    }
+  }
+
+  // WhatsApp Settings - Central Management Functions
+  async getAllWhatsAppConfigs(): Promise<WhatsAppSettings[]> {
+    try {
+      return await db.select().from(whatsappSettings)
+        .orderBy(desc(whatsappSettings.createdAt));
+    } catch (error) {
+      console.error('Error getting all WhatsApp configs:', error);
+      return [];
+    }
+  }
+
+  async updateWhatsAppConfigById(id: number, config: Partial<InsertWhatsAppSettings>): Promise<WhatsAppSettings> {
+    try {
+      const [updatedConfig] = await db
+        .update(whatsappSettings)
+        .set({
+          ...config,
+          updatedAt: new Date()
+        })
+        .where(eq(whatsappSettings.id, id))
+        .returning();
+      
+      return updatedConfig;
+    } catch (error) {
+      console.error('Error updating WhatsApp config by ID:', error);
+      throw error;
+    }
+  }
+
+  async deleteWhatsAppConfig(id: number): Promise<boolean> {
+    try {
+      await db.delete(whatsappSettings).where(eq(whatsappSettings.id, id));
+      return true;
+    } catch (error) {
+      console.error('Error deleting WhatsApp config:', error);
+      return false;
+    }
+  }
+
+  // Virtual Stores Management
+  async getAllVirtualStores(): Promise<VirtualStore[]> {
+    try {
+      return await db.select().from(virtualStores)
+        .orderBy(desc(virtualStores.createdAt));
+    } catch (error) {
+      console.error('Error getting all virtual stores:', error);
+      return [];
     }
   }
 }

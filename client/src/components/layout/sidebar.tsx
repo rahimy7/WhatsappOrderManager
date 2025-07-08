@@ -270,6 +270,14 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       roles: ["super_admin"], // Solo super admin
     },
     {
+      href: "/super-admin/whatsapp-management",
+      icon: MessageCircle,
+      label: "Gestión de WhatsApp",
+      badge: null,
+      permission: "super_admin",
+      roles: ["super_admin"], // Solo super admin
+    },
+    {
       href: "/super-admin/settings",
       icon: Settings,
       label: "Configuración Global",
