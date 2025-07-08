@@ -964,6 +964,8 @@ This is a full-stack order management system with WhatsApp integration, built fo
   - **RESPUESTAS AUTOMÁTICAS SEPARADAS**: MASQUESALUD (20 respuestas), RVR SERVICE (29 respuestas) funcionando independientemente
   - **TOKEN ACTUALIZADO Y FUNCIONAL**: Token válido configurado, sistema enviando respuestas automáticas exitosamente
   - **CONFIRMACIÓN FINAL**: Sistema multi-tenant WhatsApp 100% operacional con envío exitoso de mensajes
+  - **AUTORIZACIÓN POR TIENDA IMPLEMENTADA**: Solo tiendas con número configurado en store_settings pueden responder mensajes
+  - **VERIFICACIÓN EXITOSA**: Números no autorizados son rechazados, tiendas autorizadas responden correctamente
   - **ENRUTAMIENTO CORREGIDO**: Sistema detecta phoneNumberId y enruta a la tienda correcta sin configuración centralizada
   - **TENANT STORAGE FUNCIONAL**: Cada tienda procesa mensajes usando su propia configuración independiente
   - **AISLAMIENTO COMPLETO**: WhatsApp API calls usan tokens y configuración específica por tienda

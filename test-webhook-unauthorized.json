@@ -2,30 +2,30 @@
   "object": "whatsapp_business_account",
   "entry": [
     {
-      "id": "444239435931422",
+      "id": "1438133463993189",
       "changes": [
         {
           "value": {
             "messaging_product": "whatsapp",
             "metadata": {
-              "display_phone_number": "15556550331",
-              "phone_number_id": "667993026397854"
+              "display_phone_number": "15551234567",
+              "phone_number_id": "999999999999999"
             },
             "contacts": [
               {
                 "profile": {
-                  "name": "Cliente RVR"
+                  "name": "Test Cliente"
                 },
-                "wa_id": "1555999888"
+                "wa_id": "1234567890"
               }
             ],
             "messages": [
               {
-                "from": "1555999888",
-                "id": "wamid.rvr123",
+                "from": "1234567890",
+                "id": "wamid.test456",
                 "timestamp": "1704067200",
                 "text": {
-                  "body": "hola desde RVR SERVICE"
+                  "body": "hola desde número no autorizado"
                 },
                 "type": "text"
               }

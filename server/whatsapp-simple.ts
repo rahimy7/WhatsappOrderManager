@@ -2,10 +2,14 @@
 import { storage } from './storage.js';
 import { createTenantStorage } from './tenant-storage.js';
 
-// Independent store configuration lookup - each store manages its own WhatsApp config in tenant schema
+// Smart store lookup with response authorization verification
 async function findStoreByPhoneNumberId(phoneNumberId: string) {
   try {
     console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
+    
+    const { masterDb } = await import('./multi-tenant-db.js');
+    const { eq } = await import('drizzle-orm');
+    const schema = await import('../shared/schema.js');
     
     // Direct mapping to store configurations for independent storage
     const storeConfigurations = {
@@ -30,16 +34,32 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
     
     const storeConfig = storeConfigurations[phoneNumberId];
     if (storeConfig) {
-      console.log(`🎯 INDEPENDENT STORE MATCH - Store: ${storeConfig.storeName} (ID: ${storeConfig.storeId})`);
+      console.log(`🎯 PHONE NUMBER MATCH - Store: ${storeConfig.storeName} (ID: ${storeConfig.storeId})`);
       
-      // Return basic store mapping - tenant configuration will be loaded from independent schema
-      return {
-        storeId: storeConfig.storeId,
-        storeName: storeConfig.storeName,
-        schema: storeConfig.schema,
-        phoneNumberId: phoneNumberId,
-        requiresTenantConfig: true // Flag indicating this needs tenant-specific WhatsApp config
-      };
+      // CRITICAL: Verify this store is authorized to respond to messages
+      // Check if store has configured a WhatsApp number for receiving messages
+      const storeSettings = await masterDb.select({
+        storeWhatsAppNumber: schema.storeSettings.storeWhatsAppNumber
+      })
+      .from(schema.storeSettings)
+      .where(eq(schema.storeSettings.storeId, storeConfig.storeId))
+      .limit(1);
+      
+      if (storeSettings.length > 0 && storeSettings[0].storeWhatsAppNumber) {
+        console.log(`✅ STORE AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} responds to: ${storeSettings[0].storeWhatsAppNumber}`);
+        return {
+          storeId: storeConfig.storeId,
+          storeName: storeConfig.storeName,
+          schema: storeConfig.schema,
+          phoneNumberId: phoneNumberId,
+          responseNumber: storeSettings[0].storeWhatsAppNumber,
+          requiresTenantConfig: true
+        };
+      } else {
+        console.log(`❌ STORE NOT AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} has no response number configured`);
+        console.log(`💡 SUGGESTION: Configure WhatsApp response number in store settings for ${storeConfig.storeName}`);
+        return null;
+      }
     }
     
     console.log('❌ NO STORE FOUND - phoneNumberId not configured:', phoneNumberId);
