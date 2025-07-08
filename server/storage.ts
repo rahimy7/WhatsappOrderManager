@@ -179,6 +179,7 @@ export interface IStorage {
 
   // Virtual Stores Management
   getAllVirtualStores(): Promise<VirtualStore[]>;
+  createStore(storeData: { name: string; description: string; domain: string; isActive: boolean }): Promise<VirtualStore>;
   
   // Auto Responses
   getAllAutoResponses(): Promise<AutoResponse[]>;
@@ -1179,6 +1180,21 @@ export class MemStorage implements IStorage {
         updatedAt: new Date().toISOString()
       }
     ];
+  }
+
+  async createStore(storeData: { name: string; description: string; domain: string; isActive: boolean }): Promise<VirtualStore> {
+    // Mock implementation for MemStorage
+    const newStore: VirtualStore = {
+      id: Date.now(),
+      name: storeData.name,
+      description: storeData.description,
+      domain: storeData.domain,
+      isActive: storeData.isActive,
+      schema: `store_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    return newStore;
   }
 
   // Notification stubs - not used since we're using DatabaseStorage
@@ -3109,6 +3125,28 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error getting all virtual stores:', error);
       return [];
+    }
+  }
+
+  async createStore(storeData: { name: string; description: string; domain: string; isActive: boolean }): Promise<VirtualStore> {
+    try {
+      const timestamp = Date.now();
+      const schema = `store_${timestamp}`;
+      
+      const [newStore] = await db.insert(virtualStores).values({
+        name: storeData.name,
+        description: storeData.description,
+        domain: storeData.domain,
+        isActive: storeData.isActive,
+        databaseUrl: `postgresql://owner:password@localhost:5432/main_db?schema=${schema}`,
+        slug: storeData.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+        settings: JSON.stringify({})
+      }).returning();
+
+      return newStore;
+    } catch (error) {
+      console.error('Error creating store:', error);
+      throw new Error('Failed to create store');
     }
   }
 }

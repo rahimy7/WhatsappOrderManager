@@ -72,22 +72,12 @@ function StoreManagement() {
   // Fetch stores
   const { data: stores = [], isLoading } = useQuery({
     queryKey: ["/api/super-admin/stores"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/super-admin/stores");
-      return await response.json();
-    },
+    staleTime: 30000,
   });
 
   // Create store mutation
   const createStoreMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await apiRequest(
-        "POST",
-        "/api/super-admin/stores",
-        data,
-      );
-      return await response.json();
-    },
+    mutationFn: (data: any) => apiRequest("POST", "/api/super-admin/stores", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/super-admin/stores"] });
       setShowCreateDialog(false);

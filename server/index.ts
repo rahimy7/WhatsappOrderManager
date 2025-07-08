@@ -240,6 +240,10 @@ apiRouter.post('/store-responses/reset-defaults', async (req, res) => {
   }
 });
 
+// Note: Super Admin Stores Management endpoints moved to main app registration below
+
+// Note: Super Admin Stores Creation endpoint moved to main app registration below
+
 // Super Admin WhatsApp Management endpoints
 apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
   try {
@@ -427,6 +431,10 @@ apiRouter.get('/super-admin/stores', async (req, res) => {
 });
 
 // Mount the API router with highest priority BEFORE any async configuration
+app.use('/api', (req, res, next) => {
+  console.log('📍 API Router middleware - Path:', req.path, 'Headers:', !!req.headers.authorization);
+  next();
+});
 app.use('/api', apiRouter);
 
 (async () => {
@@ -466,6 +474,70 @@ app.get('/api/super-admin/capacity', async (req, res) => {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// Super Admin Stores Management endpoints - registered directly on app before middleware
+app.get('/api/super-admin/stores', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: "Authorization header required" });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as any;
+    
+    console.log('🔍 Super Admin Stores - User:', decoded.username, 'Role:', decoded.role, 'Level:', decoded.level);
+    
+    if (!decoded || decoded.level !== 'global' || decoded.role !== 'super_admin') {
+      console.log('❌ Access denied - Level:', decoded?.level, 'Role:', decoded?.role);
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    const stores = await storage.getAllVirtualStores();
+    
+    console.log('✅ Stores fetched successfully:', stores.length);
+    res.json(stores);
+  } catch (error) {
+    console.error('Error fetching stores:', error);
+    res.status(500).json({ error: 'Failed to fetch stores' });
+  }
+});
+
+app.post('/api/super-admin/stores', express.json(), async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: "Authorization header required" });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as any;
+    
+    if (!decoded || decoded.level !== 'global' || decoded.role !== 'super_admin') {
+      return res.status(403).json({ error: "Super admin access required" });
+    }
+
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const storeData = {
+      name: req.body.name,
+      description: req.body.description || "",
+      domain: req.body.domain,
+      isActive: req.body.isActive ?? true
+    };
+    
+    const result = await storage.createStore(storeData);
+    
+    console.log('✅ Store created successfully:', result.name);
+    res.json(result);
+  } catch (error) {
+    console.error('Error creating store:', error);
+    res.status(500).json({ error: 'Failed to create store' });
   }
 });
 
@@ -820,7 +892,7 @@ app.use((req, res, next) => {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
         req.user = decoded;
-        console.log('🔑 JWT Success - User authenticated:', (decoded as any).username, 'storeId:', (decoded as any).storeId);
+        console.log('🔑 JWT Success - User authenticated:', (decoded as any).username, 'role:', (decoded as any).role, 'level:', (decoded as any).level);
       } catch (error) {
         console.log('❌ JWT Error:', (error as Error).message);
         console.log('Token preview:', token.substring(0, 20) + '...');
@@ -843,7 +915,8 @@ app.use((req, res, next) => {
     if (req.path.startsWith('/super-admin') || 
         req.path.startsWith('/auth') || 
         req.path === '/whatsapp/test-connection') {
-      console.log('Excluyendo ruta:', req.path);
+      console.log('🟢 BYPASSING TENANT MIDDLEWARE for:', req.path);
+      console.log('🔍 User in bypassed middleware:', req.user);
       return next();
     }
     // Aplicar middleware para todas las demás rutas
