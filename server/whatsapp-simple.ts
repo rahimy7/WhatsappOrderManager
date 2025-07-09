@@ -3,275 +3,236 @@ import { storage } from './storage.js';
 import { createTenantStorage } from './tenant-storage.js';
 
 // Smart store lookup with response authorization verification
-async function findStoreByPhoneNumberId(phoneNumberId: string) {
-  try {
-    console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
-    
-    const { masterDb } = await import('./multi-tenant-db.js');
-    const { eq } = await import('drizzle-orm');
-    const schema = await import('../shared/schema.js');
-    
-    // Direct mapping to store configurations for proven functionality
-    const storeConfigurations = {
-      // MASQUESALUD Store - Production configuration
-      '766302823222313': {
-        storeId: 5,
-        storeName: 'MASQUESALUD',
-        schema: 'store_1751554718287'
-      },
-      // RVR SERVICE Store - Production configuration  
-      '667993026397854': {
-        storeId: 4,
-        storeName: 'RVR SERVICE',
-        schema: 'store_1751248005649'
-      }
-    };
-    
-    const storeConfig = storeConfigurations[phoneNumberId];
-    if (!storeConfig) {
-      console.log('❌ NO STORE CONFIGURED - phoneNumberId not in configuration map:', phoneNumberId);
-      return null;
-    }
-    
-    console.log(`🎯 PHONE NUMBER MATCH - Store: ${storeConfig.storeName} (ID: ${storeConfig.storeId})`);
-    
-    // CRITICAL: Verify this store is authorized to respond to messages
-    // Check if store has configured a WhatsApp number for receiving messages
-    const storeSettings = await masterDb.select({
-      storeWhatsAppNumber: schema.storeSettings.storeWhatsAppNumber
-    })
-    .from(schema.storeSettings)
-    .where(eq(schema.storeSettings.storeId, storeConfig.storeId))
-    .limit(1);
-    
-    if (storeSettings.length > 0 && storeSettings[0].storeWhatsAppNumber) {
-      console.log(`✅ STORE AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} responds to: ${storeSettings[0].storeWhatsAppNumber}`);
-      return {
-        storeId: storeConfig.storeId,
-        storeName: storeConfig.storeName,
-        schema: storeConfig.schema,
-        phoneNumberId: phoneNumberId,
-        responseNumber: storeSettings[0].storeWhatsAppNumber,
-        requiresTenantConfig: true
-      };
-    } else {
-      console.log(`❌ STORE NOT AUTHORIZED TO RESPOND - Store: ${storeConfig.storeName} has no response number configured`);
-      console.log(`💡 SUGGESTION: Configure WhatsApp response number in store settings for ${storeConfig.storeName}`);
-      return null;
-    }
-    
-  } catch (error) {
-    console.error('🚨 ERROR FINDING STORE:', error);
-    return null;
-  }
-}
 
-// Enhanced multi-tenant WhatsApp message processor
-export async function processWhatsAppMessageSimple(value: any): Promise<void> {
+
+export async function processWhatsAppMessage(webhookData: any) {
   try {
-    console.log('🎯 MULTI-TENANT PROCESSOR - Processing webhook');
-    console.log('📦 WEBHOOK PAYLOAD:', JSON.stringify(value, null, 2));
+    console.log('📨 WEBHOOK DATA RECEIVED:', JSON.stringify(webhookData, null, 2));
     
-    // Step 1: Extract phoneNumberId from webhook metadata (correct structure)
-    const phoneNumberId = value.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
-    console.log('📱 EXTRACTED PHONE NUMBER ID:', phoneNumberId);
-    
-    if (!phoneNumberId) {
-      console.log('❌ NO PHONE NUMBER ID - Skipping processing');
-      console.log('🔍 DEBUGGING - Available data structure:');
-      console.log('Entry length:', value.entry?.length);
-      console.log('Changes length:', value.entry?.[0]?.changes?.length);
-      console.log('Value exists:', !!value.entry?.[0]?.changes?.[0]?.value);
-      console.log('Metadata exists:', !!value.entry?.[0]?.changes?.[0]?.value?.metadata);
-      console.log('Full metadata:', JSON.stringify(value.entry?.[0]?.changes?.[0]?.value?.metadata));
+    const entry = webhookData.entry?.[0];
+    if (!entry) {
+      console.log('❌ NO ENTRY FOUND in webhook data');
       return;
     }
-    
-    // Step 2: Find which store owns this phoneNumberId
+
+    const changes = entry.changes?.[0];
+    if (!changes || changes.field !== 'messages') {
+      console.log('❌ NO MESSAGE CHANGES FOUND');
+      return;
+    }
+
+    const value = changes.value;
+    if (!value.messages || !value.metadata) {
+      console.log('❌ NO MESSAGES OR METADATA FOUND');
+      return;
+    }
+
+    const phoneNumberId = value.metadata.phone_number_id;
+    const message = value.messages[0];
+    const customerPhone = message.from;
+    const messageText = message.text?.body || '';
+
+    console.log(`📱 MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
+
+    // 🔍 BUSCAR TIENDA DINÁMICAMENTE (SIN HARDCODING)
     const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
     
     if (!storeMapping) {
-      console.log('❌ STORE NOT FOUND - No store configured for phoneNumberId:', phoneNumberId);
+      console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
       await storage.addWhatsAppLog({
-        type: 'warning',
-        phoneNumber: 'system',
-        messageContent: `No se encontró tienda para el número ${phoneNumberId}`,
-        status: 'failed'
+        type: 'error',
+        phoneNumber: customerPhone,
+        messageContent: `Mensaje recibido para phoneNumberId no configurado: ${phoneNumberId}`,
+        status: 'failed',
+        rawData: JSON.stringify({ phoneNumberId, customerPhone, messageText })
       });
       return;
     }
+
+ 
+    console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
+
+    // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
+    const tenantStorage = await createTenantStorage(storeMapping.storeId);
+
+    // 👤 PROCESAR CLIENTE
+    let customer = await tenantStorage.getCustomerByPhone(customerPhone);
     
-    console.log('✅ STORE FOUND - Store ID:', storeMapping.storeId, 'Schema:', storeMapping.schema);
-    
-    // Step 3: Extract messages from the correct webhook structure
-    const messages = value.entry?.[0]?.changes?.[0]?.value?.messages;
-    
-    if (messages && messages.length > 0) {
-      for (const message of messages) {
-        const from = message.from;
-        const messageId = message.id;
-        const messageType = message.type;
-        
-        let messageText = '';
-        if (messageType === 'text') {
-          messageText = message.text.body;
-        } else if (messageType === 'location') {
-          const location = message.location;
-          messageText = location.name || location.address || 
-            `Ubicación GPS: ${location.latitude}, ${location.longitude}`;
-        } else if (messageType === 'interactive') {
-          if (message.interactive.type === 'button_reply') {
-            messageText = message.interactive.button_reply.id;
-          }
-        } else {
-          messageText = `[${messageType}] Mensaje no soportado`;
-        }
-
-        console.log(`Message from ${from}: ${messageText}`);
-
-        // Step 3: Create tenant storage for the identified store  
-        const { getTenantDb } = await import('./multi-tenant-db.js');
-        const tenantDb = await getTenantDb(storeMapping.storeId);
-        console.log('🔍 TENANT DB OBJECT:', typeof tenantDb, tenantDb ? 'exists' : 'null');
-        const tenantStorage = createTenantStorage(tenantDb);
-        console.log('🏪 TENANT STORAGE CREATED - For store:', storeMapping.storeId);
-
-        // Log the incoming message in global logs
-        await storage.addWhatsAppLog({
-          type: 'info',
-          phoneNumber: from,
-          messageContent: `Mensaje recibido en tienda ${storeMapping.storeName}: ${messageText}`,
-          messageId: messageId,
-          status: 'received',
-          rawData: JSON.stringify(message)
-        });
-
-        // Step 4: Get or create customer in tenant schema
-        let customer = await tenantStorage.getCustomerByPhone(from);
-        
-        if (!customer) {
-          console.log('➕ CREATING NEW CUSTOMER - In tenant schema');
-          customer = await tenantStorage.createCustomer({
-            name: `Cliente ${from.slice(-4)}`,
-            phone: from,
-            whatsappId: from,
-            address: null,
-            latitude: null,
-            longitude: null,
-            lastContact: new Date(),
-            registrationDate: new Date(),
-            totalOrders: 0,
-            totalSpent: 0,
-            isVip: false,
-            notes: 'Cliente creado automáticamente desde WhatsApp',
-            mapLink: null
-          });
-          
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Nuevo cliente creado en tienda ${storeMapping.storeId}`,
-            status: 'customer_created'
-          });
-        } else {
-          console.log('✅ EXISTING CUSTOMER FOUND - ID:', customer.id);
-        }
-
-        // Step 5: Get or create conversation in tenant schema
-        let conversation = await tenantStorage.getConversationByCustomerPhone(from);
-        
-        if (!conversation) {
-          conversation = await tenantStorage.createConversation({
-            customerId: customer.id,
-            orderId: null,
-            status: 'active',
-            lastMessageAt: new Date(),
-            conversationType: 'initial'
-          });
-          
-          console.log('📞 NEW CONVERSATION CREATED - ID:', conversation.id);
-        } else {
-          console.log('📞 EXISTING CONVERSATION - ID:', conversation.id);
-        }
-
-        // Step 6: Create message in tenant schema
-        await tenantStorage.createMessage({
-          conversationId: conversation.id,
-          senderId: customer.id,
-          senderType: 'customer',
-          content: messageText,
-          messageType: messageType as any,
-          whatsappMessageId: messageId,
-          timestamp: new Date(),
-          isRead: false
-        });
-
-        console.log('💌 MESSAGE STORED - In tenant schema');
-
-        // Step 7A: PRIORITY - Check for active registration flows
-        // Temporarily disabled due to SQL syntax errors
-        console.log('⚠️ Registration flow checks temporarily disabled - Processing as normal auto-response');
-
-        // Step 7B: PRIORITY - Check if message is a structured order from web catalog
-        const isOrder = await isOrderMessage(messageText);
-        
-        if (isOrder) {
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: 'Mensaje de pedido detectado desde catálogo web - PRIMERA CONVERSACIÓN',
-            status: 'processing',
-            rawData: JSON.stringify({ 
-              customerId: customer.id,
-              messageLength: messageText.length,
-              storeId: storeMapping.storeId
-            })
-          });
-
-          await processWebCatalogOrderSimple(customer, from, messageText, storeMapping.storeId, storeMapping.phoneNumberId, tenantStorage);
-          return; // Stop processing here - order handled
-        }
-
-        // Step 8: Process message using configured auto-responses - STORE-SPECIFIC VALIDATION
-        try {
-          await processConfiguredAutoResponse(messageText, from, customer, tenantStorage, storeMapping);
-        } catch (error) {
-          console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
-          
-          // Fallback message using global configuration
-          const config = storeMapping.whatsappConfig;
-          
-          if (config) {
-            const fallbackPayload = {
-              messaging_product: 'whatsapp',
-              to: from,
-              type: 'text',
-              text: {
-                body: `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`
-              }
-            };
-
-            const response = await fetch(`https://graph.facebook.com/v21.0/${storeMapping.phoneNumberId}/messages`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${config.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(fallbackPayload),
-            });
-            
-            if (!response.ok) {
-              console.error('❌ FALLBACK MESSAGE FAILED:', await response.text());
-            }
-          }
-        }
-      }
+    if (!customer) {
+      console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
+      customer = await tenantStorage.createCustomer({
+        name: `Cliente ${customerPhone.slice(-4)}`,
+        phone: customerPhone,
+        email: '',
+        address: ''
+      });
     }
+
+    // 📝 REGISTRAR LOG EN BASE DE DATOS
+    await storage.addWhatsAppLog({
+      type: 'incoming',
+      phoneNumber: customerPhone,
+      messageContent: messageText,
+      messageId: message.id,
+      status: 'received',
+      rawData: JSON.stringify(webhookData)
+    });
+
+    // 🔄 PROCESAR AUTO-RESPUESTA
+    await processAutoResponse(messageText, customerPhone, storeMapping.storeId, tenantStorage);
+
+    console.log(`✅ MESSAGE PROCESSED SUCCESSFULLY - Store: ${storeMapping.storeName}`);
+
   } catch (error) {
-    console.error('🚨 CRITICAL ERROR IN WHATSAPP PROCESSOR:', error);
+    console.error('❌ ERROR PROCESSING WHATSAPP MESSAGE:', error);
   }
 }
 
+async function processAutoResponse(messageText: string, phoneNumber: string, storeId: number, tenantStorage: any) {
+  try {
+    console.log(`🤖 PROCESSING AUTO-RESPONSE - Store ID: ${storeId}, Message: "${messageText}"`);
+
+    // 1. Obtener respuestas automáticas desde la base de datos de la tienda
+    const autoResponses = await tenantStorage.getAutoResponses();
+    
+    if (!autoResponses || autoResponses.length === 0) {
+      console.log(`❌ NO AUTO-RESPONSES CONFIGURED - Store ${storeId}: No responses found in tenant database`);
+      return;
+    }
+
+    console.log(`📋 AUTO-RESPONSES FOUND - Store ${storeId}: ${autoResponses.length} responses available`);
+
+    // 2. Buscar respuesta apropiada
+    const messageTextLower = messageText.toLowerCase().trim();
+    let autoResponse = null;
+
+    // Buscar respuesta específica por trigger
+    autoResponse = autoResponses.find((resp: any) => {
+      if (!resp.isActive) return false;
+      
+      const triggers = resp.triggers ? resp.triggers.split(',').map((t: string) => t.trim().toLowerCase()) : [resp.trigger?.toLowerCase()];
+      return triggers.some((trigger: string) => messageTextLower.includes(trigger));
+    });
+
+    // Si no hay coincidencia específica, buscar por patrones de saludo
+    if (!autoResponse) {
+      const greetingPatterns = ['hola', 'hello', 'hi', 'buenos dias', 'buenas tardes', 'menu', 'menú'];
+      const isGreeting = greetingPatterns.some(pattern => messageTextLower.includes(pattern));
+      
+      if (isGreeting) {
+        autoResponse = autoResponses.find((resp: any) => 
+          resp.isActive && resp.trigger === 'welcome'
+        );
+        console.log(`👋 GREETING DETECTED - Using welcome auto-response`);
+      }
+    }
+    
+    // Si aún no hay coincidencia, usar welcome como predeterminado
+    if (!autoResponse) {
+      autoResponse = autoResponses.find((resp: any) => 
+        resp.isActive && resp.trigger === 'welcome'
+      );
+      console.log(`🔄 NO SPECIFIC MATCH - Using default welcome auto-response`);
+    }
+
+    // 3. Enviar respuesta si se encontró
+    if (!autoResponse) {
+      console.log(`❌ NO AUTO-RESPONSE CONFIGURED - Store ${storeId}: No matching responses in tenant database`);
+      return;
+    }
+
+    console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeId}: "${autoResponse.name}" (ID: ${autoResponse.id})`);
+    console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
+
+    // 4. Obtener configuración de WhatsApp desde la base de datos global
+    const globalWhatsAppConfig = await storage.getWhatsAppConfig(storeId);
+    
+    if (!globalWhatsAppConfig) {
+      console.log(`❌ NO WHATSAPP CONFIG FOUND - Store ${storeId}: Please configure WhatsApp API in global settings`);
+      throw new Error('WhatsApp configuration not found in global database. Please configure WhatsApp API in store settings.');
+    }
+
+    // 5. Enviar mensaje usando la configuración de la base de datos
+    const success = await sendWhatsAppMessage(
+      phoneNumber, 
+      autoResponse.messageText, 
+      globalWhatsAppConfig
+    );
+
+    if (success) {
+      console.log(`✅ AUTO-RESPONSE SENT - Store ${storeId}: Message sent successfully`);
+      
+      // Registrar envío exitoso
+      await storage.addWhatsAppLog({
+        type: 'outgoing',
+        phoneNumber: phoneNumber,
+        messageContent: autoResponse.messageText,
+        status: 'sent',
+        rawData: JSON.stringify({ 
+          storeId, 
+          autoResponseId: autoResponse.id,
+          phoneNumberId: globalWhatsAppConfig.phoneNumberId 
+        })
+      });
+    } else {
+      console.log(`❌ FAILED TO SEND AUTO-RESPONSE - Store ${storeId}: WhatsApp API error`);
+      
+      // Registrar error de envío
+      await storage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: phoneNumber,
+        messageContent: autoResponse.messageText,
+        status: 'failed',
+        errorMessage: 'Failed to send via WhatsApp API',
+        rawData: JSON.stringify({ 
+          storeId, 
+          autoResponseId: autoResponse.id,
+          phoneNumberId: globalWhatsAppConfig.phoneNumberId 
+        })
+      });
+    }
+
+  } catch (error) {
+    console.error(`❌ ERROR IN AUTO-RESPONSE - Store ${storeId}:`, error);
+  }
+}
+
+async function sendWhatsAppMessage(phoneNumber: string, message: string, config: any): Promise<boolean> {
+  try {
+    console.log(`📤 SENDING WHATSAPP MESSAGE - To: ${phoneNumber}, Using phoneNumberId: ${config.phoneNumberId}`);
+
+    const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
+    
+    const data = {
+      messaging_product: "whatsapp",
+      to: phoneNumber,
+      text: { body: message }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ WHATSAPP API ERROR:', errorText);
+      return false;
+    }
+
+    const result = await response.json();
+    console.log('✅ MESSAGE SENT SUCCESSFULLY:', result);
+    return true;
+    
+  } catch (error) {
+    console.error('❌ ERROR SENDING WHATSAPP MESSAGE:', error);
+    return false;
+  }
+}
 // New function to process configured auto-responses
 async function processConfiguredAutoResponse(messageText: string, from: string, customer: any, tenantStorage: any, storeMapping: any) {
   console.log(`🎯 PROCESSING CONFIGURED AUTO-RESPONSE - Store ${storeMapping.storeId}`);
@@ -769,23 +730,318 @@ ${collectedData.notes ? `📝 Notas: ${collectedData.notes}` : ''}
   }
 }
 
-// Function to detect if a message is a structured order from web catalog
+export async function processWhatsAppMessageSimple(value: any): Promise<void> {
+  try {
+    console.log('🎯 MULTI-TENANT PROCESSOR - Processing webhook');
+    console.log('📦 WEBHOOK PAYLOAD:', JSON.stringify(value, null, 2));
+    
+    // Step 1: Extract phoneNumberId from webhook metadata (correct structure)
+    const phoneNumberId = value.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+    console.log('📱 EXTRACTED PHONE NUMBER ID:', phoneNumberId);
+    
+    if (!phoneNumberId) {
+      console.log('❌ NO PHONE NUMBER ID - Skipping processing');
+      console.log('🔍 DEBUGGING - Available data structure:');
+      console.log('Entry length:', value.entry?.length);
+      console.log('Changes length:', value.entry?.[0]?.changes?.length);
+      console.log('Value exists:', !!value.entry?.[0]?.changes?.[0]?.value);
+      console.log('Metadata exists:', !!value.entry?.[0]?.changes?.[0]?.value?.metadata);
+      console.log('Full metadata:', JSON.stringify(value.entry?.[0]?.changes?.[0]?.value?.metadata));
+      return;
+    }
+    
+    // Step 2: Find which store owns this phoneNumberId - USANDO FUNCIÓN DINÁMICA
+    const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
+    
+    if (!storeMapping) {
+      console.log('❌ STORE NOT FOUND - No store configured for phoneNumberId:', phoneNumberId);
+      await storage.addWhatsAppLog({
+        type: 'warning',
+        phoneNumber: 'system',
+        messageContent: `No se encontró tienda para el número ${phoneNumberId}`,
+        status: 'failed'
+      });
+      return;
+    }
+    
+    console.log('✅ STORE FOUND - Store ID:', storeMapping.storeId, 'Store Name:', storeMapping.storeName);
+    
+    // Step 3: Extract messages from the correct webhook structure
+    const messages = value.entry?.[0]?.changes?.[0]?.value?.messages;
+    
+    if (messages && messages.length > 0) {
+      for (const message of messages) {
+        const from = message.from;
+        const messageId = message.id;
+        const messageType = message.type;
+        
+        let messageText = '';
+        if (messageType === 'text') {
+          messageText = message.text.body;
+        } else if (messageType === 'location') {
+          const location = message.location;
+          messageText = location.name || location.address || 
+            `Ubicación GPS: ${location.latitude}, ${location.longitude}`;
+        } else if (messageType === 'interactive') {
+          if (message.interactive.type === 'button_reply') {
+            messageText = message.interactive.button_reply.id;
+          }
+        } else {
+          messageText = `[${messageType}] Mensaje no soportado`;
+        }
+
+        console.log(`Message from ${from}: ${messageText}`);
+
+        // Step 3: Create tenant storage for the identified store  
+        const { getTenantDb } = await import('./multi-tenant-db.js');
+        const tenantDb = await getTenantDb(storeMapping.storeId);
+        console.log('🔍 TENANT DB OBJECT:', typeof tenantDb, tenantDb ? 'exists' : 'null');
+        const tenantStorage = createTenantStorage(tenantDb);
+        console.log('🏪 TENANT STORAGE CREATED - For store:', storeMapping.storeId);
+
+        // Log the incoming message in global logs
+        await storage.addWhatsAppLog({
+          type: 'info',
+          phoneNumber: from,
+          messageContent: `Mensaje recibido en tienda ${storeMapping.storeName}: ${messageText}`,
+          messageId: messageId,
+          status: 'received',
+          rawData: JSON.stringify(message)
+        });
+
+        // Step 4: Get or create customer in tenant schema
+        let customer = await tenantStorage.getCustomerByPhone(from);
+        
+        if (!customer) {
+          console.log('➕ CREATING NEW CUSTOMER - In tenant schema');
+          customer = await tenantStorage.createCustomer({
+            name: `Cliente ${from.slice(-4)}`,
+            phone: from,
+            whatsappId: from,
+            address: null,
+            latitude: null,
+            longitude: null,
+            lastContact: new Date(),
+            registrationDate: new Date(),
+            totalOrders: 0,
+            totalSpent: 0,
+            isVip: false,
+            notes: 'Cliente creado automáticamente desde WhatsApp',
+            mapLink: null
+          });
+          
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: `Nuevo cliente creado en tienda ${storeMapping.storeId}`,
+            status: 'customer_created'
+          });
+        } else {
+          console.log('✅ EXISTING CUSTOMER FOUND - ID:', customer.id);
+        }
+
+        // Step 5: Get or create conversation in tenant schema
+        let conversation = await tenantStorage.getConversationByCustomerPhone(from);
+        
+        if (!conversation) {
+          conversation = await tenantStorage.createConversation({
+            customerId: customer.id,
+            orderId: null,
+            status: 'active',
+            lastMessageAt: new Date(),
+            conversationType: 'initial'
+          });
+          
+          console.log('📞 NEW CONVERSATION CREATED - ID:', conversation.id);
+        } else {
+          console.log('📞 EXISTING CONVERSATION - ID:', conversation.id);
+        }
+
+        // Step 6: Create message in tenant schema
+        await tenantStorage.createMessage({
+          conversationId: conversation.id,
+          senderId: customer.id,
+          senderType: 'customer',
+          content: messageText,
+          messageType: messageType as any,
+          whatsappMessageId: messageId,
+          timestamp: new Date(),
+          isRead: false
+        });
+
+        console.log('💌 MESSAGE STORED - In tenant schema');
+
+        // Step 7A: PRIORITY - Check for active registration flows
+        console.log('⚠️ Registration flow checks temporarily disabled - Processing as normal auto-response');
+
+        // Step 7B: PRIORITY - Check if message is a structured order from web catalog
+        const isOrder = await isOrderMessage(messageText);
+        
+        if (isOrder) {
+          await storage.addWhatsAppLog({
+            type: 'info',
+            phoneNumber: from,
+            messageContent: 'Mensaje de pedido detectado desde catálogo web - PRIMERA CONVERSACIÓN',
+            status: 'processing',
+            rawData: JSON.stringify({ 
+              customerId: customer.id,
+              messageLength: messageText.length,
+              storeId: storeMapping.storeId
+            })
+          });
+
+          // ✅ CORREGIDO: Pasar phoneNumberId en lugar de storeMapping.phoneNumberId
+          await processWebCatalogOrderSimple(customer, from, messageText, storeMapping.storeId, phoneNumberId, tenantStorage);
+          return; // Stop processing here - order handled
+        }
+
+        // Step 8: Process message using configured auto-responses - STORE-SPECIFIC VALIDATION
+        try {
+          await processConfiguredAutoResponse(messageText, from, customer, tenantStorage, storeMapping);
+        } catch (error) {
+          console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
+          
+          // ✅ CORREGIDO: Obtener configuración desde base de datos en lugar de storeMapping.whatsappConfig
+          console.log('🔧 GETTING WHATSAPP CONFIG FROM DATABASE - Store ID:', storeMapping.storeId);
+          
+          try {
+            const whatsappConfig = await storage.getWhatsAppConfig(storeMapping.storeId);
+            
+            if (!whatsappConfig) {
+              console.error('❌ NO WHATSAPP CONFIG FOUND - Store ID:', storeMapping.storeId);
+              await storage.addWhatsAppLog({
+                type: 'error',
+                phoneNumber: from,
+                messageContent: `No se encontró configuración de WhatsApp para la tienda ${storeMapping.storeId}`,
+                status: 'failed',
+                errorMessage: 'Missing WhatsApp configuration'
+              });
+              return;
+            }
+
+            console.log('✅ WHATSAPP CONFIG FOUND - Sending fallback message');
+            
+            const fallbackPayload = {
+              messaging_product: 'whatsapp',
+              to: from,
+              type: 'text',
+              text: {
+                body: `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`
+              }
+            };
+
+            const response = await fetch(`https://graph.facebook.com/v21.0/${whatsappConfig.phoneNumberId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${whatsappConfig.accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(fallbackPayload),
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error('❌ FALLBACK MESSAGE FAILED:', errorText);
+              
+              await storage.addWhatsAppLog({
+                type: 'error',
+                phoneNumber: from,
+                messageContent: 'Error enviando mensaje de fallback',
+                status: 'failed',
+                errorMessage: errorText
+              });
+            } else {
+              console.log('✅ FALLBACK MESSAGE SENT SUCCESSFULLY');
+              
+              await storage.addWhatsAppLog({
+                type: 'outgoing',
+                phoneNumber: from,
+                messageContent: fallbackPayload.text.body,
+                status: 'sent',
+                rawData: JSON.stringify(fallbackPayload)
+              });
+            }
+            
+          } catch (configError) {
+            console.error('❌ ERROR GETTING WHATSAPP CONFIG:', configError);
+            
+            await storage.addWhatsAppLog({
+              type: 'error',
+              phoneNumber: from,
+              messageContent: 'Error crítico obteniendo configuración de WhatsApp',
+              status: 'failed',
+              errorMessage: configError instanceof Error ? configError.message : 'Unknown config error'
+            });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('🚨 CRITICAL ERROR IN WHATSAPP PROCESSOR:', error);
+    
+    // Log error crítico
+    await storage.addWhatsAppLog({
+      type: 'error',
+      phoneNumber: 'system',
+      messageContent: 'Error crítico en el procesador de WhatsApp',
+      status: 'failed',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      rawData: JSON.stringify({ 
+        error: error instanceof Error ? error.stack : error,
+        webhookPayload: value 
+      })
+    });
+  }
+}
+
+async function findStoreByPhoneNumberId(phoneNumberId: string) {
+  try {
+    console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
+    
+    // Buscar configuración directamente en la base de datos
+    const config = await storage.getWhatsAppConfigByPhoneNumberId(phoneNumberId);
+    
+    if (!config) {
+      console.log('❌ NO STORE CONFIGURED - phoneNumberId not found in database:', phoneNumberId);
+      return null;
+    }
+    
+    console.log(`🎯 PHONE NUMBER MATCH - Store ID: ${config.storeId}`);
+    
+    // Obtener información de la tienda
+    const allStores = await storage.getAllVirtualStores();
+    const storeInfo = allStores.find(store => store.id === config.storeId);
+    
+    if (!storeInfo) {
+      console.log('❌ STORE NOT FOUND - Store ID not found:', config.storeId);
+      return null;
+    }
+    
+    console.log(`✅ STORE FOUND - Store: ${storeInfo.name} (ID: ${config.storeId})`);
+    
+    // Verificar que la tienda esté activa
+    if (!storeInfo.isActive) {
+      console.log(`⚠️ STORE INACTIVE - Store: ${storeInfo.name} is not active`);
+      return null;
+    }
+    
+    return {
+      storeId: config.storeId,
+      storeName: storeInfo.name,
+      phoneNumberId: phoneNumberId,
+      isActive: storeInfo.isActive
+    };
+    
+  } catch (error) {
+    console.error('Error finding store by phoneNumberId:', error);
+    return null;
+  }
+}
+
+
+// ✅ FUNCIÓN AUXILIAR PARA DETECTAR ÓRDENES
 async function isOrderMessage(text: string): Promise<boolean> {
-  const orderIndicators = [
-    '🛍️ *NUEVO PEDIDO',
-    'NUEVO PEDIDO',
-    'Cantidad:',
-    'Precio unitario:',
-    'Subtotal:',
-    '*TOTAL:',
-    'confirma tu pedido'
-  ];
-  
-  const indicatorCount = orderIndicators.reduce((count, indicator) => {
-    return count + (text.includes(indicator) ? 1 : 0);
-  }, 0);
-  
-  return indicatorCount >= 3; // At least 3 indicators to be considered an order
+  return text.startsWith('🛍️ *NUEVO PEDIDO*');
 }
 
 // Function to parse order items from catalog message

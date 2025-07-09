@@ -42,25 +42,26 @@ interface StoreOverview {
 export default function GlobalDashboard() {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d');
 
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
+  // ✅ CORREGIR - Agregar tipos explícitos a las queries
+  const { data: metrics, isLoading: metricsLoading } = useQuery<GlobalMetrics>({
     queryKey: ['/api/super-admin/metrics', timeRange],
   });
 
-  const { data: stores, isLoading: storesLoading } = useQuery({
+  const { data: stores, isLoading: storesLoading } = useQuery<StoreOverview[]>({
     queryKey: ['/api/super-admin/stores'],
   });
 
-  const globalMetrics: GlobalMetrics = metrics || {
-    totalStores: 0,
-    activeStores: 0,
-    inactiveStores: 0,
-    totalOrders: 0,
-    monthlyRevenue: 0,
-    averageRetention: 0,
-    pendingSupport: 0
+ const globalMetrics: GlobalMetrics = {
+    totalStores: metrics?.totalStores ?? 0,
+    activeStores: metrics?.activeStores ?? 0,
+    inactiveStores: metrics?.inactiveStores ?? 0,
+    totalOrders: metrics?.totalOrders ?? 0,
+    monthlyRevenue: metrics?.monthlyRevenue ?? 0,
+    averageRetention: metrics?.averageRetention ?? 0,
+    pendingSupport: metrics?.pendingSupport ?? 0
   };
 
-  const storesList: StoreOverview[] = stores || [];
+const storesList: StoreOverview[] = stores ?? [];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -130,9 +131,9 @@ export default function GlobalDashboard() {
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{globalMetrics.totalStores || 0}</div>
+            <div className="text-2xl font-bold">{globalMetrics.totalStores.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {globalMetrics.activeStores || 0} activas • {globalMetrics.inactiveStores || 0} inactivas
+              {globalMetrics.activeStores} activas • {globalMetrics.inactiveStores} inactivas
             </p>
           </CardContent>
         </Card>
@@ -143,7 +144,7 @@ export default function GlobalDashboard() {
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{(globalMetrics.totalOrders || 0).toLocaleString()}</div>
+            <div className="text-2xl font-bold">{globalMetrics.totalOrders.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               En los últimos {timeRange === '7d' ? '7 días' : timeRange === '30d' ? '30 días' : '90 días'}
             </p>
@@ -156,7 +157,7 @@ export default function GlobalDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${(globalMetrics.monthlyRevenue || 0).toLocaleString()}</div>
+            <div className="text-2xl font-bold">${globalMetrics.monthlyRevenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
               Revenue total del ecosistema
             </p>
@@ -169,14 +170,14 @@ export default function GlobalDashboard() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{(globalMetrics.averageRetention || 0)}%</div>
-            <Progress value={globalMetrics.averageRetention || 0} className="mt-2" />
+            <div className="text-2xl font-bold">{globalMetrics.averageRetention}%</div>
+            <Progress value={globalMetrics.averageRetention} className="mt-2" />
           </CardContent>
         </Card>
       </div>
 
       {/* Alertas y Notificaciones */}
-      {(globalMetrics.pendingSupport || 0) > 0 && (
+      {globalMetrics.pendingSupport > 0 && (
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-orange-800">
@@ -186,131 +187,62 @@ export default function GlobalDashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-orange-700">
-              Tienes {globalMetrics.pendingSupport || 0} tickets de soporte pendientes que requieren atención.
+              Tienes {globalMetrics.pendingSupport} tickets de soporte pendientes que requieren atención.
             </p>
-            <Button className="mt-2" variant="outline">
-              Ver Tickets de Soporte
-            </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Tabs de Contenido */}
-      <Tabs defaultValue="stores" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="stores">Tiendas Registradas</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics Globales</TabsTrigger>
-          <TabsTrigger value="subscriptions">Suscripciones</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="stores" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Listado de Tiendas</CardTitle>
-              <CardDescription>
-                Todas las tiendas registradas en la plataforma
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {storesList.map((store) => (
-                  <div key={store.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-3 h-3 rounded-full ${getStatusColor(store.status)}`} />
-                      <div>
-                        <h3 className="font-semibold">{store.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {store.monthlyOrders} pedidos • ${store.monthlyRevenue.toLocaleString()} ingresos
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      {getSubscriptionBadge(store.subscriptionStatus)}
-                      {store.supportTickets > 0 && (
-                        <Badge variant="outline" className="text-orange-600">
-                          {store.supportTickets} tickets
-                        </Badge>
-                      )}
-                      <Button variant="outline" size="sm">
-                        Gestionar
-                      </Button>
-                    </div>
+      {/* Lista de Tiendas */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumen de Tiendas</CardTitle>
+          <CardDescription>
+            Vista general del estado de todas las tiendas en el sistema
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {storesList.map((store) => (
+              <div key={store.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-3 h-3 rounded-full ${getStatusColor(store.status)}`} />
+                  <div>
+                    <h3 className="font-medium">{store.name}</h3>
+                    <p className="text-sm text-muted-foreground">ID: {store.id}</p>
                   </div>
-                ))}
+                </div>
+                <div className="flex items-center space-x-4">
+                  {getSubscriptionBadge(store.subscriptionStatus)}
+                  <div className="text-right">
+                    <p className="text-sm font-medium">${store.monthlyRevenue?.toLocaleString() ?? '0'}</p>
+                    <p className="text-xs text-muted-foreground">{store.monthlyOrders ?? 0} pedidos</p>
+                  </div>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Crecimiento de Tiendas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  Gráfico de crecimiento de tiendas a implementar
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Revenue por Región</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  Distribución geográfica de ingresos
-                </div>
-              </CardContent>
-            </Card>
+            ))}
           </div>
-        </TabsContent>
-
-        <TabsContent value="subscriptions" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Estado de Suscripciones</CardTitle>
-              <CardDescription>
-                Resumen del estado de todas las suscripciones
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 border rounded-lg">
-                  <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold">
-                    {storesList.filter(s => s.subscriptionStatus === 'active').length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Activas</div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <Clock className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold">
-                    {storesList.filter(s => s.subscriptionStatus === 'trial').length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">En Prueba</div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold">
-                    {storesList.filter(s => s.subscriptionStatus === 'expired').length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Vencidas</div>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold">
-                    {storesList.filter(s => s.subscriptionStatus === 'cancelled').length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Canceladas</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'active': return 'bg-green-500';
+    case 'inactive': return 'bg-gray-500';
+    case 'suspended': return 'bg-red-500';
+    default: return 'bg-gray-500';
+  }
+};
+
+const getSubscriptionBadge = (status: string) => {
+  switch (status) {
+    case 'active': return <Badge className="bg-green-100 text-green-800">Activa</Badge>;
+    case 'trial': return <Badge className="bg-blue-100 text-blue-800">Prueba</Badge>;
+    case 'expired': return <Badge className="bg-red-100 text-red-800">Vencida</Badge>;
+    case 'cancelled': return <Badge className="bg-gray-100 text-gray-800">Cancelada</Badge>;
+    default: return <Badge>Desconocido</Badge>;
+  }
+};

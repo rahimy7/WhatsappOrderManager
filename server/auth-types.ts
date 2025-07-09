@@ -11,6 +11,7 @@ export interface AuthUser {
   storeId?: number;
   level: 'global' | 'store' | 'tenant';
   permissions?: string[];
+  userId?: number;
 }
 
 export interface AuthenticatedRequest extends Request {
