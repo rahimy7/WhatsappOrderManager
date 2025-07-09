@@ -17,3 +17,13 @@ dist/
 .replit.md
 replit.txt
 vite.config.ts.timestamp-*
+
+# Yarn específicos
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# npm (ya no lo usamos)
+package-lock.json

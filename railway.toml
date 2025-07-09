@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npm run start"
+startCommand = "yarn start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
@@ -10,3 +10,13 @@ restartPolicyType = "on_failure"
 [variables]
 NODE_ENV = "production"
 PORT = "${{ RAILWAY_PORT || 3000 }}"
+
+# Configuración específica para Yarn
+[build.nixpacksConfigOverride]
+providers = ["node"]
+
+[build.nixpacksConfigOverride.phases.build]
+cmds = ["yarn install --frozen-lockfile", "yarn build"]
+
+[build.nixpacksConfigOverride.phases.start]
+cmd = "yarn start"
