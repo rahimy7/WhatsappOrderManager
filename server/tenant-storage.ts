@@ -77,29 +77,29 @@ export function createTenantStorage(tenantDb: any) {
 
     // Categories
     async getAllCategories() {
-      return await tenantDb.select().from(schema.categories).orderBy(schema.categories.name);
+      return await tenantDb.select().from(schema.productCategories).orderBy(schema.productCategories.name);
     },
 
     async getCategoryById(id: number) {
-      const [category] = await tenantDb.select().from(schema.categories).where(eq(schema.categories.id, id));
+      const [category] = await tenantDb.select().from(schema.productCategories).where(eq(schema.productCategories.id, id));
       return category || null;
     },
 
     async createCategory(categoryData: any) {
-      const [category] = await tenantDb.insert(schema.categories).values(categoryData).returning();
+      const [category] = await tenantDb.insert(schema.productCategories).values(categoryData).returning();
       return category;
     },
 
     async updateCategory(id: number, categoryData: any) {
-      const [category] = await tenantDb.update(schema.categories)
+      const [category] = await tenantDb.update(schema.productCategories)
         .set(categoryData)
-        .where(eq(schema.categories.id, id))
+        .where(eq(schema.productCategories.id, id))
         .returning();
       return category;
     },
 
     async deleteCategory(id: number) {
-      await tenantDb.delete(schema.categories).where(eq(schema.categories.id, id));
+      await tenantDb.delete(schema.productCategories).where(eq(schema.productCategories.id, id));
     },
 
     // Customers
@@ -374,11 +374,6 @@ export function createTenantStorage(tenantDb: any) {
       return newLog;
     },
 
-    // Auto Responses
-    async getAllAutoResponses() {
-      return await tenantDb.select().from(schema.autoResponses)
-        .orderBy(desc(schema.autoResponses.createdAt));
-    },
 
     async getAutoResponseByTrigger(trigger: string) {
       const [response] = await tenantDb.select().from(schema.autoResponses)

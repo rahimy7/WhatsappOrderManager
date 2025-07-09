@@ -12,6 +12,8 @@ import { eq } from "drizzle-orm";
 import type { AuthenticatedRequest, AuthUser } from './auth-types';
 import { WebSocketServer } from 'ws';
 import { authenticateToken } from './authMiddleware.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 
@@ -1223,6 +1225,14 @@ app.use('/api', (req, res, next) => {
       }
     });
 
+    app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
 
@@ -1372,13 +1382,26 @@ app.use('/api', (req, res, next) => {
     }
 
     // ALWAYS serve the app on port 5000
-    const port = 5000;
-    server.listen({
-      port,
-      host: "0.0.0.0",
-    }, () => {
-      log(`serving on port ${port}`);
-    });
+  const PORT = process.env.PORT || process.env.RAILWAY_PORT || 5000;
+server.listen(PORT, "0.0.0.0", () => {
+  log(`🚀 Server running on port ${PORT}`);
+  log(`📱 Health check available at /api/health`);
+  log(`🔌 WebSocket server ready`);
+});
+
+ // Servir archivos estáticos en producción
+if (process.env.NODE_ENV === 'production') {
+  const staticPath = path.join(__dirname, 'public');
+  app.use(express.static(staticPath));
+  
+  // Manejar rutas del frontend (SPA)
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.sendFile(path.join(staticPath, 'index.html'));
+  });
+}
 
     // WebSocket Server - MOVED INSIDE THE ASYNC FUNCTION
     const wss = new WebSocketServer({ server });

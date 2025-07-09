@@ -4,15 +4,22 @@
   "type": "module",
   "license": "MIT",
     "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "tsx watch server/index.ts",
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build --outDir dist/public",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node18 --outfile=dist/server.js --external:@neondatabase/serverless --external:ws",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/server.js --external:@neondatabase/serverless --external:ws --external:bufferutil --external:@babel/preset-typescript/package.json --external:../pkg",
     "start": "node dist/server.js",
+    "start:local": "npx tsx server/index.ts",
     "preview": "vite preview",
+    "railway:build": "npm run build",
+    "railway:start": "npm run start",
     "vercel-build": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

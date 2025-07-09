@@ -1,0 +1,19 @@
+# Archivos que Railway debe ignorar durante el deploy
+
+node_modules/
+.git/
+.vscode/
+.replit
+replit.nix
+.config/
+*.log
+.env.local
+.env.development
+dist/
+.cache/
+.parcel-cache/
+
+# Archivos específicos de desarrollo
+.replit.md
+replit.txt
+vite.config.ts.timestamp-*

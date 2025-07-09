@@ -1692,43 +1692,6 @@ async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppS
     return result.map(row => ({ ...row.cart, product: row.product }));
   }
 
-  async addToCart(item: InsertShoppingCart): Promise<ShoppingCart> {
-    // Check if item already exists in cart
-    const existingItems = await db
-      .select()
-      .from(shoppingCart)
-      .where(
-        and(
-          eq(shoppingCart.sessionId, item.sessionId),
-          eq(shoppingCart.productId, item.productId),
-          item.userId ? eq(shoppingCart.userId, item.userId) : isNull(shoppingCart.userId)
-        )
-      );
-
-    if (existingItems.length > 0) {
-      // Update quantity instead of creating new item
-      const existingItem = existingItems[0];
-      const newQuantity = existingItem.quantity + (item.quantity || 1);
-      
-      const [updatedItem] = await db
-        .update(shoppingCart)
-        .set({ 
-          quantity: newQuantity,
-          updatedAt: new Date()
-        })
-        .where(eq(shoppingCart.id, existingItem.id))
-        .returning();
-      
-      return updatedItem;
-    }
-
-    const [newItem] = await db
-      .insert(shoppingCart)
-      .values(item)
-      .returning();
-    
-    return newItem;
-  }
 
   async updateCartItem(id: number, quantity: number): Promise<ShoppingCart | undefined> {
     const [updatedItem] = await db
@@ -1741,12 +1704,6 @@ async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppS
       .returning();
     
     return updatedItem;
-  }
-
-  async removeFromCart(id: number): Promise<void> {
-    await db
-      .delete(shoppingCart)
-      .where(eq(shoppingCart.id, id));
   }
 
   async clearCart(sessionId: string, userId?: number): Promise<void> {
@@ -1892,15 +1849,6 @@ async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppS
         eq(shoppingCart.sessionId, sessionId),
         eq(shoppingCart.productId, productId)
       ));
-  }
-
-  async clearCart(sessionId: string, userId?: number): Promise<void> {
-    await db.delete(shoppingCart)
-      .where(eq(shoppingCart.sessionId, sessionId));
-  }
-
-  async getAllCategories(): Promise<ProductCategory[]> {
-    return await db.select().from(productCategories).where(eq(productCategories.isActive, true));
   }
 
   // Store Configuration
