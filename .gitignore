@@ -4,6 +4,3 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
-server/routes.ts.backup
-server/routes.ts.broken
-server/routes.corrupted.ts

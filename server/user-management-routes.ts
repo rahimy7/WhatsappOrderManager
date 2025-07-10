@@ -21,7 +21,7 @@ function authenticateToken(req: Request, res: Response, next: any) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as any;
     req.user = decoded;
     next();
   } catch (error) {

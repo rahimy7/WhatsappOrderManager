@@ -47,6 +47,18 @@ apiRouter.get('/health', (req, res) => {
   });
 });
 
+
+app.get('/api/debug/env', (req, res) => {
+  res.json({
+    environment: process.env.NODE_ENV,
+    jwtSecret: process.env.JWT_SECRET ? 'CONFIGURED' : 'NOT_SET',
+    databaseUrl: process.env.DATABASE_URL ? 'CONFIGURED' : 'NOT_SET',
+    metaAppId: process.env.META_APP_ID ? 'CONFIGURED' : 'NOT_SET',
+    port: process.env.PORT || '5000',
+    railwayUrl: process.env.RAILWAY_STATIC_URL
+  });
+});
+
 // Login endpoint
 apiRouter.post('/auth/login', async (req, res) => {
   try {
@@ -262,7 +274,7 @@ apiRouter.post('/store-responses/reset-defaults', async (req, res) => {
 apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -288,7 +300,7 @@ apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
 apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -319,7 +331,7 @@ apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
 apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -351,7 +363,7 @@ apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
 apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -374,7 +386,7 @@ apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
 apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -427,7 +439,7 @@ apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
 apiRouter.get('/super-admin/stores', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -446,7 +458,7 @@ apiRouter.get('/super-admin/stores', async (req, res) => {
 apiRouter.get('/super-admin/global-whatsapp-settings', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -480,7 +492,7 @@ apiRouter.get('/super-admin/global-whatsapp-settings', async (req, res) => {
 apiRouter.put('/super-admin/global-whatsapp-settings', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -523,7 +535,7 @@ apiRouter.put('/super-admin/global-whatsapp-settings', async (req, res) => {
 apiRouter.post('/super-admin/test-webhook', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -578,7 +590,7 @@ apiRouter.post('/super-admin/test-webhook', async (req, res) => {
 apiRouter.get('/super-admin/webhook-info', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -614,7 +626,7 @@ apiRouter.get('/super-admin/webhook-info', async (req, res) => {
 apiRouter.get('/super-admin/validate-all-whatsapp', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.level !== 'global' || user.role !== 'super_admin') {
+    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
     }
 
@@ -663,6 +675,68 @@ apiRouter.get('/super-admin/validate-all-whatsapp', async (req, res) => {
   } catch (error) {
     console.error("Error validating all WhatsApp configs:", error);
     res.status(500).json({ error: "Error al validar configuraciones" });
+  }
+});
+
+apiRouter.get('/debug/token-info', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    console.log('=== DEBUG TOKEN INFO ===');
+    console.log('AuthHeader:', authHeader);
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.json({
+        error: 'No token provided',
+        authHeader: authHeader
+      });
+    }
+
+    const token = authHeader.substring(7);
+    console.log('Token:', token);
+    
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    console.log('Decoded token:', decoded);
+    
+    // Verificar exactamente qué propiedades tiene
+    const user = decoded;
+    console.log('User object:', user);
+    console.log('user.id:', user.id);
+    console.log('user.role:', user.role);
+    console.log('user.level:', user.level);
+    console.log('user.username:', user.username);
+    
+    // Probar las condiciones del middleware problemático
+    const condition1 = !user;
+    const condition2 = user.level !== 'global';
+    const condition3 = user.role !== 'super_admin';
+    const overallCondition = condition1 || condition2 || condition3;
+    
+    console.log('Middleware checks:');
+    console.log('!user:', condition1);
+    console.log('user.level !== global:', condition2);
+    console.log('user.role !== super_admin:', condition3);
+    console.log('Overall (should fail):', overallCondition);
+    
+    res.json({
+      success: true,
+      user: user,
+      middlewareChecks: {
+        noUser: condition1,
+        levelNotGlobal: condition2,
+        roleNotSuperAdmin: condition3,
+        wouldFail: overallCondition
+      },
+      tokenValid: true,
+      jwtSecret: process.env.JWT_SECRET || 'dev-secret'
+    });
+    
+  } catch (error) {
+    console.error('Debug error:', error);
+    res.json({
+      error: error.message,
+      jwtSecret: process.env.JWT_SECRET || 'dev-secret'
+    });
   }
 });
 
@@ -1745,41 +1819,92 @@ app.use('/api', apiRouter);
     }
 
     // WebSocket Server
-    const wss = new WebSocketServer({ server });
-    wss.on('connection', (socket, req) => {
+  const wss = new WebSocketServer({ 
+  server,
+  handleProtocols: () => false, // Evitar problemas de protocolo
+  perMessageDeflate: false // Desactivar compresión que puede causar errores
+});
+
+wss.on('connection', (socket, req) => {
+  console.log('🔌 Nueva conexión WebSocket');
+  
+  try {
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const token = url.searchParams.get('token');
+
+    console.log('Token recibido:', token ? `${token.substring(0, 10)}...` : 'null');
+
+    // Validar JWT token si existe
+    if (token) {
       try {
-        const url = new URL(req.url!, `http://${req.headers.host}`);
-        const token = url.searchParams.get('token');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+        console.log('✅ Token válido para WebSocket');
 
-        console.log('🔌 Nueva conexión WebSocket con token:', token);
+        // Send welcome message
+        socket.send(JSON.stringify({ 
+          type: 'connected', 
+          message: 'WebSocket conectado exitosamente',
+          timestamp: new Date().toISOString()
+        }));
+      } catch (jwtError: any) {
+        console.log('❌ Token JWT inválido:', jwtError.message);
+        socket.send(JSON.stringify({ 
+          type: 'error', 
+          message: 'Token inválido' 
+        }));
+        socket.close(1000, 'Token inválido');
+        return;
+      }
+    } else {
+      console.log('⚠️ WebSocket sin token - conexión limitada');
+      socket.send(JSON.stringify({ 
+        type: 'connected', 
+        message: 'WebSocket conectado sin autenticación' 
+      }));
+    }
 
-        // Validate JWT token if needed
-        if (token) {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-          console.log('✅ Token válido:', decoded);
-
-          // Send welcome message
-          socket.send(JSON.stringify({ type: 'connected', message: 'WebSocket conectado exitosamente' }));
-        } else {
-          console.log('❌ Token no proporcionado');
-          socket.close();
-        }
-
-        // Handle incoming messages
-        socket.on('message', (data) => {
-          console.log('📩 Mensaje recibido del cliente:', data.toString());
-        });
-
-        // Handle connection close
-        socket.on('close', () => {
-          console.log('🔌 Conexión WebSocket cerrada');
-        });
-
-      } catch (error: any) {
-        console.error('❌ Error en conexión WebSocket:', error.message);
-        socket.close();
+    // Handle incoming messages
+    socket.on('message', (data) => {
+      try {
+        const message = data.toString();
+        console.log('📩 Mensaje WebSocket:', message);
+        
+        // Echo back para testing
+        socket.send(JSON.stringify({ 
+          type: 'echo', 
+          data: message 
+        }));
+      } catch (error) {
+        console.error('Error procesando mensaje WebSocket:', error);
       }
     });
+
+    // Handle connection close
+    socket.on('close', (code, reason) => {
+      console.log(`🔌 WebSocket cerrado - Code: ${code}, Reason: ${reason}`);
+    });
+
+    // Handle errors
+    socket.on('error', (error) => {
+      console.error('❌ Error WebSocket:', error.message);
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error configurando WebSocket:', error.message);
+    try {
+      socket.close(1000, 'Error de configuración');
+    } catch (closeError) {
+      console.error('Error cerrando socket:', closeError);
+    }
+  }
+});
+
+// Manejar errores del servidor WebSocket
+wss.on('error', (error) => {
+  console.error('❌ Error del servidor WebSocket:', error.message);
+});
+
+console.log('🔌 Servidor WebSocket configurado con manejo de errores mejorado');
 
     // IMPORTANT: Use PORT from environment variable for Railway
     const PORT = parseInt(process.env.PORT || process.env.RAILWAY_PORT || '5000', 10);
