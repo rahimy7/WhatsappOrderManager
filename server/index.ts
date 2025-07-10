@@ -15,9 +15,12 @@ import { authenticateToken } from './authMiddleware.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
+import setupCorsForRailway from './cors-config-railway.js';
+
 
 const app = express();
 const server = createServer(app);
+setupCorsForRailway(app);
 
 // Get the __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -26,6 +29,7 @@ const __dirname = path.dirname(__filename);
 // CRITICAL: Parse JSON bodies globally BEFORE any routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
 
 // CRITICAL: Create a high-priority router for API endpoints
 const apiRouter = express.Router();
@@ -696,31 +700,88 @@ apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// PRODUCTOS
+// PRODUCTOS - using tenant storage
 apiRouter.get('/products', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
     const user = (req as any).user;
-    const products = await storage.getAllProducts(user.storeId);
-    res.json(products);
+    
+    if (user.level === 'tenant' && user.storeId) {
+      // Use tenant storage for store-specific products
+      const { getTenantDb } = await import('./multi-tenant-db.js');
+      const { createTenantStorage } = await import('./tenant-storage.js');
+      
+      const tenantDb = await getTenantDb(user.storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
+      
+      const products = await tenantStorage.getAllProducts();
+      res.json(products);
+    } else {
+      // Use main storage for global access
+      const { DatabaseStorage } = await import('./storage.js');
+      const storage = new DatabaseStorage();
+      
+      const products = await storage.getAllProducts(user.storeId);
+      res.json(products);
+    }
   } catch (error) {
     console.error('Error fetching products:', error);
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
 
+apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    if (user.level === 'tenant' && user.storeId) {
+      const { getTenantDb } = await import('./multi-tenant-db.js');
+      const { createTenantStorage } = await import('./tenant-storage.js');
+      
+      const tenantDb = await getTenantDb(user.storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
+      
+      const product = await tenantStorage.getProductById(id);
+      if (!product) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+      res.json(product);
+    } else {
+      const { DatabaseStorage } = await import('./storage.js');
+      const storage = new DatabaseStorage();
+      
+      const product = await storage.getProduct(id, user.storeId);
+      if (!product) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+      res.json(product);
+    }
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({ error: 'Failed to fetch product' });
+  }
+});
+
 apiRouter.post('/products', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
     const user = (req as any).user;
-    const productData = { ...req.body, storeId: user.storeId };
     
-    const product = await storage.createProduct(productData);
-    res.status(201).json(product);
+    if (user.level === 'tenant' && user.storeId) {
+      const { getTenantDb } = await import('./multi-tenant-db.js');
+      const { createTenantStorage } = await import('./tenant-storage.js');
+      
+      const tenantDb = await getTenantDb(user.storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
+      
+      const product = await tenantStorage.createProduct(req.body);
+      res.status(201).json(product);
+    } else {
+      const { DatabaseStorage } = await import('./storage.js');
+      const storage = new DatabaseStorage();
+      
+      const product = await storage.createProduct(req.body, user.storeId);
+      res.status(201).json(product);
+    }
   } catch (error) {
     console.error('Error creating product:', error);
     res.status(500).json({ error: 'Failed to create product' });
@@ -853,6 +914,20 @@ apiRouter.get('/metrics', authenticateToken, async (req, res) => {
   }
 });
 
+apiRouter.get('/dashboard/metrics', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const metrics = await storage.getDashboardMetrics(user.storeId);
+    res.json(metrics);
+  } catch (error) {
+    console.error('Error fetching dashboard metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard metrics' });
+  }
+});
+
 // ÓRDENES
 apiRouter.get('/orders', authenticateToken, async (req, res) => {
   try {
@@ -934,6 +1009,22 @@ apiRouter.get('/notifications', authenticateToken, async (req, res) => {
   }
 });
 
+// Add this to your index.ts API routes
+apiRouter.get('/notifications/count', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const userId = parseInt(req.query.userId as string) || user.id;
+    const counts = await storage.getNotificationCounts(userId, user.storeId);
+    res.json(counts);
+  } catch (error) {
+    console.error('Error fetching notification counts:', error);
+    res.status(500).json({ error: 'Failed to fetch notification counts' });
+  }
+});
+
 // CONFIGURACIONES DE TIENDA
 apiRouter.get('/settings', authenticateToken, async (req, res) => {
   try {
@@ -941,7 +1032,7 @@ apiRouter.get('/settings', authenticateToken, async (req, res) => {
     const storage = new DatabaseStorage();
     
     const user = (req as any).user;
-    const settings = await storage.getStoreSettings(user.storeId);
+    const settings = await storage.getStoreConfig(user.storeId);
     res.json(settings);
   } catch (error) {
     console.error('Error fetching settings:', error);

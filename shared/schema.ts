@@ -1,6 +1,7 @@
 import { pgTable, text, serial, integer, boolean, timestamp, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { makeInsertSchema } from "./schema.utils";
 
 // ================================
 // SISTEMA MULTI-TENANT - TIENDAS VIRTUALES
@@ -141,6 +142,23 @@ export const systemAuditLog = pgTable("system_audit_log", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Store configuration table
+export const storeSettings = pgTable("store_settings", {
+  id: serial("id").primaryKey(),
+  storeId: integer("store_id").references(() => virtualStores.id),
+  storeWhatsAppNumber: text("store_whatsapp_number").notNull(),
+  storeName: text("store_name").notNull(),
+  storeAddress: text("store_address"),
+  storeEmail: text("store_email"),
+  businessHours: text("business_hours").default("09:00-18:00"),
+  deliveryRadius: text("delivery_radius").default("50"),
+  baseSiteUrl: text("base_site_url"),
+  enableNotifications: boolean("enable_notifications").default(true),
+  autoAssignOrders: boolean("auto_assign_orders").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // ================================
 // ESQUEMAS PARA BASES DE DATOS POR TIENDA
 // ================================
@@ -151,8 +169,8 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: text("role").notNull(), // 'admin', 'technician', 'seller', 'delivery', 'support', 'customer_service'
-  status: text("status").notNull().default("active"), // 'active', 'busy', 'break', 'offline'
-  phone: text("phone"),
+  status: text("status").notNull().default("active"),
+   phone: text("phone"),
   email: text("email"),
   address: text("address"),
   avatar: text("avatar"),
@@ -160,6 +178,7 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").notNull().default(true),
   department: text("department"), // 'technical', 'sales', 'delivery', 'support', 'admin'
   permissions: text("permissions").array(), // Array of specific permissions
+  storeId: integer("store_id"),
 });
 
 export const customers = pgTable("customers", {
@@ -445,108 +464,51 @@ export const productCategories = pgTable("product_categories", {
 });
 
 // Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
+export const insertUserSchema = makeInsertSchema(users, {
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  role: z.enum(["admin", "technician", "seller", "delivery", "support", "customer_service"]),
+  status: z.enum(["active", "busy", "break", "offline"]).optional(),
+}, ["id", "createdAt", "updatedAt", "lastLogin"]);
+
+
+export const insertCustomerSchema = makeInsertSchema(customers, {
+  storeId: z.number(),
+  lastContact: z.date().optional(),
 });
 
-const baseCustomerSchema = createInsertSchema(customers);
-export const insertCustomerSchema = baseCustomerSchema
-  .omit({ id: true }) // ❗️solo 'id' es parte del insertSchema por defecto
-  .extend({
-    storeId: z.number(),
-  });
+export const insertProductSchema = makeInsertSchema(products);
 
-
-export const insertProductSchema = createInsertSchema(products).omit({
-  id: true,
-});
-
-export const insertOrderSchema = createInsertSchema(orders).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-}).extend({
+export const insertOrderSchema = makeInsertSchema(orders, {
   orderNumber: z.string().optional(),
 });
 
-export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
-  id: true,
-});
+export const insertOrderItemSchema = makeInsertSchema(orderItems);
 
-export const insertOrderHistorySchema = createInsertSchema(orderHistory).omit({
-  id: true,
-  timestamp: true,
-});
+export const insertOrderHistorySchema = makeInsertSchema(orderHistory, {}, ["id", "timestamp"]);
 
-export const insertConversationSchema = createInsertSchema(conversations).omit({
-  id: true,
-  lastMessageAt: true,
-});
+export const insertConversationSchema = makeInsertSchema(conversations, {}, ["id", "lastMessageAt"]);
 
-export const insertMessageSchema = createInsertSchema(messages).omit({
-  id: true,
-  sentAt: true,
-});
+export const insertMessageSchema = makeInsertSchema(messages, {}, ["id", "sentAt"]);
 
-export const insertWebMessageSchema = createInsertSchema(messages).omit({
-  id: true,
-  sentAt: true,
-  conversationId: true,
-});
+export const insertWebMessageSchema = makeInsertSchema(messages, {}, ["id", "sentAt", "conversationId"]);
 
-export const insertWhatsAppSettingsSchema = createInsertSchema(whatsappSettings).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertWhatsAppSettingsSchema = makeInsertSchema(whatsappSettings);
 
-export const insertWhatsAppLogSchema = createInsertSchema(whatsappLogs).omit({
-  id: true,
-  timestamp: true,
-});
+export const insertWhatsAppLogSchema = makeInsertSchema(whatsappLogs, {}, ["id", "timestamp"]);
 
-export const insertAutoResponseSchema = createInsertSchema(autoResponses).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertAutoResponseSchema = makeInsertSchema(autoResponses);
 
-export const insertCustomerRegistrationFlowSchema = createInsertSchema(customerRegistrationFlows).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertCustomerRegistrationFlowSchema = makeInsertSchema(customerRegistrationFlows);
 
-export const insertEmployeeProfileSchema = createInsertSchema(employeeProfiles).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertEmployeeProfileSchema = makeInsertSchema(employeeProfiles);
 
-export const insertAssignmentRuleSchema = createInsertSchema(assignmentRules).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertAssignmentRuleSchema = makeInsertSchema(assignmentRules);
 
-export const insertShoppingCartSchema = createInsertSchema(shoppingCart).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertShoppingCartSchema = makeInsertSchema(shoppingCart);
 
-export const insertProductCategorySchema = createInsertSchema(productCategories).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertProductCategorySchema = makeInsertSchema(productCategories);
 
-// Subscription plan schemas
-export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-}).extend({
+export const insertSubscriptionPlanSchema = makeInsertSchema(subscriptionPlans, {
   monthlyPrice: z.string().nullable().optional(),
   maxDbStorage: z.string().nullable().optional(),
   pricePerProduct: z.string().nullable().optional(),
@@ -555,16 +517,25 @@ export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans
   pricePerOrder: z.string().nullable().optional(),
 });
 
-export const insertStoreSubscriptionSchema = createInsertSchema(storeSubscriptions).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertStoreSubscriptionSchema = makeInsertSchema(storeSubscriptions);
 
-export const insertUsageHistorySchema = createInsertSchema(usageHistory).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertUsageHistorySchema = makeInsertSchema(usageHistory, {}, ["id", "createdAt"]);
+
+export const insertNotificationSchema = makeInsertSchema(notifications, {}, ["id", "createdAt"]);
+
+export const insertStoreSettingsSchema = makeInsertSchema(storeSettings);
+
+export const insertVirtualStoreSchema = makeInsertSchema(virtualStores, {}, [
+  "id", "createdAt", "updatedAt", "databaseUrl",
+]);
+
+export const insertSystemUserSchema = makeInsertSchema(systemUsers, {}, [
+  "id", "createdAt", "updatedAt", "lastLogin",
+]);
+
+export const insertSystemAuditLogSchema = makeInsertSchema(systemAuditLog, {}, ["id", "createdAt"]);
+
+export const insertCustomerHistorySchema = makeInsertSchema(customerHistory);
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -628,7 +599,6 @@ export type InsertUsageHistory = z.infer<typeof insertUsageHistorySchema>;
 export type CartItem = typeof shoppingCart.$inferSelect;
 export type InsertCartItem = z.infer<typeof insertShoppingCartSchema>;
 
-export const insertCustomerHistorySchema = createInsertSchema(customerHistory);
 export type CustomerHistory = typeof customerHistory.$inferSelect;
 export type InsertCustomerHistory = z.infer<typeof insertCustomerHistorySchema>;
 
@@ -654,36 +624,12 @@ export type MessageWithSender = Message & {
   sender?: User;
 };
 
-export const insertNotificationSchema = createInsertSchema(notifications).omit({
-  id: true,
-  createdAt: true,
-});
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
-// Store configuration table
-export const storeSettings = pgTable("store_settings", {
-  id: serial("id").primaryKey(),
-  storeId: integer("store_id").references(() => virtualStores.id),
-  storeWhatsAppNumber: text("store_whatsapp_number").notNull(),
-  storeName: text("store_name").notNull(),
-  storeAddress: text("store_address"),
-  storeEmail: text("store_email"),
-  businessHours: text("business_hours").default("09:00-18:00"),
-  deliveryRadius: text("delivery_radius").default("50"),
-  baseSiteUrl: text("base_site_url"),
-  enableNotifications: boolean("enable_notifications").default(true),
-  autoAssignOrders: boolean("auto_assign_orders").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
 
-export const insertStoreSettingsSchema = createInsertSchema(storeSettings).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+
 
 export type StoreSettings = typeof storeSettings.$inferSelect;
 export type InsertStoreSettings = z.infer<typeof insertStoreSettingsSchema>;
@@ -692,33 +638,12 @@ export type InsertStoreSettings = z.infer<typeof insertStoreSettingsSchema>;
 // TIPOS Y SCHEMAS MULTI-TENANT
 // ================================
 
-// Virtual Stores
-export const insertVirtualStoreSchema = createInsertSchema(virtualStores).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  databaseUrl: true, // Se genera automáticamente en el backend
-});
-
 export type VirtualStore = typeof virtualStores.$inferSelect;
 export type InsertVirtualStore = z.infer<typeof insertVirtualStoreSchema>;
 
-// System Users 
-export const insertSystemUserSchema = createInsertSchema(systemUsers).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  lastLogin: true,
-});
 
 export type SystemUser = typeof systemUsers.$inferSelect;
 export type InsertSystemUser = z.infer<typeof insertSystemUserSchema>;
-
-// System Audit Log
-export const insertSystemAuditLogSchema = createInsertSchema(systemAuditLog).omit({
-  id: true,
-  createdAt: true,
-});
 
 export type SystemAuditLog = typeof systemAuditLog.$inferSelect;
 export type InsertSystemAuditLog = z.infer<typeof insertSystemAuditLogSchema>;
