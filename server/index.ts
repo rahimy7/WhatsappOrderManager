@@ -662,6 +662,723 @@ apiRouter.get('/super-admin/validate-all-whatsapp', async (req, res) => {
   }
 });
 
+// CONVERSACIONES
+apiRouter.get('/conversations', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const conversations = await storage.getAllConversations(user.storeId);
+    res.json(conversations);
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const conversation = await storage.getConversation(id);
+    
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    
+    res.json(conversation);
+  } catch (error) {
+    console.error('Error fetching conversation:', error);
+    res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+// PRODUCTOS
+apiRouter.get('/products', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const products = await storage.getAllProducts(user.storeId);
+    res.json(products);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+apiRouter.post('/products', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const productData = { ...req.body, storeId: user.storeId };
+    
+    const product = await storage.createProduct(productData);
+    res.status(201).json(product);
+  } catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: 'Failed to create product' });
+  }
+});
+
+apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const product = await storage.updateProduct(id, req.body, user.storeId);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    
+    res.json(product);
+  } catch (error) {
+    console.error('Error updating product:', error);
+    res.status(500).json({ error: 'Failed to update product' });
+  }
+});
+
+apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const success = await storage.deleteProduct(id, user.storeId);
+    if (!success) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+});
+
+// CLIENTES
+apiRouter.get('/customers', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const customers = await storage.getAllCustomers(user.storeId);
+    res.json(customers);
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+});
+
+apiRouter.post('/customers', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const customerData = { ...req.body, storeId: user.storeId };
+    
+    const customer = await storage.createCustomer(customerData);
+    res.status(201).json(customer);
+  } catch (error) {
+    console.error('Error creating customer:', error);
+    res.status(500).json({ error: 'Failed to create customer' });
+  }
+});
+
+apiRouter.put('/customers/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const customer = await storage.updateCustomer(id, req.body, user.storeId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    
+    res.json(customer);
+  } catch (error) {
+    console.error('Error updating customer:', error);
+    res.status(500).json({ error: 'Failed to update customer' });
+  }
+});
+
+apiRouter.delete('/customers/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const success = await storage.deleteCustomer(id, user.storeId);
+    if (!success) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting customer:', error);
+    res.status(500).json({ error: 'Failed to delete customer' });
+  }
+});
+
+// MÉTRICAS
+apiRouter.get('/metrics', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const metrics = await storage.getDashboardMetrics(user.storeId);
+    res.json(metrics);
+  } catch (error) {
+    console.error('Error fetching metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch metrics' });
+  }
+});
+
+// ÓRDENES
+apiRouter.get('/orders', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const orders = await storage.getAllOrders(user.storeId);
+    res.json(orders);
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+apiRouter.get('/orders/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const order = await storage.getOrder(id, user.storeId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    res.json(order);
+  } catch (error) {
+    console.error('Error fetching order:', error);
+    res.status(500).json({ error: 'Failed to fetch order' });
+  }
+});
+
+apiRouter.post('/orders', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const orderData = { ...req.body, storeId: user.storeId };
+    
+    const order = await storage.createOrder(orderData);
+    res.status(201).json(order);
+  } catch (error) {
+    console.error('Error creating order:', error);
+    res.status(500).json({ error: 'Failed to create order' });
+  }
+});
+
+// USUARIOS (para gestión interna de tienda)
+apiRouter.get('/users', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const users = await storage.getAllUsers(user.storeId);
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// NOTIFICACIONES
+apiRouter.get('/notifications', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const notifications = await storage.getUserNotifications(user.id, user.storeId);
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// CONFIGURACIONES DE TIENDA
+apiRouter.get('/settings', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const settings = await storage.getStoreSettings(user.storeId);
+    res.json(settings);
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+apiRouter.put('/settings', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const settings = await storage.updateStoreSettings(user.storeId, req.body);
+    res.json(settings);
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// CONFIGURACIÓN WHATSAPP (específica de tienda)
+apiRouter.get('/whatsapp-settings', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const config = await storage.getWhatsAppConfig(user.storeId);
+    res.json(config || {});
+  } catch (error) {
+    console.error('Error fetching WhatsApp settings:', error);
+    res.status(500).json({ error: 'Failed to fetch WhatsApp settings' });
+  }
+});
+
+apiRouter.put('/whatsapp-settings', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const config = await storage.updateWhatsAppConfig(req.body, user.storeId);
+    res.json(config);
+  } catch (error) {
+    console.error('Error updating WhatsApp settings:', error);
+    res.status(500).json({ error: 'Failed to update WhatsApp settings' });
+  }
+});
+
+// DASHBOARD STATS
+apiRouter.get('/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const stats = await storage.getDashboardStats(user.storeId);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+});
+
+// MENSAJES
+apiRouter.get('/messages', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const conversationId = req.query.conversationId as string;
+    
+    if (conversationId) {
+      const messages = await storage.getMessagesByConversation(parseInt(conversationId), user.storeId);
+      res.json(messages);
+    } else {
+      const messages = await storage.getAllMessages(user.storeId);
+      res.json(messages);
+    }
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+apiRouter.post('/messages', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const messageData = { ...req.body, storeId: user.storeId };
+    
+    const message = await storage.createMessage(messageData);
+    res.status(201).json(message);
+  } catch (error) {
+    console.error('Error creating message:', error);
+    res.status(500).json({ error: 'Failed to create message' });
+  }
+});
+
+// WEBHOOK WHATSAPP
+apiRouter.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  
+  const verify_token = process.env.WEBHOOK_VERIFY_TOKEN || 'default_verify_token_12345';
+  
+  if (mode === 'subscribe' && token === verify_token) {
+    console.log('✅ Webhook verified successfully');
+    res.status(200).send(challenge);
+  } else {
+    console.log('❌ Webhook verification failed');
+    res.status(403).send('Forbidden');
+  }
+});
+
+apiRouter.post('/webhook', async (req, res) => {
+  try {
+    console.log('📥 Webhook received:', JSON.stringify(req.body, null, 2));
+    
+    // Process WhatsApp webhook
+    const { processWhatsAppMessage } = await import('./routes.js');
+    await processWhatsAppMessage(req.body);
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('❌ Error processing webhook:', error);
+    res.status(500).send('Error');
+  }
+});
+
+// TIENDAS (para usuarios regulares)
+apiRouter.get('/stores', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    if (user.level === 'global') {
+      // Super admin puede ver todas las tiendas
+      const { DatabaseStorage } = await import('./storage.js');
+      const storage = new DatabaseStorage();
+      const stores = await storage.getAllVirtualStores();
+      res.json(stores);
+    } else {
+      // Usuarios regulares solo ven su tienda
+      const store = await getStoreInfo(user.storeId);
+      res.json(store ? [store] : []);
+    }
+  } catch (error) {
+    console.error('Error fetching stores:', error);
+    res.status(500).json({ error: 'Failed to fetch stores' });
+  }
+});
+
+// ================================
+// ENDPOINTS ADICIONALES QUE PUEDEN ESTAR FALTANDO
+// ================================
+
+// AUTO RESPONSES (ya están implementados arriba pero con prefijo /store-responses)
+apiRouter.get('/auto-responses', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const responses = await storage.getAllAutoResponses(user.storeId);
+    res.json(responses);
+  } catch (error) {
+    console.error('Error fetching auto-responses:', error);
+    res.status(500).json({ error: 'Failed to fetch auto-responses' });
+  }
+});
+
+apiRouter.post('/auto-responses', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const responseData = { ...req.body, storeId: user.storeId };
+    
+    const response = await storage.createAutoResponse(responseData);
+    res.status(201).json(response);
+  } catch (error) {
+    console.error('Error creating auto-response:', error);
+    res.status(500).json({ error: 'Failed to create auto-response' });
+  }
+});
+
+apiRouter.put('/auto-responses/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const response = await storage.updateAutoResponse(id, req.body, user.storeId);
+    res.json(response);
+  } catch (error) {
+    console.error('Error updating auto-response:', error);
+    res.status(500).json({ error: 'Failed to update auto-response' });
+  }
+});
+
+apiRouter.delete('/auto-responses/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+
+    await storage.deleteAutoResponse(id, user.storeId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting auto-response:', error);
+    res.status(500).json({ error: 'Failed to delete auto-response' });
+  }
+});
+
+// ASSIGNMENT RULES
+apiRouter.get('/assignment-rules', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const rules = await storage.getAllAssignmentRules(user.storeId);
+    res.json(rules);
+  } catch (error) {
+    console.error('Error fetching assignment rules:', error);
+    res.status(500).json({ error: 'Failed to fetch assignment rules' });
+  }
+});
+
+// EMPLOYEES/TECHNICIANS
+apiRouter.get('/employees', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const employees = await storage.getAllEmployees(user.storeId);
+    res.json(employees);
+  } catch (error) {
+    console.error('Error fetching employees:', error);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
+apiRouter.post('/employees', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const employeeData = { ...req.body, storeId: user.storeId };
+    
+    const employee = await storage.createEmployee(employeeData);
+    res.status(201).json(employee);
+  } catch (error) {
+    console.error('Error creating employee:', error);
+    res.status(500).json({ error: 'Failed to create employee' });
+  }
+});
+
+apiRouter.put('/employees/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const employee = await storage.updateEmployee(id, req.body, user.storeId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    res.json(employee);
+  } catch (error) {
+    console.error('Error updating employee:', error);
+    res.status(500).json({ error: 'Failed to update employee' });
+  }
+});
+
+apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const success = await storage.deleteEmployee(id, user.storeId);
+    if (!success) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting employee:', error);
+    res.status(500).json({ error: 'Failed to delete employee' });
+  }
+});
+
+// CART/SHOPPING CART
+apiRouter.get('/cart', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const sessionId = req.query.sessionId as string;
+    const userId = user.id;
+    
+    const cart = await storage.getCart(sessionId, userId, user.storeId);
+    res.json(cart);
+  } catch (error) {
+    console.error('Error fetching cart:', error);
+    res.status(500).json({ error: 'Failed to fetch cart' });
+  }
+});
+
+apiRouter.post('/cart', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const cartData = { ...req.body, storeId: user.storeId };
+    
+    const cartItem = await storage.addToCart(cartData);
+    res.status(201).json(cartItem);
+  } catch (error) {
+    console.error('Error adding to cart:', error);
+    res.status(500).json({ error: 'Failed to add to cart' });
+  }
+});
+
+apiRouter.put('/cart/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const cartItem = await storage.updateCartItem(id, req.body, user.storeId);
+    if (!cartItem) {
+      return res.status(404).json({ error: 'Cart item not found' });
+    }
+    
+    res.json(cartItem);
+  } catch (error) {
+    console.error('Error updating cart item:', error);
+    res.status(500).json({ error: 'Failed to update cart item' });
+  }
+});
+
+apiRouter.delete('/cart/:id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const success = await storage.removeFromCart(id, user.storeId);
+    if (!success) {
+      return res.status(404).json({ error: 'Cart item not found' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing cart item:', error);
+    res.status(500).json({ error: 'Failed to remove cart item' });
+  }
+});
+
+// CATEGORIES
+apiRouter.get('/categories', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const categories = await storage.getAllCategories(user.storeId);
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+apiRouter.post('/categories', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const categoryData = { ...req.body, storeId: user.storeId };
+    
+    const category = await storage.createCategory(categoryData);
+    res.status(201).json(category);
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({ error: 'Failed to create category' });
+  }
+});
+
+// REPORTS/ANALYTICS
+apiRouter.get('/reports', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const { type, startDate, endDate } = req.query;
+    
+    const reports = await storage.getReports(user.storeId, {
+      type: type as string,
+      startDate: startDate as string,
+      endDate: endDate as string
+    });
+    
+    res.json(reports);
+  } catch (error) {
+    console.error('Error fetching reports:', error);
+    res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+});
+
 // Mount API router BEFORE any other middleware
 app.use('/api', apiRouter);
 

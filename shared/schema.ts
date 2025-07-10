@@ -166,11 +166,12 @@ export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   phone: text("phone").notNull().unique(),
+  storeId: integer("store_id").notNull().references(() => virtualStores.id), // <--- 🔥 AÑADIDO
   whatsappId: text("whatsapp_id"),
   address: text("address"),
   latitude: decimal("latitude", { precision: 10, scale: 8 }),
   longitude: decimal("longitude", { precision: 11, scale: 8 }),
-  mapLink: text("map_link"), // URL clickeable para abrir en Google Maps/GPS
+  mapLink: text("map_link"),
   lastContact: timestamp("last_contact"),
   registrationDate: timestamp("registration_date").defaultNow(),
   totalOrders: integer("total_orders").default(0),
@@ -178,6 +179,7 @@ export const customers = pgTable("customers", {
   isVip: boolean("is_vip").default(false),
   notes: text("notes"),
 });
+
 
 export const customerHistory = pgTable("customer_history", {
   id: serial("id").primaryKey(),
@@ -447,10 +449,13 @@ export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
 });
 
-export const insertCustomerSchema = createInsertSchema(customers).omit({
-  id: true,
-  lastContact: true,
-});
+const baseCustomerSchema = createInsertSchema(customers);
+export const insertCustomerSchema = baseCustomerSchema
+  .omit({ id: true }) // ❗️solo 'id' es parte del insertSchema por defecto
+  .extend({
+    storeId: z.number(),
+  });
+
 
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,

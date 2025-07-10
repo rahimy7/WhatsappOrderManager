@@ -146,6 +146,7 @@ export interface IStorage {
 
   // Conversations
   getConversation(id: number): Promise<ConversationWithDetails | undefined>;
+  getAllConversations(storeId: number): Promise<ConversationWithDetails[]>;
   getActiveConversations(): Promise<ConversationWithDetails[]>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   updateConversation(id: number, updates: Partial<InsertConversation>): Promise<Conversation | undefined>;
@@ -877,6 +878,23 @@ export class DatabaseStorage implements IStorage {
 
     return conversationsWithDetails.filter(conv => conv !== undefined) as ConversationWithDetails[];
   }
+
+  async getAllConversations(storeId: number): Promise<ConversationWithDetails[]> {
+  const convs = await db.select()
+    .from(conversations)
+    .leftJoin(customers, eq(conversations.customerId, customers.id))
+    .where(eq(customers.storeId, storeId))
+    .orderBy(desc(conversations.lastMessageAt));
+
+  const conversationsWithDetails = await Promise.all(
+    convs.map(async ({ conversation }) => {
+      return await this.getConversation(conversation.id);
+    })
+  );
+
+  return conversationsWithDetails.filter(conv => conv !== undefined) as ConversationWithDetails[];
+}
+
 
   async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
     const [conversation] = await db.insert(conversations).values(insertConversation).returning();
