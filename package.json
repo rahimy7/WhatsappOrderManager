@@ -10,7 +10,9 @@
     "build:client": "vite build",
     "build:server": "esbuild server/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:./node_modules/* --format=esm --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
     "start": "NODE_ENV=production node dist/index.js",
-    "preview": "npm run build && npm run start"
+    "preview": "npm run build && npm run start",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "npm run build"
   },
     "engines": {
         "node": ">=18.0.0",
