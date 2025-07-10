@@ -5,21 +5,13 @@
     "license": "MIT",
     "packageManager": "yarn@4.0.0",
     "scripts": {
-        "dev": "tsx watch server/index.ts",
-        "dev:server": "tsx watch server/index.ts",
-        "dev:client": "vite",
-        "build": "yarn build:client && yarn build:server",
-        "build:client": "vite build --outDir dist/public",
-        "build:server": "esbuild server/index.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/server.js --external:@neondatabase/serverless --external:ws --external:bufferutil --external:@babel/preset-typescript/package.json --external:../pkg --external:lightningcss",
-        "start": "node dist/server.js",
-        "start:local": "tsx server/index.ts",
-        "preview": "vite preview",
-        "railway:build": "yarn build",
-        "railway:start": "yarn start",
-        "vercel-build": "yarn build",
-        "clean": "rm -rf dist node_modules/.cache",
-        "postinstall": "echo 'Dependencies installed successfully'"
-    },
+    "dev": "tsx --watch server/index.ts",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:./node_modules/* --format=esm --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
+    "start": "NODE_ENV=production node dist/index.js",
+    "preview": "npm run build && npm run start"
+  },
     "engines": {
         "node": ">=18.0.0",
         "yarn": ">=3.0.0"
