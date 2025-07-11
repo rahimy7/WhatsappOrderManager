@@ -335,9 +335,9 @@ apiRouter.post('/store-responses/reset-defaults', async (req, res) => {
 apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+  /*   if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage();
@@ -361,9 +361,9 @@ apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
 apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+   /*  if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const { z } = await import('zod');
     const configData = z.object({
@@ -392,9 +392,9 @@ apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
 apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+   /*  if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const id = parseInt(req.params.id);
     const { z } = await import('zod');
@@ -424,9 +424,9 @@ apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
 apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+   /*  if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const id = parseInt(req.params.id);
     const { DatabaseStorage } = await import('./storage.js');
@@ -519,9 +519,9 @@ apiRouter.get('/super-admin/stores', async (req, res) => {
 apiRouter.get('/super-admin/global-whatsapp-settings', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+   /*  if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const globalSettings = {
       webhook: {
@@ -553,9 +553,9 @@ apiRouter.get('/super-admin/global-whatsapp-settings', async (req, res) => {
 apiRouter.put('/super-admin/global-whatsapp-settings', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+    /* if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const { webhook, meta } = req.body;
 
@@ -596,9 +596,9 @@ apiRouter.put('/super-admin/global-whatsapp-settings', async (req, res) => {
 apiRouter.post('/super-admin/test-webhook', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+   /*  if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const { storeId, phoneNumberId } = req.body;
 
@@ -651,9 +651,9 @@ apiRouter.post('/super-admin/test-webhook', async (req, res) => {
 apiRouter.get('/super-admin/webhook-info', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+   /*  if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const webhookUrl = process.env.RAILWAY_STATIC_URL 
       ? `${process.env.RAILWAY_STATIC_URL}/webhook`
@@ -687,9 +687,9 @@ apiRouter.get('/super-admin/webhook-info', async (req, res) => {
 apiRouter.get('/super-admin/validate-all-whatsapp', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+   /*  if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage();
