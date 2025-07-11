@@ -18,12 +18,15 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
 
-    // Validación segura
-    if (typeof decoded !== 'object' || decoded === null || !('storeId' in decoded)) {
-      return res.status(403).json({ error: 'Token inválido o incompleto' });
+    if (typeof decoded !== 'object' || decoded === null) {
+      return res.status(403).json({ error: 'Token inválido' });
     }
 
-    // Type assertion confiable
+    // 🧠 Permitir sin storeId si es nivel global
+    if (!('storeId' in decoded) && (decoded as any).level !== 'global') {
+      return res.status(403).json({ error: 'Token incompleto - falta storeId' });
+    }
+
     req.user = decoded as AuthUser;
     next();
   } catch (err) {

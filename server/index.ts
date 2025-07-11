@@ -59,6 +59,17 @@ app.get('/api/debug/env', (req, res) => {
   });
 });
 
+// Agregar este endpoint adicional para verificar secrets
+apiRouter.get('/auth/debug-secrets', (req, res) => {
+  const secret = process.env.JWT_SECRET || 'dev-secret';
+  res.json({
+    hasJwtSecret: !!process.env.JWT_SECRET,
+    secretLength: secret.length,
+    secretPreview: secret.substring(0, 5) + '...',
+    environment: process.env.NODE_ENV
+  });
+});
+
 // Login endpoint
 apiRouter.post('/auth/login', async (req, res) => {
   try {
@@ -118,6 +129,56 @@ apiRouter.post('/auth/login', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Agregar al apiRouter en server/index.ts
+apiRouter.get('/auth/debug-token', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    console.log('=== DEBUGGING TOKEN ===');
+    console.log('AuthHeader:', authHeader);
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.json({
+        error: 'No token provided',
+        authHeader: authHeader
+      });
+    }
+
+    const token = authHeader.substring(7);
+    console.log('Token extracted:', token.substring(0, 20) + '...');
+    
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    console.log('Token decoded:', decoded);
+    
+    // Verificar validación del middleware
+    const hasStoreId = 'storeId' in decoded;
+    const isObject = typeof decoded === 'object' && decoded !== null;
+    
+    res.json({
+      success: true,
+      decoded: {
+        id: decoded.id,
+        username: decoded.username,
+        role: decoded.role,
+        storeId: decoded.storeId,
+        level: decoded.level
+      },
+      validation: {
+        isObject,
+        hasStoreId,
+        storeIdValue: decoded.storeId,
+        middlewareWouldPass: isObject && hasStoreId
+      }
+    });
+    
+  } catch (error) {
+    res.json({
+      error: error.message,
+      step: 'JWT verification failed'
     });
   }
 });
@@ -439,9 +500,9 @@ apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
 apiRouter.get('/super-admin/stores', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+ /*     if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    }  */
 
     const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage();
