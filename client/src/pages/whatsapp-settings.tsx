@@ -63,15 +63,17 @@ export default function WhatsAppSettings() {
   });
 
   // Obtener configuración actual
-  const { data: config, isLoading: configLoading, refetch: refetchConfig } = useQuery({
-    queryKey: ["/api/settings/whatsapp"]
-  });
+ // Obtener configuración actual
+// Obtener configuración actual
+const { data: config, isLoading: configLoading, refetch: refetchConfig } = useQuery<WhatsAppConfig>({
+  queryKey: ["/api/whatsapp-settings"]
+});
 
-  // Obtener estado de conexión
-  const { data: status, refetch: refetchStatus } = useQuery({
-    queryKey: ["/api/whatsapp/status"],
-    refetchInterval: 30000 // Auto-refresh cada 30 segundos
-  });
+// Obtener estado de conexión
+const { data: status, refetch: refetchStatus } = useQuery<WhatsAppStatus>({
+  queryKey: ["/api/whatsapp/status"],
+  refetchInterval: 30000
+});
 
   // Actualizar formData cuando se obtiene la configuración
   useEffect(() => {
@@ -88,38 +90,49 @@ export default function WhatsAppSettings() {
   }, [config]);
 
   // Mutación para actualizar configuración
-  const updateConfigMutation = useMutation({
-    mutationFn: (data: WhatsAppConfig) => 
-      apiRequest("PUT", "/api/settings/whatsapp", data),
-    onSuccess: () => {
-      toast({
-        title: "Configuración actualizada",
-        description: "Los cambios se guardaron correctamente"
-      });
-      refetchConfig();
-      refetchStatus();
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error?.message || "No se pudo actualizar la configuración",
-        variant: "destructive"
-      });
-    }
-  });
 
-  // Mutación para probar conexión
-  const testConnectionMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/whatsapp/test-connection"),
-    onSuccess: (data: any) => {
-      toast({
-        title: "Prueba de conexión",
-        description: data.success ? "Conexión exitosa" : "Error en la conexión",
-        variant: data.success ? "default" : "destructive"
-      });
-      refetchStatus();
-    }
-  });
+const updateConfigMutation = useMutation({
+  mutationFn: (data: WhatsAppConfig) => 
+    apiRequest("PUT", "/api/whatsapp-settings", data),
+  onSuccess: () => {
+    toast({
+      title: "Configuración actualizada",
+      description: "Los cambios se guardaron correctamente"
+    });
+    refetchConfig();
+    refetchStatus();
+  },
+  onError: (error: any) => {
+    toast({
+      title: "Error",
+      description: error?.message || "No se pudo actualizar la configuración",
+      variant: "destructive"
+    });
+  }
+});
+
+const testConnectionMutation = useMutation({
+  mutationFn: () => apiRequest("POST", "/api/super-admin/whatsapp-test", {
+    storeId: user?.storeId || user?.storeId,
+    phoneNumberId: formData.phoneNumberId || config?.phoneNumberId
+  }),
+  onSuccess: (data: any) => {
+    toast({
+      title: "Prueba de conexión",
+      description: data.success ? (data.message || "Conexión exitosa") : (data.message || "Error en la conexión"),
+      variant: data.success ? "default" : "destructive"
+    });
+    refetchStatus();
+  },
+  onError: (error: any) => {
+    toast({
+      title: "Error de conexión",
+      description: error?.message || "No se pudo probar la conexión",
+      variant: "destructive"
+    });
+  }
+});
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

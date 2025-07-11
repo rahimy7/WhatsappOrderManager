@@ -67,8 +67,8 @@ function StoreSettings() {
   const { toast } = useToast();
   
   const { data: storeConfig = {}, isLoading } = useQuery<any>({
-    queryKey: ["/api/settings/store"],
-  });
+  queryKey: ["/api/store-settings"], // O verificar cuál es el endpoint correcto
+});
 
   const form = useForm<StoreConfig>({
     resolver: zodResolver(storeConfigSchema),
@@ -98,7 +98,7 @@ function StoreSettings() {
 
   const saveStoreConfigMutation = useMutation({
     mutationFn: async (data: StoreConfig) => {
-      return apiRequest("PUT", "/api/settings/store", data);
+      return apiRequest("PUT", "/api/store-settings", data);
     },
     onSuccess: () => {
       toast({
@@ -220,27 +220,19 @@ export default function Settings() {
   const { user } = useAuth();
 
   const { data: config = {}, isLoading } = useQuery<any>({
-    queryKey: ["/api/settings/whatsapp"],
-  });
+  queryKey: ["/api/whatsapp-settings"],
+});
 
   const { data: connectionStatus = {} } = useQuery<any>({
     queryKey: ["/api/whatsapp/status"],
   });
 
-  const { data: whatsappLogs = [], refetch: refetchLogs } = useQuery<any[]>({
-    queryKey: ["/api/whatsapp/logs"],
-    refetchInterval: autoRefreshLogs ? 3000 : false, // Auto-refresh every 3 seconds
-  });
+ const { data: whatsappLogs = [], refetch: refetchLogs } = useQuery<any[]>({
+  queryKey: ["/api/whatsapp/logs"],
+  refetchInterval: autoRefreshLogs ? 30000 : false, // ← 30 segundos en lugar de 3
+});
 
-  // Auto-refresh logs effect
-  useEffect(() => {
-    if (autoRefreshLogs) {
-      const interval = setInterval(() => {
-        refetchLogs();
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [autoRefreshLogs, refetchLogs]);
+ 
 
   const form = useForm<WhatsAppConfig>({
     resolver: zodResolver(whatsappConfigSchema),
@@ -319,10 +311,10 @@ export default function Settings() {
       
       const validatedFields = whatsappPartialSchema.parse(fieldsToValidate);
 
-      return apiRequest("PATCH", "/api/settings/whatsapp", validatedFields);
+      return apiRequest("PUT", "/api/whatsapp-settings", validatedFields);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/whatsapp"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       toast({
         title: "Configuración guardada",
@@ -342,7 +334,10 @@ export default function Settings() {
     mutationFn: async () => {
       setIsTestingConnection(true);
       const storeId = user?.storeId || user?.companyId;
-      return apiRequest("POST", "/api/whatsapp/test-connection", { storeId });
+      return apiRequest("POST", "/api/super-admin/whatsapp-test", { 
+  storeId,
+  phoneNumberId: config.whatsappPhoneNumberId || ""
+});
     },
     onSuccess: (result: any) => {
       setIsTestingConnection(false);

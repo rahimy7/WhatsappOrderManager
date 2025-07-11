@@ -1152,7 +1152,7 @@ apiRouter.get('/notifications/count', authenticateToken, async (req, res) => {
     
     const user = (req as any).user;
     const userId = parseInt(req.query.userId as string) || user.id;
-    const counts = await storage.getNotificationCounts(userId, user.storeId);
+    const counts = await storage.getNotificationCounts(userId);
     res.json(counts);
   } catch (error) {
     console.error('Error fetching notification counts:', error);

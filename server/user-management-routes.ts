@@ -6,10 +6,11 @@
 import { Express, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';  // ← Agregar count aquí
 import { masterDb } from './multi-tenant-db.js';
 import * as schema from '../shared/schema.ts';
 import { AuthUser } from './auth-types.js';
+
 
 // Middleware de autenticación simplificado
 function authenticateToken(req: Request, res: Response, next: any) {
@@ -68,63 +69,77 @@ export function registerUserManagementRoutes(app: Express) {
   });
 
   // Crear nuevo usuario de tienda (system_users)
-  app.post('/api/super-admin/users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
-    try {
-      const { name, email, role, storeId, username, password } = req.body;
+// Crear nuevo usuario de tienda (system_users)
+app.post('/api/super-admin/users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const { name, email, role, storeId, username, password, sendInvitation, invitationMessage } = req.body;
 
-      // Validar que la tienda existe
-      const [store] = await masterDb
-        .select()
-        .from(schema.virtualStores)
-        .where(eq(schema.virtualStores.id, storeId))
-        .limit(1);
+    // Validar que la tienda existe
+    const [store] = await masterDb
+      .select()
+      .from(schema.virtualStores)
+      .where(eq(schema.virtualStores.id, storeId))
+      .limit(1);
 
-      if (!store) {
-        return res.status(400).json({ error: 'Store not found' });
-      }
-
-      // Verificar si el email ya existe
-      const [existingUser] = await masterDb
-        .select()
-        .from(schema.systemUsers)
-        .where(eq(schema.systemUsers.email, email))
-        .limit(1);
-
-      if (existingUser) {
-        return res.status(400).json({ error: 'Email already exists' });
-      }
-
-      // Hash de la contraseña
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      // Crear usuario
-      const [newUser] = await masterDb
-        .insert(schema.systemUsers)
-        .values({
-          name,
-          username,
-          email,
-          password: hashedPassword,
-          role,
-          storeId,
-          isActive: true
-        })
-        .returning();
-
-      res.status(201).json({
-        id: newUser.id,
-        username: newUser.username,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        storeId: newUser.storeId,
-        isActive: newUser.isActive
-      });
-    } catch (error) {
-      console.error('Error creating system user:', error);
-      res.status(500).json({ error: 'Failed to create user' });
+    if (!store) {
+      return res.status(400).json({ error: 'Store not found' });
     }
-  });
+
+    // Verificar si el email ya existe
+    const [existingUser] = await masterDb
+      .select()
+      .from(schema.systemUsers)
+      .where(eq(schema.systemUsers.email, email))
+      .limit(1);
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    // Generar username automáticamente si no se proporciona
+    const finalUsername = username || `${name.toLowerCase().replace(/\s+/g, '')}_${Date.now()}`;
+
+    // Generar contraseña temporal si no se proporciona
+    const tempPassword = password || Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
+
+    // Hash de la contraseña
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    // Crear usuario
+    const [newUser] = await masterDb
+      .insert(schema.systemUsers)
+      .values({
+        name,
+        username: finalUsername,
+        email,
+        password: hashedPassword,
+        role,
+        storeId,
+        isActive: true
+      })
+      .returning();
+
+    // TODO: Implementar envío de email si sendInvitation es true
+    const invitationSent = false; // Por ahora false hasta implementar email
+
+    // Respuesta con todos los campos que el frontend espera
+    res.status(201).json({
+      id: newUser.id,
+      username: newUser.username,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      storeId: newUser.storeId,
+      isActive: newUser.isActive,
+      tempPassword: tempPassword, // ← ¡AGREGADO!
+      storeName: store.name, // ← ¡AGREGADO!
+      invitationSent: invitationSent // ← ¡AGREGADO!
+    });
+  } catch (error) {
+    console.error('Error creating system user:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
 
   // Actualizar usuario de tienda
   app.put('/api/super-admin/users/:id', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
@@ -210,41 +225,45 @@ export function registerUserManagementRoutes(app: Express) {
   });
 
   // Métricas de usuarios
-  app.get('/api/super-admin/user-metrics', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
-    try {
-      // Contar usuarios del sistema
-      const totalUsers = await masterDb
-        .select({ count: schema.systemUsers.id })
-        .from(schema.systemUsers);
+// Métricas de usuarios
+app.get('/api/super-admin/user-metrics', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+  try {
+    // ✅ CORRECTO: Usar count() apropiadamente
+    const [totalUsersResult] = await masterDb
+      .select({ count: count() })
+      .from(schema.systemUsers);
 
-      const activeUsers = await masterDb
-        .select({ count: schema.systemUsers.id })
-        .from(schema.systemUsers)
-        .where(eq(schema.systemUsers.isActive, true));
+    const [activeUsersResult] = await masterDb
+      .select({ count: count() })
+      .from(schema.systemUsers)
+      .where(eq(schema.systemUsers.isActive, true));
 
-      // Contar por roles
-      const roleStats = await masterDb
-        .select({
-          role: schema.systemUsers.role,
-          count: schema.systemUsers.id
-        })
-        .from(schema.systemUsers)
-        .groupBy(schema.systemUsers.role);
+    // ✅ CORRECTO: Estadísticas por roles
+    const roleStats = await masterDb
+      .select({
+        role: schema.systemUsers.role,
+        count: count()
+      })
+      .from(schema.systemUsers)
+      .groupBy(schema.systemUsers.role);
 
-      res.json({
-        totalUsers: totalUsers.length,
-        activeUsers: activeUsers.length,
-        inactiveUsers: totalUsers.length - activeUsers.length,
-        roleDistribution: roleStats.reduce((acc: any, curr: any) => {
-          acc[curr.role] = curr.count;
-          return acc;
-        }, {})
-      });
-    } catch (error) {
-      console.error('Error fetching user metrics:', error);
-      res.status(500).json({ error: 'Failed to fetch user metrics' });
-    }
-  });
+    const totalUsers = totalUsersResult.count;
+    const activeUsers = activeUsersResult.count;
+
+    res.json({
+      totalUsers,
+      activeUsers,
+      inactiveUsers: totalUsers - activeUsers,
+      roleDistribution: roleStats.reduce((acc: any, curr: any) => {
+        acc[curr.role] = curr.count;
+        return acc;
+      }, {})
+    });
+  } catch (error) {
+    console.error('Error fetching user metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch user metrics' });
+  }
+});
 
   // ============= GESTIÓN DE USUARIOS OPERACIONALES (schemas de tienda) =============
 

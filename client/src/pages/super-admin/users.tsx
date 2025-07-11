@@ -616,7 +616,10 @@ export default function SuperAdminUsers() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-sm font-medium">Tienda Asignada</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value?.toString() || ""}>
+                           <Select 
+  onValueChange={(value) => field.onChange(parseInt(value))} 
+  value={field.value?.toString() || ""}
+>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Seleccionar tienda" />

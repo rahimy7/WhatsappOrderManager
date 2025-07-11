@@ -1689,23 +1689,26 @@ async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppS
   async deleteNotification(id: number): Promise<void> {
     await db.delete(notifications).where(eq(notifications.id, id));
   }
+async getNotificationCounts(userId: number): Promise<{ total: number; unread: number }> {
+  const [totalResult] = await db
+    .select({ count: count() })
+    .from(notifications)
+    .where(eq(notifications.userId, userId));
 
-  async getNotificationCount(userId: number): Promise<{ total: number; unread: number }> {
-    const [totalResult] = await db
-      .select({ count: count() })
-      .from(notifications)
-      .where(eq(notifications.userId, userId));
+  const [unreadResult] = await db
+    .select({ count: count() })
+    .from(notifications)
+    .where(and(
+      eq(notifications.userId, userId), 
+      eq(notifications.isRead, false)
+    ));
 
-    const [unreadResult] = await db
-      .select({ count: count() })
-      .from(notifications)
-      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
-
-    return {
-      total: totalResult.count,
-      unread: unreadResult.count,
-    };
-  }
+  return {
+    total: totalResult.count,
+    unread: unreadResult.count,
+  };
+}
+ 
 
   // Conversation Type Logic for WhatsApp Segmentation
   async determineConversationType(customerId: number): Promise<'initial' | 'tracking' | 'support'> {

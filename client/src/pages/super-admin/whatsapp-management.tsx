@@ -61,14 +61,14 @@ export default function WhatsAppManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch WhatsApp configs
-  const { data: configs = [], isLoading: configsLoading } = useQuery({
+  // ✅ CORREGIDO - Fetch WhatsApp configs con tipado explícito
+  const { data: configs = [], isLoading: configsLoading } = useQuery<WhatsAppConfig[]>({
     queryKey: ["/api/super-admin/whatsapp-configs"],
     staleTime: 30000,
   });
 
-  // Fetch stores
-  const { data: stores = [], isLoading: storesLoading } = useQuery({
+  // ✅ CORREGIDO - Fetch stores con tipado explícito
+  const { data: stores = [], isLoading: storesLoading } = useQuery<VirtualStore[]>({
     queryKey: ["/api/super-admin/stores"],
     staleTime: 60000,
   });
@@ -263,58 +263,36 @@ export default function WhatsAppManagement() {
             </Button>
           </div>
         </div>
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="bg-white/90 backdrop-blur-sm border-emerald-100">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Configuraciones</CardTitle>
-              <MessageCircle className="h-4 w-4 text-emerald-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{configs.length}</div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-white/90 backdrop-blur-sm border-emerald-100">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Configuraciones Activas</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900">
-                {configs.filter((c: WhatsAppConfig) => c.isActive).length}
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-white/90 backdrop-blur-sm border-emerald-100">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Tiendas Conectadas</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900">
-                {new Set(configs.map((c: WhatsAppConfig) => c.storeId)).size}
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-white/90 backdrop-blur-sm border-emerald-100">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Tiendas Disponibles</CardTitle>
-              <XCircle className="h-4 w-4 text-gray-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{stores.length}</div>
-            </CardContent>
-          </Card>
-        </div>
-
+{/* ✅ CORREGIDO - Statistics Cards sin type assertions */}
+  <Card className="bg-white/90 backdrop-blur-sm border-emerald-100">
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardTitle className="text-sm font-medium text-gray-600">Configuraciones Activas</CardTitle>
+      <CheckCircle className="h-4 w-4 text-green-600" />
+    </CardHeader>
+    <CardContent>
+      <div className="text-2xl font-bold text-gray-900">
+        {configs.filter(c => c.isActive).length}
+      </div>
+    </CardContent>
+  </Card>
+  
+  <Card className="bg-white/90 backdrop-blur-sm border-emerald-100">
+    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardTitle className="text-sm font-medium text-gray-600">Tiendas Conectadas</CardTitle>
+      <AlertTriangle className="h-4 w-4 text-orange-600" />
+    </CardHeader>
+    <CardContent>
+      <div className="text-2xl font-bold text-gray-900">
+        {new Set(configs.map(c => c.storeId)).size}
+      </div>
+    </CardContent>
+  </Card>
+       
+    
         {/* Configuration Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {configs.map((config: WhatsAppConfig) => (
-            <Card key={config.id} className="bg-white/90 backdrop-blur-sm border-emerald-100 hover:shadow-lg transition-all duration-200">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+    {configs.map(config => (
+      <Card key={config.id} className="bg-white/90 backdrop-blur-sm border-emerald-100 hover:shadow-lg transition-all duration-200">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg text-gray-900 flex items-center">
@@ -465,12 +443,12 @@ export default function WhatsAppManagement() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {stores.map((store: VirtualStore) => (
-                            <SelectItem key={store.id} value={store.id.toString()}>
-                              {store.name} (ID: {store.id})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
+    {stores.map(store => (
+      <SelectItem key={store.id} value={store.id.toString()}>
+        {store.name} (ID: {store.id})
+      </SelectItem>
+    ))}
+  </SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
