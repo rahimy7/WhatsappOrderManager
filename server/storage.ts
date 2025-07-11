@@ -1084,34 +1084,36 @@ async getWhatsAppConfigByPhoneNumberId(phoneNumberId: string): Promise<WhatsAppS
 }
 
 
-
-  async updateWhatsAppConfig(config: InsertWhatsAppSettings, storeId?: number): Promise<WhatsAppSettings> {
-    // Obtener la configuración activa existente - se debe pasar storeId
-    const targetStoreId = storeId || config.storeId;
-    const existingConfig = await this.getWhatsAppConfig(targetStoreId);
-    
-    if (existingConfig) {
-      // Actualizar la configuración existente
-      const [updatedConfig] = await db
-        .update(whatsappSettings)
-        .set({
-          ...config,
-          updatedAt: new Date()
-        })
-        .where(eq(whatsappSettings.id, existingConfig.id))
-        .returning();
-      
-      return updatedConfig;
-    } else {
-      // Si no hay configuración existente, crear una nueva
-      const [newConfig] = await db.insert(whatsappSettings).values({
+async updateWhatsAppConfig(config: InsertWhatsAppSettings, storeId?: number): Promise<WhatsAppSettings> {
+  // Obtener la configuración activa existente - se debe pasar storeId
+  const targetStoreId = storeId || config.storeId;
+  const existingConfig = await this.getWhatsAppConfig(targetStoreId);
+  
+  if (existingConfig) {
+    // Actualizar la configuración existente
+    const [updatedConfig] = await db
+      .update(whatsappSettings)
+      .set({
         ...config,
-        isActive: true
-      }).returning();
-      
-      return newConfig;
-    }
+        storeId: targetStoreId,  // ✅ AGREGADO: Asegurar que storeId esté presente en update
+        updatedAt: new Date()
+      })
+      .where(eq(whatsappSettings.id, existingConfig.id))
+      .returning();
+    
+    return updatedConfig;
+  } else {
+    // ✅ CORREGIDO: Si no hay configuración existente, crear una nueva CON storeId
+    const [newConfig] = await db.insert(whatsappSettings).values({
+      ...config,
+      storeId: targetStoreId,  // ✅ AGREGADO: Incluir explícitamente el storeId
+      isActive: true
+    }).returning();
+    
+    return newConfig;
   }
+}
+
 
   // WhatsApp Logs with PostgreSQL
   async getWhatsAppLogs(): Promise<WhatsAppLog[]> {

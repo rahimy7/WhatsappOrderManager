@@ -66,9 +66,10 @@ type StoreConfig = z.infer<typeof storeConfigSchema>;
 function StoreSettings() {
   const { toast } = useToast();
   
+  // ✅ CORREGIDO: Endpoint correcto
   const { data: storeConfig = {}, isLoading } = useQuery<any>({
-  queryKey: ["/api/store-settings"], // O verificar cuál es el endpoint correcto
-});
+    queryKey: ["/api/store-settings"],
+  });
 
   const form = useForm<StoreConfig>({
     resolver: zodResolver(storeConfigSchema),
@@ -98,6 +99,7 @@ function StoreSettings() {
 
   const saveStoreConfigMutation = useMutation({
     mutationFn: async (data: StoreConfig) => {
+      // ✅ CORREGIDO: Endpoint correcto
       return apiRequest("PUT", "/api/store-settings", data);
     },
     onSuccess: () => {
@@ -105,7 +107,8 @@ function StoreSettings() {
         title: "Configuración guardada",
         description: "La configuración de la tienda se ha guardado correctamente",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/store"] });
+      // ✅ CORREGIDO: Invalidar query correcto
+      queryClient.invalidateQueries({ queryKey: ["/api/store-settings"] });
     },
     onError: (error: any) => {
       toast({
@@ -157,8 +160,6 @@ function StoreSettings() {
                 <p className="text-sm text-red-600">{form.formState.errors.storeName.message}</p>
               )}
             </div>
-
-
 
             {/* Dirección de la tienda */}
             <div className="space-y-2">
@@ -219,20 +220,22 @@ export default function Settings() {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // ✅ CORREGIDO: Endpoint correcto
   const { data: config = {}, isLoading } = useQuery<any>({
-  queryKey: ["/api/whatsapp-settings"],
-});
+    queryKey: ["/api/whatsapp-settings"],
+  });
 
   const { data: connectionStatus = {} } = useQuery<any>({
     queryKey: ["/api/whatsapp/status"],
   });
 
- const { data: whatsappLogs = [], refetch: refetchLogs } = useQuery<any[]>({
-  queryKey: ["/api/whatsapp/logs"],
-  refetchInterval: autoRefreshLogs ? 30000 : false, // ← 30 segundos en lugar de 3
-});
+  // ✅ CORREGIDO: Polling cada 30 segundos en lugar de 3
+  const { data: whatsappLogs = [], refetch: refetchLogs } = useQuery<any[]>({
+    queryKey: ["/api/whatsapp/logs"],
+    refetchInterval: autoRefreshLogs ? 30000 : false, // 30 segundos
+  });
 
- 
+  // ✅ ELIMINADO: useEffect duplicado de polling que causaba spam
 
   const form = useForm<WhatsAppConfig>({
     resolver: zodResolver(whatsappConfigSchema),
@@ -248,16 +251,16 @@ export default function Settings() {
     },
   });
 
-  // Actualizar formulario cuando cambian los datos de configuración
+  // ✅ CORREGIDO: Mapear campos del backend al frontend
   useEffect(() => {
     if (config && !isLoading) {
       const newValues = {
-        metaAppId: config.metaAppId || "",
+        metaAppId: config.appId || "",
         metaAppSecret: config.metaAppSecret || "",
-        whatsappBusinessAccountId: config.whatsappBusinessAccountId || "",
-        whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
-        whatsappToken: config.whatsappToken && !config.whatsappToken.startsWith("****") ? config.whatsappToken : "",
-        whatsappVerifyToken: config.whatsappVerifyToken && !config.whatsappVerifyToken.startsWith("****") ? config.whatsappVerifyToken : "",
+        whatsappBusinessAccountId: config.businessAccountId || "",
+        whatsappPhoneNumberId: config.phoneNumberId || "",
+        whatsappToken: config.accessToken && !config.accessToken.startsWith("****") ? config.accessToken : "",
+        whatsappVerifyToken: config.webhookVerifyToken && !config.webhookVerifyToken.startsWith("****") ? config.webhookVerifyToken : "",
         webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
         storeWhatsAppNumber: config.storeWhatsAppNumber || "",
       };
@@ -277,12 +280,12 @@ export default function Settings() {
       // Detectar solo los campos que han cambiado y no están vacíos
       const changedFields: Partial<WhatsAppConfig> = {};
       const originalData = {
-        metaAppId: config.metaAppId || "",
+        metaAppId: config.appId || "",
         metaAppSecret: config.metaAppSecret || "",
-        whatsappBusinessAccountId: config.whatsappBusinessAccountId || "",
-        whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
-        whatsappToken: config.whatsappToken || "",
-        whatsappVerifyToken: config.whatsappVerifyToken || "",
+        whatsappBusinessAccountId: config.businessAccountId || "",
+        whatsappPhoneNumberId: config.phoneNumberId || "",
+        whatsappToken: config.accessToken || "",
+        whatsappVerifyToken: config.webhookVerifyToken || "",
         webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
         storeWhatsAppNumber: config.storeWhatsAppNumber || "",
       };
@@ -311,9 +314,39 @@ export default function Settings() {
       
       const validatedFields = whatsappPartialSchema.parse(fieldsToValidate);
 
-      return apiRequest("PUT", "/api/whatsapp-settings", validatedFields);
+      // ✅ CORREGIDO: Mapear campos del frontend al formato del backend
+      const backendFields: any = {};
+
+      if (validatedFields.whatsappToken) {
+        backendFields.accessToken = validatedFields.whatsappToken;
+      }
+      if (validatedFields.whatsappPhoneNumberId) {
+        backendFields.phoneNumberId = validatedFields.whatsappPhoneNumberId;
+      }
+      if (validatedFields.whatsappBusinessAccountId) {
+        backendFields.businessAccountId = validatedFields.whatsappBusinessAccountId;
+      }
+      if (validatedFields.metaAppId) {
+        backendFields.appId = validatedFields.metaAppId;
+      }
+      if (validatedFields.whatsappVerifyToken) {
+        backendFields.webhookVerifyToken = validatedFields.whatsappVerifyToken;
+      }
+      if (validatedFields.webhookUrl) {
+        backendFields.webhookUrl = validatedFields.webhookUrl;
+      }
+      if (validatedFields.storeWhatsAppNumber) {
+        backendFields.storeWhatsAppNumber = validatedFields.storeWhatsAppNumber;
+      }
+      if (validatedFields.metaAppSecret) {
+        backendFields.metaAppSecret = validatedFields.metaAppSecret;
+      }
+
+      // ✅ CORREGIDO: Endpoint y método correctos
+      return apiRequest("PUT", "/api/whatsapp-settings", backendFields);
     },
     onSuccess: () => {
+      // ✅ CORREGIDO: Invalidar queries correctos
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       toast({
@@ -330,14 +363,15 @@ export default function Settings() {
     },
   });
 
+  // ✅ CORREGIDO: Endpoint correcto para test connection
   const testConnectionMutation = useMutation({
     mutationFn: async () => {
       setIsTestingConnection(true);
       const storeId = user?.storeId || user?.companyId;
       return apiRequest("POST", "/api/super-admin/whatsapp-test", { 
-  storeId,
-  phoneNumberId: config.whatsappPhoneNumberId || ""
-});
+        storeId,
+        phoneNumberId: config.phoneNumberId || form.getValues().whatsappPhoneNumberId
+      });
     },
     onSuccess: (result: any) => {
       setIsTestingConnection(false);
@@ -753,7 +787,7 @@ export default function Settings() {
                         className="rounded"
                       />
                       <Label htmlFor="autoRefresh" className="text-sm">
-                        Auto-actualizar (3s)
+                        Auto-actualizar (30s)
                       </Label>
                     </div>
                     <Button
@@ -843,7 +877,6 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
-
 
         </Tabs>
       </div>
