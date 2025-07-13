@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface WhatsAppConfig {
   id?: number;
@@ -51,7 +52,7 @@ interface WhatsAppStatus {
 
 export default function WhatsAppSettings() {
   const { toast } = useToast();
-  const user = { username: 'admin', storeId: 5, level: 'store' }; // Temporary user object
+ const { user } = useAuth();
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<WhatsAppConfig>({
     accessToken: "",
@@ -229,7 +230,7 @@ const testConnectionMutation = useMutation({
                 </div>
                 <div>
                   <span className="text-muted-foreground">Nivel:</span>
-                  <Badge variant="outline" className="ml-2">{user?.level || 'N/A'}</Badge>
+                 <Badge variant="outline" className="ml-2">{user?.role || 'N/A'}</Badge>
                 </div>
               </div>
             </div>

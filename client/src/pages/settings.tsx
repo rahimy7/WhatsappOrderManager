@@ -27,6 +27,28 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// Interfaces para tipado
+interface WhatsAppLog {
+  id: number;
+  type: 'incoming' | 'outgoing' | 'error' | 'webhook';
+  phoneNumber?: string;
+  messageContent?: string;
+  messageId?: string;
+  status?: string;
+  errorMessage?: string;
+  timestamp: string;
+  rawData?: string;
+}
+
+interface WhatsAppLogStats {
+  total: number;
+  success: number;
+  errors: number;
+  today: number;
+  thisWeek: number;
+  thisMonth: number;
+}
+
 // Schema completo para validación inicial
 const whatsappConfigSchema = z.object({
   metaAppId: z.string().optional(),
@@ -66,7 +88,6 @@ type StoreConfig = z.infer<typeof storeConfigSchema>;
 function StoreSettings() {
   const { toast } = useToast();
   
-  // ✅ CORREGIDO: Endpoint correcto
   const { data: storeConfig = {}, isLoading } = useQuery<any>({
     queryKey: ["/api/store-settings"],
   });
@@ -99,7 +120,6 @@ function StoreSettings() {
 
   const saveStoreConfigMutation = useMutation({
     mutationFn: async (data: StoreConfig) => {
-      // ✅ CORREGIDO: Endpoint correcto
       return apiRequest("PUT", "/api/store-settings", data);
     },
     onSuccess: () => {
@@ -107,7 +127,6 @@ function StoreSettings() {
         title: "Configuración guardada",
         description: "La configuración de la tienda se ha guardado correctamente",
       });
-      // ✅ CORREGIDO: Invalidar query correcto
       queryClient.invalidateQueries({ queryKey: ["/api/store-settings"] });
     },
     onError: (error: any) => {
@@ -219,8 +238,13 @@ export default function Settings() {
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
+ console.log("🔍 Settings Debug:");
+  console.log("user:", user);
+  console.log("user?.storeId:", user?.storeId);
+  console.log("!!user?.storeId:", !!user?.storeId);
+  if (!user) return <div>Loading...</div>;
 
-  // ✅ CORREGIDO: Endpoint correcto
+  // ✅ Queries principales
   const { data: config = {}, isLoading } = useQuery<any>({
     queryKey: ["/api/whatsapp-settings"],
   });
@@ -229,13 +253,19 @@ export default function Settings() {
     queryKey: ["/api/whatsapp/status"],
   });
 
-  // ✅ CORREGIDO: Polling cada 30 segundos en lugar de 3
-  const { data: whatsappLogs = [], refetch: refetchLogs } = useQuery<any[]>({
+  // ✅ CORREGIDO: Query única para logs con condicional auto-refresh
+  const { data: whatsappLogs = [], isLoading: logsLoading, refetch: refetchLogs } = useQuery<WhatsAppLog[]>({
     queryKey: ["/api/whatsapp/logs"],
-    refetchInterval: autoRefreshLogs ? 30000 : false, // 30 segundos
+    refetchInterval: autoRefreshLogs ? 30000 : false, // Respeta la configuración del usuario
+    // enabled: !!user?.storeId
   });
 
-  // ✅ ELIMINADO: useEffect duplicado de polling que causaba spam
+  // ✅ Query para estadísticas de logs
+  const { data: logsStats } = useQuery<WhatsAppLogStats>({
+    queryKey: ["/api/whatsapp/logs/stats"],
+    refetchInterval: autoRefreshLogs ? 60000 : false, // Respeta la configuración del usuario
+    // enabled: !!user?.storeId
+  });
 
   const form = useForm<WhatsAppConfig>({
     resolver: zodResolver(whatsappConfigSchema),
@@ -246,7 +276,7 @@ export default function Settings() {
       whatsappPhoneNumberId: config.whatsappPhoneNumberId || "",
       whatsappToken: config.whatsappToken || "",
       whatsappVerifyToken: config.whatsappVerifyToken || "",
-      webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
+      webhookUrl: config.webhookUrl || "https://whatsappordermanager-production.up.railway.app/webhook",
       storeWhatsAppNumber: config.storeWhatsAppNumber || "",
     },
   });
@@ -261,7 +291,7 @@ export default function Settings() {
         whatsappPhoneNumberId: config.phoneNumberId || "",
         whatsappToken: config.accessToken && !config.accessToken.startsWith("****") ? config.accessToken : "",
         whatsappVerifyToken: config.webhookVerifyToken && !config.webhookVerifyToken.startsWith("****") ? config.webhookVerifyToken : "",
-        webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
+        webhookUrl: config.webhookUrl || "https://whatsappordermanager-production.up.railway.app/webhook",
         storeWhatsAppNumber: config.storeWhatsAppNumber || "",
       };
       
@@ -286,7 +316,7 @@ export default function Settings() {
         whatsappPhoneNumberId: config.phoneNumberId || "",
         whatsappToken: config.accessToken || "",
         whatsappVerifyToken: config.webhookVerifyToken || "",
-        webhookUrl: config.webhookUrl || "https://whatsapp2-production-e205.up.railway.app/webhook",
+        webhookUrl: config.webhookUrl || "https://whatsappordermanager-production.up.railway.app/webhook",
         storeWhatsAppNumber: config.storeWhatsAppNumber || "",
       };
 
@@ -342,11 +372,9 @@ export default function Settings() {
         backendFields.metaAppSecret = validatedFields.metaAppSecret;
       }
 
-      // ✅ CORREGIDO: Endpoint y método correctos
       return apiRequest("PUT", "/api/whatsapp-settings", backendFields);
     },
     onSuccess: () => {
-      // ✅ CORREGIDO: Invalidar queries correctos
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
       toast({
@@ -363,7 +391,6 @@ export default function Settings() {
     },
   });
 
-  // ✅ CORREGIDO: Endpoint correcto para test connection
   const testConnectionMutation = useMutation({
     mutationFn: async () => {
       setIsTestingConnection(true);
@@ -655,7 +682,7 @@ export default function Settings() {
                       <Input
                         id="webhookUrl"
                         {...form.register("webhookUrl")}
-                        placeholder="https://whatsapp2-production-e205.up.railway.app/webhook"
+                        placeholder="https://whatsappordermanager-production.up.railway.app/webhook"
                         className="font-mono"
                       />
                       {form.formState.errors.webhookUrl && (
@@ -794,8 +821,9 @@ export default function Settings() {
                       variant="outline"
                       size="sm"
                       onClick={() => refetchLogs()}
+                      disabled={logsLoading}
                     >
-                      <RefreshCw className="h-4 w-4" />
+                      <RefreshCw className={`h-4 w-4 ${logsLoading ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                 </CardTitle>
@@ -811,14 +839,19 @@ export default function Settings() {
                     <AlertDescription>
                       <strong>Webhook URL configurada:</strong><br />
                       <code className="text-xs bg-gray-100 px-2 py-1 rounded">
-                        https://whatsapp2-production-e205.up.railway.app/webhook
+                        https://whatsappordermanager-production.up.railway.app/webhook
                       </code>
                     </AlertDescription>
                   </Alert>
 
                   {/* Logs Container */}
                   <div className="bg-gray-900 text-gray-100 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm">
-                    {whatsappLogs.length === 0 ? (
+                    {logsLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <RefreshCw className="h-6 w-6 animate-spin text-blue-400" />
+                        <span className="ml-2 text-blue-400">Cargando logs...</span>
+                      </div>
+                    ) : whatsappLogs.length === 0 ? (
                       <div className="text-center text-gray-400 mt-8">
                         <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p>No hay logs disponibles aún</p>
@@ -826,7 +859,7 @@ export default function Settings() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {whatsappLogs.map((log: any) => (
+                        {whatsappLogs.map((log: WhatsAppLog) => (
                           <div key={log.id} className="border-b border-gray-700 pb-2">
                             <div className="flex justify-between items-start">
                               <span className="text-blue-300">
@@ -841,10 +874,10 @@ export default function Settings() {
                               </span>
                             </div>
                             <div className="mt-1">
-                              <p className="text-white">{log.message || log.description}</p>
-                              {log.data && (
+                              <p className="text-white">{log.messageContent || log.errorMessage}</p>
+                              {log.rawData && (
                                 <pre className="text-gray-300 text-xs mt-1 overflow-x-auto">
-                                  {typeof log.data === 'object' ? JSON.stringify(log.data, null, 2) : log.data}
+                                  {typeof log.rawData === 'string' ? log.rawData : JSON.stringify(log.rawData, null, 2)}
                                 </pre>
                               )}
                             </div>
@@ -858,18 +891,20 @@ export default function Settings() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                     <div className="bg-blue-50 p-3 rounded-lg">
                       <p className="text-sm font-medium text-blue-800">Total Logs</p>
-                      <p className="text-lg font-bold text-blue-900">{whatsappLogs.length}</p>
+                      <p className="text-lg font-bold text-blue-900">
+                        {logsStats?.total || whatsappLogs.length}
+                      </p>
                     </div>
                     <div className="bg-green-50 p-3 rounded-lg">
                       <p className="text-sm font-medium text-green-800">Mensajes Entrantes</p>
                       <p className="text-lg font-bold text-green-900">
-                        {whatsappLogs.filter((log: any) => log.type === 'incoming').length}
+                        {whatsappLogs.filter((log: WhatsAppLog) => log.type === 'incoming').length}
                       </p>
                     </div>
                     <div className="bg-orange-50 p-3 rounded-lg">
                       <p className="text-sm font-medium text-orange-800">Mensajes Salientes</p>
                       <p className="text-lg font-bold text-orange-900">
-                        {whatsappLogs.filter((log: any) => log.type === 'outgoing').length}
+                        {whatsappLogs.filter((log: WhatsAppLog) => log.type === 'outgoing').length}
                       </p>
                     </div>
                   </div>

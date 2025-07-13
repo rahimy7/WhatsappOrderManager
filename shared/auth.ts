@@ -27,6 +27,28 @@ export interface AuthResponse {
   token: string;
 }
 
+
+/**
+ * Tipos de autenticación para el sistema multi-tenant
+ */
+
+export interface AuthenticatedRequest extends Request {
+  user?: AuthUser;
+  session?: any;
+  sessionID?: string;
+  files?: any;
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthUser;
+      session?: any;
+      sessionID?: string;
+      files?: any;
+    }
+  }
+}
 // Definición de permisos por rol
 export const rolePermissions = {
   super_admin: [

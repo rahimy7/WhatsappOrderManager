@@ -9,7 +9,7 @@ import { seedAssignmentRules } from "./seed-assignment-rules";
 import { getStoreInfo, getTenantDb, masterDb, tenantMiddleware } from "./multi-tenant-db";
 import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
-import type { AuthenticatedRequest, AuthUser } from './auth-types';
+import type { AuthenticatedRequest, AuthUser } from '@shared/auth.js' ;
 import { WebSocketServer } from 'ws';
 import { authenticateToken } from './authMiddleware.js';
 import path from 'path';
@@ -209,7 +209,7 @@ apiRouter.get('/auth/debug-token', (req, res) => {
         username: decoded.username,
         role: decoded.role,
         storeId: decoded.storeId,
-        level: decoded.level
+        
       },
       validation: {
         isObject,
@@ -245,7 +245,7 @@ apiRouter.get('/auth/me', (req, res) => {
       username: decoded.username,
       role: decoded.role,
       storeId: decoded.storeId,
-      level: decoded.level
+      
     });
   } catch (error) {
     res.status(401).json({ success: false, message: 'Invalid token' });
@@ -1875,7 +1875,7 @@ app.use('/api', apiRouter);
         const token = authHeader.substring(7);
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as any;
         
-        if (!decoded || decoded.level !== 'global' || decoded.role !== 'super_admin') {
+        if (decoded.role !== 'super_admin') {
           return res.status(403).json({ error: "Super admin access required" });
         }
 

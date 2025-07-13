@@ -40,15 +40,25 @@ export function getUserAccessLevel(user: any): 'global' | 'store' | 'tenant' {
 /**
  * Autenticación para usuarios globales (super admin, etc.)
  */
+
 export async function authenticateGlobalUser(username: string, password: string): Promise<AuthUser | null> {
   try {
+    // ✅ CORREGIDO: Usar systemUsers en lugar de users
     const [user] = await masterDb
       .select()
-      .from(schema.users)
-      .where(eq(schema.users.username, username))
+      .from(schema.systemUsers)  // ← CAMBIO AQUÍ
+      .where(eq(schema.systemUsers.username, username))  // ← Y AQUÍ
       .limit(1);
 
     if (!user) return null;
+
+    // ✅ También agregar verificación de contraseña
+    const bcrypt = await import('bcrypt');
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    
+    if (!isValidPassword) {
+      return null;
+    }
 
     return {
       id: user.id,
@@ -61,7 +71,6 @@ export async function authenticateGlobalUser(username: string, password: string)
     return null;
   }
 }
-
 /**
  * Autenticación para usuarios de tienda (propietarios, administradores)
  */

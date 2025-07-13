@@ -1,6 +1,6 @@
 import { type Request, type Response, type NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import type { AuthUser } from './auth-types';
+import type { AuthUser } from '@shared/auth';
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
@@ -23,9 +23,9 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
     }
 
     // 🧠 Permitir sin storeId si es nivel global
-    if (!('storeId' in decoded) && (decoded as any).level !== 'global') {
-      return res.status(403).json({ error: 'Token incompleto - falta storeId' });
-    }
+   if (!('storeId' in decoded) && (decoded as any).role !== 'super_admin') {
+  return res.status(403).json({ error: 'Token incompleto - falta storeId' });
+}
 
     req.user = decoded as AuthUser;
     next();
