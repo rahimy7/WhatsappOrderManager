@@ -24,10 +24,11 @@ export const virtualStores = pgTable("virtual_stores", {
   subscriptionExpiry: timestamp("subscription_expiry"),
   subscriptionPlanId: integer("subscription_plan_id").references(() => subscriptionPlans.id),
   databaseUrl: text("database_url").notNull(), // URL de la base de datos específica de la tienda
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+ createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
   ownerId: integer("owner_id"), // ID del usuario propietario principal
   settings: text("settings"), // JSON con configuraciones específicas de la tienda
+
 });
 
 // Usuarios del sistema multi-tenant (en base de datos maestra)
@@ -179,6 +180,8 @@ export const users = pgTable("users", {
   department: text("department"), // 'technical', 'sales', 'delivery', 'support', 'admin'
   permissions: text("permissions").array(), // Array of specific permissions
   storeId: integer("store_id"),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const customers = pgTable("customers", {
@@ -197,6 +200,8 @@ export const customers = pgTable("customers", {
   totalSpent: decimal("total_spent", { precision: 10, scale: 2 }).default("0.00"),
   isVip: boolean("is_vip").default(false),
   notes: text("notes"),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
 
@@ -337,6 +342,7 @@ export const whatsappLogs = pgTable("whatsapp_logs", {
   id: serial("id").primaryKey(),
   type: text("type").notNull(), // 'incoming', 'outgoing', 'webhook', 'error'
   phoneNumber: text("phone_number"),
+  storeId: integer("store_id").references(() => virtualStores.id).notNull(),
   messageContent: text("message_content"),
   messageId: text("message_id"),
   status: text("status"), // 'sent', 'delivered', 'read', 'failed'
@@ -459,7 +465,7 @@ export const productCategories = pgTable("product_categories", {
   imageUrl: text("image_url"),
   sortOrder: integer("sort_order").default(0),
   isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -474,7 +480,11 @@ export const insertUserSchema = makeInsertSchema(users, {
 export const insertCustomerSchema = makeInsertSchema(customers, {
   storeId: z.number(),
   lastContact: z.date().optional(),
-});
+ totalOrders: z.number().optional(),
+ totalSpent: z.string().optional(),
+isVip: z.boolean().optional(),
+}, ["id", "createdAt", "updatedAt"]);
+
 
 export const insertProductSchema = makeInsertSchema(products);
 
@@ -484,9 +494,12 @@ export const insertOrderSchema = makeInsertSchema(orders, {
 
 export const insertOrderItemSchema = makeInsertSchema(orderItems);
 
-export const insertOrderHistorySchema = makeInsertSchema(orderHistory, {}, ["id", "timestamp"]);
+export const insertOrderHistorySchema = makeInsertSchema(orderHistory, {
+  statusFrom: z.string().nullable().optional()
+}, ["id", "timestamp"]);
 
-export const insertConversationSchema = makeInsertSchema(conversations, {}, ["id", "lastMessageAt"]);
+
+export const insertConversationSchema = makeInsertSchema(conversations, { orderId: z.number().nullable().optional() }, ["id", "lastMessageAt"]);
 
 export const insertMessageSchema = makeInsertSchema(messages, {}, ["id", "sentAt"]);
 
@@ -658,4 +671,35 @@ export type VirtualStoreWithOwner = VirtualStore & {
 
 export type SystemUserWithStore = SystemUser & {
   store?: VirtualStore;
+};
+
+export const schema = {
+  // Sistema multi-tenant
+  virtualStores,
+  systemUsers,
+  subscriptionPlans,
+  storeSubscriptions,
+  usageHistory,
+  systemAuditLog,
+  storeSettings,
+
+  // Esquemas de tienda virtual
+  users,
+  customers,
+  customerHistory,
+  notifications,
+  products,
+  productCategories,
+  orders,
+  orderItems,
+  orderHistory,
+  conversations,
+  messages,
+  whatsappSettings,
+  whatsappLogs,
+  autoResponses,
+  customerRegistrationFlows,
+  employeeProfiles,
+  assignmentRules,
+  shoppingCart,
 };

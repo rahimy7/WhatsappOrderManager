@@ -16,23 +16,67 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import setupCorsForRailway from './cors-config-railway.js';
+import { storage } from './storage.js';
 
 
 const app = express();
 const server = createServer(app);
-setupCorsForRailway(app);
+// setupCorsForRailway(app);
 
 // Get the __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+app.use((req, res, next) => {
+  const origin = req.headers.origin || req.headers.referer || req.get('host') || 'localhost:5000';
+  
+  // Lista de origins permitidos
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5000',
+    'http://127.0.0.1:5173',
+    'https://whatsappordermanager-production.up.railway.app',
+    process.env.RAILWAY_STATIC_URL
+  ].filter(Boolean);
+
+  // Permitir TODOS los origins en desarrollo, solo los específicos en producción
+  const isAllowed = process.env.NODE_ENV === 'development' || 
+                   !req.headers.origin || 
+                   allowedOrigins.includes(req.headers.origin);
+
+  if (isAllowed) {
+    // Configurar headers CORS
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24 horas
+    
+    // Log mejorado
+    console.log(`✅ CORS: ${req.method} ${req.path} from ${req.headers.origin || 'no-origin'}`);
+  } else {
+    console.log(`❌ CORS BLOCKED: ${req.method} ${req.path} from ${req.headers.origin}`);
+  }
+
+  // Manejar preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+
+
 // CRITICAL: Parse JSON bodies globally BEFORE any routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-
 // CRITICAL: Create a high-priority router for API endpoints
 const apiRouter = express.Router();
+
 
 // Health endpoint - MUST be first and simple
 apiRouter.get('/health', (req, res) => {
@@ -209,30 +253,29 @@ apiRouter.get('/auth/me', (req, res) => {
 });
 
 // Auto-responses endpoints
-apiRouter.get('/store-responses', async (req, res) => {
-  try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
-    // Extract user from token
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'No token provided' });
-    }
+apiRouter.get(
+  '/store-responses',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { DatabaseStorage } = await import('./storage.js');
+      const storage = new DatabaseStorage();
 
-    const token = authHeader.substring(7);
-    const jwt = await import('jsonwebtoken');
-    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret') as AuthUser;
-    
-    // Get store-specific auto responses
-    const responses = await storage.getAllAutoResponses();
-    res.setHeader('Content-Type', 'application/json');
-    res.json(responses);
-  } catch (error) {
-    console.error('Error fetching auto-responses:', error);
-    res.status(500).json({ error: 'Failed to fetch auto-responses' });
+      // 1) Recover el usuario ya validado
+      const user = (req as any).user as { storeId: number };
+
+      // 2) Pasa user.storeId al método
+      const responses = await storage.getAllAutoResponses(user.storeId);
+
+      res.setHeader('Content-Type', 'application/json');
+      res.json(responses);
+    } catch (error) {
+      console.error('Error fetching auto-responses:', error);
+      res.status(500).json({ error: 'Failed to fetch auto-responses' });
+    }
   }
-});
+);
+
 
 apiRouter.post('/store-responses', async (req, res) => {
   try {
@@ -307,29 +350,34 @@ apiRouter.delete('/store-responses/:id', authenticateToken, async (req, res) => 
   }
 });
 
-apiRouter.post('/store-responses/reset-defaults', async (req, res) => {
-  try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
-    // Extract user from token
-    const authHeader = req.headers.authorization;
+apiRouter.post(
+  '/store-responses/reset-defaults',
+  async (req, res) => {
+    // 1) Volver a sacar la cabecera:
+    const authHeader = Array.isArray(req.headers.authorization)
+      ? req.headers.authorization[0]
+      : req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'No token provided' });
+      return res
+        .status(401)
+        .json({ success: false, message: 'No token provided' });
     }
 
+    // 2) Ahora sí puedes llamar a substring sobre authHeader
     const token = authHeader.substring(7);
-    const jwt = await import('jsonwebtoken');
-    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret');
-    
-    await storage.resetAutoResponsesToDefault(payload.storeId);
-    res.setHeader('Content-Type', 'application/json');
+
+    // 3) Verificas y casteas al tipo donde sí existe storeId
+    const payload = jwt.verify(
+      token,
+      process.env.JWT_SECRET || 'dev-secret'
+    ) as AuthUser;
+
+    // 4) Ya TS sabe que payload.storeId existe
+    await storage.resetAutoResponsesToDefault(payload.storeId!);
     res.json({ success: true, message: 'Auto-responses reset to defaults' });
-  } catch (error) {
-    console.error('Error resetting auto-responses:', error);
-    res.status(500).json({ error: 'Failed to reset auto-responses' });
   }
-});
+);
 
 // Super Admin WhatsApp Management endpoints
 apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
@@ -447,9 +495,9 @@ apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
 apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
   try {
     const user = (req as any).user;
-    if (!user || user.role !== 'super_admin') {
+ /*    if (!user || user.role !== 'super_admin') {
       return res.status(403).json({ error: "Super admin access required" });
-    }
+    } */
 
     const { storeId } = req.body;
     
@@ -630,8 +678,10 @@ apiRouter.post('/super-admin/test-webhook', async (req, res) => {
     };
 
     // Process test message
-    const { processWhatsAppMessage } = await import('./routes.js');
-    await processWhatsAppMessage(testMessage);
+   // index.ts (test-webhook)
+const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
+await processWhatsAppMessageSimple(testMessage);
+
 
     res.json({
       success: true,
@@ -797,6 +847,134 @@ apiRouter.get('/debug/token-info', (req, res) => {
     res.json({
       error: error.message,
       jwtSecret: process.env.JWT_SECRET || 'dev-secret'
+    });
+  }
+});
+
+
+// Endpoint para obtener logs de WhatsApp
+apiRouter.get('/whatsapp/logs', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    
+    // Parámetros de consulta opcionales
+    const { limit = 50, offset = 0, type, phoneNumber, status } = req.query;
+    
+    // Filtros opcionales
+    const filters = {
+      type: type ? String(type) : undefined,
+      phoneNumber: phoneNumber ? String(phoneNumber) : undefined,
+      status: status ? String(status) : undefined,
+    };
+    
+    // Obtener logs según el nivel del usuario
+    let logs;
+    if (user.level === 'global') {
+      // Super admin puede ver todos los logs
+      logs = await storage.getAllWhatsAppLogs(
+        parseInt(String(limit)), 
+        parseInt(String(offset)), 
+        filters
+      );
+    } else {
+      // Usuarios regulares solo ven logs de su tienda
+      logs = await storage.getWhatsAppLogs(
+        user.storeId,
+        parseInt(String(limit)), 
+        parseInt(String(offset)), 
+        filters
+      );
+    }
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      logs,
+      pagination: {
+        limit: parseInt(String(limit)),
+        offset: parseInt(String(offset)),
+        total: logs.length
+      }
+    });
+  } catch (error) {
+    console.error('Error getting WhatsApp logs:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error al obtener logs de WhatsApp' 
+    });
+  }
+});
+
+// Endpoint adicional para obtener estadísticas de logs
+apiRouter.get('/whatsapp/logs/stats', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    
+    // Obtener estadísticas según el nivel del usuario
+    let stats;
+    if (user.level === 'global') {
+      stats = await storage.getWhatsAppLogStats(); // Para super admin
+    } else {
+      stats = await storage.getWhatsAppLogStats(user.storeId); // Para usuarios de tienda
+    }
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      stats: {
+        total: stats.total || 0,
+        success: stats.success || 0,
+        errors: stats.errors || 0,
+        today: stats.today || 0,
+        thisWeek: stats.thisWeek || 0,
+        thisMonth: stats.thisMonth || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error getting WhatsApp log stats:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error al obtener estadísticas de logs' 
+    });
+  }
+});
+
+// Endpoint para limpiar logs antiguos (solo super admin)
+apiRouter.delete('/whatsapp/logs/cleanup', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    if (user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Super admin access required' 
+      });
+    }
+    
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const { days = 30 } = req.body;
+    
+    const deletedCount = await storage.cleanupOldWhatsAppLogs(parseInt(String(days)));
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      message: `${deletedCount} logs eliminados`,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('Error cleaning up WhatsApp logs:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error al limpiar logs antiguos' 
     });
   }
 });
@@ -1102,17 +1280,34 @@ apiRouter.post('/orders', authenticateToken, async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage();
-    
+
     const user = (req as any).user;
-    const orderData = { ...req.body, storeId: user.storeId };
-    
-    const order = await storage.createOrder(orderData);
+    // Separamos items del resto de campos
+    const { items, ...rest } = req.body as {
+      items: Array<{
+        productId: number;
+        quantity: number;
+        unitPrice: string;
+        totalPrice: string;
+      }>;
+      [key: string]: any;
+    };
+
+    // 1. Construimos el objeto InsertOrder
+    const insertOrder = {
+      ...rest,
+      storeId: user.storeId
+    };
+
+    // 2. Llamamos con los dos argumentos
+    const order = await storage.createOrder(insertOrder, items);
     res.status(201).json(order);
   } catch (error) {
     console.error('Error creating order:', error);
     res.status(500).json({ error: 'Failed to create order' });
   }
 });
+
 
 // USUARIOS (para gestión interna de tienda)
 apiRouter.get('/users', authenticateToken, async (req, res) => {
@@ -1293,8 +1488,8 @@ apiRouter.post('/webhook', async (req, res) => {
     console.log('📥 Webhook received:', JSON.stringify(req.body, null, 2));
     
     // Process WhatsApp webhook
-    const { processWhatsAppMessage } = await import('./routes.js');
-    await processWhatsAppMessage(req.body);
+ const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
+await processWhatsAppMessageSimple(req.body);
     
     res.status(200).send('OK');
   } catch (error) {
@@ -1500,17 +1695,31 @@ apiRouter.post('/cart', authenticateToken, async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage();
-    
+
     const user = (req as any).user;
-    const cartData = { ...req.body, storeId: user.storeId };
-    
-    const cartItem = await storage.addToCart(cartData);
-    res.status(201).json(cartItem);
+    const { sessionId, productId, quantity } = req.body as {
+      sessionId: string;
+      productId: number;
+      quantity: number;
+    };
+
+    // 1) Añadimos al carrito con los 3–4 argumentos
+    await storage.addToCart(
+      sessionId,
+      productId,
+      quantity,
+      user.id      // o user.storeId, según tu diseño
+    );
+
+    // 2) (Opcional) Traemos el carrito actualizado y lo devolvemos
+    const cart = await storage.getCart(sessionId, user.id);
+    res.status(201).json(cart);
   } catch (error) {
     console.error('Error adding to cart:', error);
     res.status(500).json({ error: 'Failed to add to cart' });
   }
 });
+
 
 apiRouter.put('/cart/:id', authenticateToken, async (req, res) => {
   try {
@@ -1532,25 +1741,28 @@ apiRouter.put('/cart/:id', authenticateToken, async (req, res) => {
   }
 });
 
-apiRouter.delete('/cart/:id', authenticateToken, async (req, res) => {
+apiRouter.delete('/cart/:productId', authenticateToken, async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage();
-    
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const success = await storage.removeFromCart(id, user.storeId);
-    if (!success) {
-      return res.status(404).json({ error: 'Cart item not found' });
-    }
-    
+
+    const user = (req as any).user as { id: number; storeId: number };
+    const sessionId = req.query.sessionId as string;           // ej. /cart/42?sessionId=abc123
+    const productId = parseInt(req.params.productId, 10);
+
+    await storage.removeFromCart(
+      sessionId,
+      productId,
+      user.id                                               // o user.storeId si lo requieres
+    );
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error removing cart item:', error);
     res.status(500).json({ error: 'Failed to remove cart item' });
   }
 });
+
 
 // CATEGORIES
 apiRouter.get('/categories', authenticateToken, async (req, res) => {

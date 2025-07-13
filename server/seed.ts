@@ -25,7 +25,7 @@ async function seedDatabase() {
       fullName: "Super Administrador Global",
       role: "super_admin",
       status: "active"
-    }).returning();
+    }as any).returning();
 
     const [admin] = await db.insert(users).values({
       username: "admin",
@@ -34,7 +34,7 @@ async function seedDatabase() {
       fullName: "Administrador",
       role: "admin",
       status: "active"
-    }).returning();
+    }as any).returning();
 
     const [technician1] = await db.insert(users).values({
       username: "tech1",
@@ -43,7 +43,7 @@ async function seedDatabase() {
       fullName: "Carlos Mendoza",
       role: "technician",
       status: "active"
-    }).returning();
+    }as any).returning();
 
     const [seller1] = await db.insert(users).values({
       username: "seller1",
@@ -52,7 +52,7 @@ async function seedDatabase() {
       fullName: "Ana García",
       role: "seller",
       status: "active"
-    }).returning();
+    }as any).returning();
 
     const [technician2] = await db.insert(users).values({
       username: "tech2",
@@ -61,7 +61,7 @@ async function seedDatabase() {
       fullName: "Roberto Silva",
       role: "technician",
       status: "busy"
-    }).returning();
+    }as any).returning();
 
     console.log("Usuarios creados:", { admin: admin.id, technician1: technician1.id, seller1: seller1.id, technician2: technician2.id });
 
@@ -74,7 +74,7 @@ async function seedDatabase() {
       latitude: "19.4126",
       longitude: "-99.1732",
       lastContact: new Date()
-    }).returning();
+    }as any).returning();
 
     const [customer2] = await db.insert(customers).values({
       name: "María González",
@@ -84,7 +84,7 @@ async function seedDatabase() {
       latitude: "19.4325",
       longitude: "-99.1915",
       lastContact: new Date()
-    }).returning();
+    }as any).returning();
 
     const [customer3] = await db.insert(customers).values({
       name: "Pedro Ramírez",
@@ -94,7 +94,7 @@ async function seedDatabase() {
       latitude: "19.3908",
       longitude: "-99.1592",
       lastContact: new Date()
-    }).returning();
+    }as any).returning();
 
     console.log("Clientes creados:", { customer1: customer1.id, customer2: customer2.id, customer3: customer3.id });
 
@@ -106,7 +106,7 @@ async function seedDatabase() {
       basePrice: "2500.00",
       category: "instalacion",
       isActive: true
-    }).returning();
+    }as any).returning();
 
     const [product2] = await db.insert(products).values({
       name: "Aire Acondicionado Split 12,000 BTU",
@@ -115,7 +115,7 @@ async function seedDatabase() {
       basePrice: "8500.00",
       category: "equipos",
       isActive: true
-    }).returning();
+    }as any).returning();
 
     const [product3] = await db.insert(products).values({
       name: "Mantenimiento Preventivo AC",
@@ -124,7 +124,7 @@ async function seedDatabase() {
       basePrice: "800.00",
       category: "mantenimiento",
       isActive: true
-    }).returning();
+    }as any).returning();
 
     console.log("Productos creados:", { product1: product1.id, product2: product2.id, product3: product3.id });
 
@@ -140,7 +140,7 @@ async function seedDatabase() {
       customerAddress: customer1.address,
       customerLatitude: customer1.latitude,
       customerLongitude: customer1.longitude
-    }).returning();
+    }as any).returning();
 
     console.log("Pedido creado:", { order1: order1.id });
 
@@ -153,7 +153,7 @@ async function seedDatabase() {
       totalPrice: "8500.00",
       deliveryCost: "300.00",
       deliveryDistance: "15.5"
-    });
+    }as any);
 
     await db.insert(orderItems).values({
       orderId: order1.id,
@@ -164,7 +164,7 @@ async function seedDatabase() {
       installationCost: "2500.00",
       laborHours: "4.0",
       laborRate: "625.00"
-    });
+    }as any);
 
     // Insertar conversación
     const [conversation1] = await db.insert(conversations).values({
@@ -172,7 +172,7 @@ async function seedDatabase() {
       orderId: order1.id,
       status: "active",
       lastMessageAt: new Date()
-    }).returning();
+    }as any).returning();
 
     // Insertar mensajes
     await db.insert(messages).values({
@@ -183,7 +183,7 @@ async function seedDatabase() {
       isFromCustomer: true,
       isRead: true,
       whatsappMessageId: "wamid.12345"
-    });
+    }as any);
 
     await db.insert(messages).values({
       conversationId: conversation1.id,
@@ -192,7 +192,7 @@ async function seedDatabase() {
       messageType: "text",
       isFromCustomer: false,
       isRead: true
-    });
+    }as any);
 
     // Insertar configuración de WhatsApp con el nuevo token
     await db.insert(whatsappSettings).values({
@@ -202,7 +202,7 @@ async function seedDatabase() {
       businessAccountId: "457588944081739",
       appId: "1611235026094756",
       isActive: true
-    });
+    }as any);
 
     console.log("✓ Base de datos configurada exitosamente");
     console.log("✓ Configuración de WhatsApp guardada con el nuevo token");
