@@ -74,6 +74,7 @@ export async function authenticateGlobalUser(username: string, password: string)
 /**
  * Autenticación para usuarios de tienda (propietarios, administradores)
  */
+
 export async function authenticateStoreUser(username: string, password: string): Promise<AuthUser | null> {
   try {
     const bcrypt = await import('bcrypt');
@@ -99,7 +100,8 @@ export async function authenticateStoreUser(username: string, password: string):
       id: user.id,
       username: user.username,
       role: user.role,
-      storeId: user.storeId !== null ? user.storeId : undefined,
+      // 🔧 CORRECCIÓN: Solo asignar storeId si es válido
+      storeId: user.storeId && user.storeId !== null ? user.storeId : undefined,
       level: 'store' as 'store'
     };
   } catch (error) {
@@ -107,7 +109,6 @@ export async function authenticateStoreUser(username: string, password: string):
     return null;
   }
 }
-
 /**
  * Autenticación para usuarios operacionales (técnicos, vendedores)
  * Busca en el schema específico de la tienda

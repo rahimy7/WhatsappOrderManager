@@ -22,10 +22,19 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
       return res.status(403).json({ error: 'Token inválido' });
     }
 
-    // 🧠 Permitir sin storeId si es nivel global
-   if (!('storeId' in decoded) && (decoded as any).role !== 'super_admin') {
-  return res.status(403).json({ error: 'Token incompleto - falta storeId' });
-}
+    // 🔧 CORRECCIÓN: Verificar storeId basado en el nivel de acceso
+    const user = decoded as any;
+    
+    // Si es super_admin o tiene nivel global, no necesita storeId
+    if (user.role === 'super_admin' || user.level === 'global') {
+      req.user = decoded as AuthUser;
+      return next();
+    }
+    
+    // Para usuarios de tienda y operacionales, verificar que tengan un storeId válido
+    if (!user.storeId || user.storeId === null || user.storeId === undefined) {
+      return res.status(403).json({ error: 'Token incompleto - falta storeId' });
+    }
 
     req.user = decoded as AuthUser;
     next();
