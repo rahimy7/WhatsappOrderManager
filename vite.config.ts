@@ -5,7 +5,9 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig(async () => {
   const plugins = [
-    react(),
+      react({
+      jsxRuntime: "automatic", // 👈 Esto activa el nuevo transform (React 17+)
+    }),
     runtimeErrorOverlay(),
   ];
 

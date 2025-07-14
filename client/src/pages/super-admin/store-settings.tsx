@@ -34,15 +34,16 @@ export default function StoreSettings() {
     select: (data: any[]) => data?.find((s: any) => s.id === storeId)
   });
 
-  // Fetch subscription plans
-  const { data: subscriptionPlans = [], isLoading: plansLoading } = useQuery({
+  // ✅ CORREGIDO: Fetch subscription plans con tipado correcto
+  const { data: subscriptionPlans = [], isLoading: plansLoading } = useQuery<SubscriptionPlan[]>({
     queryKey: ['/api/super-admin/subscription-plans'],
+    queryFn: () => apiRequest<SubscriptionPlan[]>('GET', '/api/super-admin/subscription-plans'),
   });
 
-  // Update store mutation
+  // ✅ CORREGIDO: Remover .then(res => res.json())
   const updateStoreMutation = useMutation({
     mutationFn: (data: any) => 
-      apiRequest("PUT", `/api/super-admin/stores/${storeId}`, data).then(res => res.json()),
+      apiRequest("PUT", `/api/super-admin/stores/${storeId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/super-admin/stores`] });
       toast({
@@ -76,183 +77,206 @@ export default function StoreSettings() {
       domain: formData.get('domain') as string,
       description: formData.get('description') as string,
       subscriptionPlanId: selectedPlanId ? parseInt(selectedPlanId) : null,
+      contactEmail: formData.get('contactEmail') as string,
+      contactPhone: formData.get('contactPhone') as string,
+      address: formData.get('address') as string,
+      isActive: formData.get('isActive') === 'on',
     };
     updateStoreMutation.mutate(data);
-  };
-
-  const formatPrice = (price: string | null) => {
-    if (!price) return 'N/A';
-    return `$${parseFloat(price).toLocaleString('es-MX')}`;
   };
 
   if (!storeId) {
     return (
       <div className="p-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
-          <p className="text-gray-600">No se especificó una tienda válida</p>
-          <Button onClick={() => window.history.back()} className="mt-4">
-            Volver
-          </Button>
+          <h1 className="text-2xl font-bold text-gray-600 mb-4">
+            ID de tienda requerido
+          </h1>
+          <p className="text-gray-500">
+            Por favor, especifica un ID de tienda válido en la URL
+          </p>
         </div>
       </div>
     );
   }
 
-  if (isLoading) {
+  if (isLoading || plansLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!store) {
     return (
       <div className="p-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Cargando...</h1>
-          <p className="text-gray-600">Obteniendo información de la tienda</p>
+          <h1 className="text-2xl font-bold text-gray-600 mb-4">
+            Tienda no encontrada
+          </h1>
+          <p className="text-gray-500">
+            No se pudo encontrar la tienda con ID {storeId}
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Configuración de Tienda</h1>
-          <p className="text-gray-600 mt-2">
-            {store?.name || "Tienda"} • Gestiona la configuración específica de esta tienda
-          </p>
-        </div>
-        <Button onClick={() => window.history.back()} variant="outline">
+      <div className="flex items-center gap-4">
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => window.history.back()}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
+        <div>
+          <h1 className="text-3xl font-bold">Configuración de Tienda</h1>
+          <p className="text-gray-600">
+            Gestiona la configuración de {store.name}
+          </p>
+        </div>
       </div>
 
+      {/* Store Status Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Store className="h-5 w-5" />
-            Información General
+            Estado de la Tienda
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold">{store.name}</h3>
+              <p className="text-sm text-gray-600">{store.domain}</p>
+            </div>
+            <Badge variant={store.isActive ? "default" : "secondary"}>
+              {store.isActive ? "Activa" : "Inactiva"}
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Configuration Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Configuración General
           </CardTitle>
           <CardDescription>
-            Configura la información básica de la tienda
+            Actualiza la información básica de la tienda
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Basic Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="name">Nombre de la Tienda</Label>
-                <Input 
-                  id="name" 
-                  name="name" 
-                  defaultValue={store?.name || ""}
+                <Input
+                  id="name"
+                  name="name"
+                  defaultValue={store.name}
+                  placeholder="Nombre de la tienda"
                   required
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="domain">Dominio</Label>
-                <Input 
-                  id="domain" 
-                  name="domain" 
-                  defaultValue={store?.domain || ""}
-                  placeholder="mi-tienda.com"
+                <Input
+                  id="domain"
+                  name="domain"
+                  defaultValue={store.domain}
+                  placeholder="ejemplo.com"
+                  required
                 />
               </div>
             </div>
-            
-            <div>
+
+            <div className="space-y-2">
               <Label htmlFor="description">Descripción</Label>
-              <Textarea 
-                id="description" 
-                name="description" 
-                defaultValue={store?.description || ""}
+              <Textarea
+                id="description"
+                name="description"
+                defaultValue={store.description}
                 placeholder="Descripción de la tienda"
                 rows={3}
               />
             </div>
 
-            {/* Plan de Suscripción */}
-            <div className="space-y-4">
-              <Label>Plan de Suscripción</Label>
-              <div className="grid gap-4">
-                {subscriptionPlans.map((plan: SubscriptionPlan) => {
-                  const isSelected = selectedPlanId === plan.id.toString();
-                  return (
-                    <Card 
-                      key={plan.id} 
-                      className={`cursor-pointer transition-all ${
-                        isSelected 
-                          ? 'border-blue-500 bg-blue-50 shadow-md' 
-                          : 'hover:border-gray-300 hover:shadow-sm'
-                      }`}
-                      onClick={() => setSelectedPlanId(plan.id.toString())}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div 
-                                className={`w-4 h-4 rounded-full border-2 ${
-                                  isSelected 
-                                    ? 'border-blue-500 bg-blue-500' 
-                                    : 'border-gray-300'
-                                }`}
-                              >
-                                {isSelected && <div className="w-2 h-2 bg-white rounded-full m-0.5" />}
-                              </div>
-                              <h3 className="font-semibold text-lg">{plan.name}</h3>
-                              <Badge className={
-                                plan.type === 'fixed' ? 'bg-blue-100 text-blue-800' :
-                                plan.type === 'usage_based' ? 'bg-green-100 text-green-800' :
-                                'bg-purple-100 text-purple-800'
-                              }>
-                                {plan.type === 'fixed' ? 'Fijo' : 
-                                 plan.type === 'usage_based' ? 'Por Uso' : 'Híbrido'}
-                              </Badge>
-                            </div>
-                            
-                            <p className="text-gray-600 mb-3">{plan.description}</p>
-                            
-                            <div className="text-2xl font-bold text-blue-600 mb-3">
-                              {formatPrice(plan.monthlyPrice?.toString())}
-                              <span className="text-sm font-normal text-gray-500">/mes</span>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div className="flex items-center gap-2">
-                                <Package className="h-4 w-4 text-gray-500" />
-                                <span>Productos: {plan.maxProducts === -1 ? 'Ilimitados' : plan.maxProducts}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <MessageSquare className="h-4 w-4 text-gray-500" />
-                                <span>WhatsApp: {plan.maxWhatsappMessages === -1 ? 'Ilimitados' : plan.maxWhatsappMessages}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Users className="h-4 w-4 text-gray-500" />
-                                <span>Usuarios: {plan.maxUsers === -1 ? 'Ilimitados' : plan.maxUsers}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <CreditCard className="h-4 w-4 text-gray-500" />
-                                <span>BD: {plan.maxDbStorage === null ? 'N/A' : `${plan.maxDbStorage}GB`}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+            {/* Contact Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contactEmail">Email de Contacto</Label>
+                <Input
+                  id="contactEmail"
+                  name="contactEmail"
+                  type="email"
+                  defaultValue={store.contactEmail}
+                  placeholder="contacto@tienda.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactPhone">Teléfono de Contacto</Label>
+                <Input
+                  id="contactPhone"
+                  name="contactPhone"
+                  defaultValue={store.contactPhone}
+                  placeholder="+1234567890"
+                />
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <Switch 
-                id="isActive" 
-                defaultChecked={store?.isActive || false}
-                name="isActive"
+            <div className="space-y-2">
+              <Label htmlFor="address">Dirección</Label>
+              <Textarea
+                id="address"
+                name="address"
+                defaultValue={store.address}
+                placeholder="Dirección completa"
+                rows={2}
               />
-              <Label htmlFor="isActive">Tienda Activa</Label>
             </div>
 
+            {/* Subscription Plan */}
+            <div className="space-y-2">
+              <Label htmlFor="subscriptionPlan">Plan de Suscripción</Label>
+              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.isArray(subscriptionPlans) && subscriptionPlans.map((plan: SubscriptionPlan) => (
+                    <SelectItem key={plan.id} value={plan.id.toString()}>
+                      {plan.name} - ${plan.monthlyPrice}/mes
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Store Status */}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="isActive"
+                name="isActive"
+                defaultChecked={store.isActive}
+              />
+              <Label htmlFor="isActive">Tienda activa</Label>
+            </div>
+
+            {/* Submit Button */}
             <div className="flex justify-end">
               <Button 
                 type="submit" 
@@ -265,50 +289,43 @@ export default function StoreSettings() {
         </CardContent>
       </Card>
 
-      {/* Store Information Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Información de la Tienda
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="font-medium">ID:</span> {store?.id}
-            </div>
-            <div>
-              <span className="font-medium">Estado:</span>{" "}
-              <span className={store?.isActive ? "text-green-600" : "text-red-600"}>
-                {store?.isActive ? "Activa" : "Inactiva"}
-              </span>
-            </div>
-            <div>
-              <span className="font-medium">Plan:</span> {store?.plan}
-            </div>
-            <div>
-              <span className="font-medium">Fecha de creación:</span>{" "}
-              {store?.createdAt ? new Date(store.createdAt).toLocaleDateString() : "No disponible"}
-            </div>
-            <div>
-              <span className="font-medium">Propietario:</span> {store?.ownerName || "No asignado"}
-            </div>
-            <div>
-              <span className="font-medium">Email del propietario:</span> {store?.ownerEmail || "No disponible"}
-            </div>
-            <div className="md:col-span-2">
-              <span className="font-medium">Schema de BD:</span>{" "}
-              <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded text-xs font-mono">
-                {store?.databaseUrl ? 
-                  store.databaseUrl.match(/schema=([^&]+)/)?.[1] || "schema no encontrado" 
-                  : "No disponible"
-                }
-              </code>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="cursor-pointer hover:bg-gray-50" 
+              onClick={() => window.location.href = `/super-admin/store-products?store=${storeId}`}>
+          <CardContent className="p-4 text-center">
+            <Package className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+            <h3 className="font-semibold">Productos</h3>
+            <p className="text-sm text-gray-600">Gestionar catálogo</p>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:bg-gray-50 border-green-200 bg-green-50"
+              onClick={() => window.location.href = `/super-admin/stores/${storeId}/whatsapp`}>
+          <CardContent className="p-4 text-center">
+            <MessageSquare className="h-8 w-8 mx-auto mb-2 text-green-600" />
+            <h3 className="font-semibold text-green-700">WhatsApp</h3>
+            <p className="text-sm text-green-600">Configurar API</p>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:bg-gray-50"
+              onClick={() => window.location.href = `/super-admin/store-themes?store=${storeId}`}>
+          <CardContent className="p-4 text-center">
+            <CreditCard className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+            <h3 className="font-semibold">Temas</h3>
+            <p className="text-sm text-gray-600">Personalizar diseño</p>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:bg-gray-50">
+          <CardContent className="p-4 text-center">
+            <Users className="h-8 w-8 mx-auto mb-2 text-orange-600" />
+            <h3 className="font-semibold">Usuarios</h3>
+            <p className="text-sm text-gray-600">Gestionar equipo</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

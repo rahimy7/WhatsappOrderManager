@@ -144,14 +144,22 @@ apiRouter.post('/auth/login', async (req, res) => {
     }
 
     const jwt = await import('jsonwebtoken');
+    
+    // 🔧 CORRECCIÓN: Crear payload condicional para el token
+    const tokenPayload: any = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      level: user.level
+    };
+    
+    // Solo incluir storeId si es válido
+    if (user.storeId && user.storeId !== null && user.storeId !== undefined) {
+      tokenPayload.storeId = user.storeId;
+    }
+    
     const token = jwt.default.sign(
-      { 
-        id: user.id, 
-        username: user.username, 
-        role: user.role,
-        storeId: user.storeId,
-        level: user.level
-      },
+      tokenPayload,
       process.env.JWT_SECRET || 'dev-secret',
       { expiresIn: '24h' }
     );

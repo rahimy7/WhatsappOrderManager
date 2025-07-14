@@ -1,62 +1,48 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Building2, 
-  Plus, 
-  Search, 
-  Settings, 
-  Power, 
-  PowerOff,
-  CreditCard,
-  AlertTriangle,
-  CheckCircle,
-  Calendar,
-  Phone,
-  Mail,
-  MapPin,
-  Edit,
-  Trash2,
-  Database
-} from "lucide-react";
+import { Building2, Plus, Search, Settings, Pause, Play, AlertTriangle, CheckCircle, XCircle, Wrench, MessageSquare } from "lucide-react";
 
 interface VirtualStore {
   id: number;
   name: string;
   description: string;
   domain: string;
-  status: 'active' | 'inactive' | 'suspended';
-  subscriptionStatus: 'trial' | 'active' | 'expired' | 'cancelled';
-  planType: 'basic' | 'premium' | 'enterprise';
   contactEmail: string;
   contactPhone: string;
   address: string;
+  planType: string;
+  status: 'active' | 'inactive' | 'suspended';
+  isActive: boolean;
+  schema: string;
+  databaseUrl?: string;
   createdAt: string;
-  lastActivity: string;
-  monthlyOrders: number;
-  monthlyRevenue: number;
-  supportTickets: number;
-  settings: {
-    whatsappEnabled: boolean;
-    notificationsEnabled: boolean;
-    analyticsEnabled: boolean;
-  };
+  updatedAt: string;
+}
+
+interface ValidationResponse {
+  valid: boolean;
+  message: string;
+}
+
+interface RepairResponse {
+  success: boolean;
+  message: string;
 }
 
 const storeSchema = z.object({
@@ -80,36 +66,15 @@ export default function StoresManagement() {
   const queryClient = useQueryClient();
   const [location, setLocation] = useLocation();
 
-  const { data: stores, isLoading, error } = useQuery({
+  // ✅ CORREGIDO: apiRequest ya devuelve JSON directamente
+  const { data: stores = [], isLoading, error } = useQuery<VirtualStore[]>({
     queryKey: ['/api/super-admin/stores'],
-    queryFn: async () => {
-      console.log('Executing query for stores...');
-      try {
-        const response = await apiRequest('GET', '/api/super-admin/stores');
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers);
-        
-        const contentType = response.headers.get('content-type');
-        console.log('Content-Type:', contentType);
-        
-        if (!contentType || !contentType.includes('application/json')) {
-          const text = await response.text();
-          console.error('Expected JSON but received:', text);
-          throw new Error('Server returned non-JSON response');
-        }
-        
-        const data = await response.json();
-        console.log('Raw response data:', data);
-        return data;
-      } catch (err) {
-        console.error('Query error:', err);
-        throw err;
-      }
-    }
+    queryFn: () => apiRequest<VirtualStore[]>('GET', '/api/super-admin/stores'),
+    staleTime: 30_000,
   });
 
   // Debug log para verificar datos
-  console.log('=== DEBUG STORES ===');
+  console.log('=== DEBUG STORES CORREGIDO ===');
   console.log('Stores data received:', stores);
   console.log('Array length:', stores?.length);
   console.log('Query error:', error);
@@ -117,11 +82,9 @@ export default function StoresManagement() {
   console.log('Stores type:', typeof stores);
   console.log('===================');
 
+  // ✅ CORREGIDO: Remover .json() innecesario
   const createStoreMutation = useMutation({
-    mutationFn: async (data: StoreFormData) => {
-      const response = await apiRequest("POST", "/api/super-admin/stores", data);
-      return response.json();
-    },
+    mutationFn: (data: StoreFormData) => apiRequest("POST", "/api/super-admin/stores", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/super-admin/stores'] });
       setIsCreateDialogOpen(false);
@@ -139,11 +102,10 @@ export default function StoresManagement() {
     }
   });
 
+  // ✅ CORREGIDO: Remover .json() innecesario
   const toggleStoreMutation = useMutation({
-    mutationFn: async ({ storeId, action }: { storeId: number, action: 'enable' | 'disable' | 'suspend' }) => {
-      const response = await apiRequest("PATCH", `/api/super-admin/stores/${storeId}/status`, { action });
-      return response.json();
-    },
+    mutationFn: ({ storeId, action }: { storeId: number, action: 'enable' | 'disable' | 'suspend' }) =>
+      apiRequest("PATCH", `/api/super-admin/stores/${storeId}/status`, { action }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/super-admin/stores'] });
       toast({
@@ -173,19 +135,13 @@ export default function StoresManagement() {
     },
   });
 
-  const storesList: VirtualStore[] = Array.isArray(stores) ? stores : [];
-  console.log('StoresList after processing:', storesList);
-  console.log('Original stores data type:', typeof stores, stores);
-
-  const filteredStores = storesList.filter(store => {
+  // ✅ CORREGIDO: Simplificar el procesamiento de stores
+  const filteredStores = stores.filter(store => {
     const matchesSearch = store.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          store.domain.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || store.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
-
-  console.log('Filtered stores to render:', filteredStores);
-  console.log('First store details:', filteredStores[0]);
 
   console.log('Filtered stores to render:', filteredStores);
   console.log('First store details:', filteredStores[0]);
@@ -198,10 +154,10 @@ export default function StoresManagement() {
     toggleStoreMutation.mutate({ storeId, action });
   };
 
+  // ✅ CORREGIDO: Funciones de validación y reparación con tipado correcto
   const handleValidateStore = async (storeId: number) => {
     try {
-      const response = await apiRequest("GET", `/api/super-admin/stores/${storeId}/validate`);
-      const validation = await response.json();
+      const validation = await apiRequest<ValidationResponse>("GET", `/api/super-admin/stores/${storeId}/validate`);
       
       if (!validation.valid) {
         // Si la validación falla, preguntar si quiere reparar
@@ -220,10 +176,10 @@ export default function StoresManagement() {
         description: validation.message || "Validación completada",
         variant: validation.valid ? "default" : "destructive",
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({
-        title: "Error en Validación",
-        description: "No se pudo validar el ecosistema de la tienda",
+        title: "Error en validación",
+        description: error.message || "No se pudo validar el ecosistema",
         variant: "destructive",
       });
     }
@@ -231,83 +187,107 @@ export default function StoresManagement() {
 
   const handleRepairStore = async (storeId: number) => {
     try {
-      toast({
-        title: "Reparando Ecosistema",
-        description: "Iniciando reparación de base de datos...",
-      });
-
-      const response = await apiRequest("POST", `/api/super-admin/stores/${storeId}/repair`);
-      const result = await response.json();
+      const result = await apiRequest<RepairResponse>("POST", `/api/super-admin/stores/${storeId}/repair`);
       
-      if (result.success) {
-        toast({
-          title: "Reparación Exitosa",
-          description: result.message,
-        });
-        
-        // Volver a validar después de la reparación
-        setTimeout(() => {
-          handleValidateStore(storeId);
-        }, 1000);
-      } else {
-        toast({
-          title: "Error en Reparación",
-          description: result.message,
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
       toast({
-        title: "Error en Reparación",
-        description: "No se pudo reparar el ecosistema de la tienda",
+        title: "Reparación completada",
+        description: result.message || "El ecosistema ha sido reparado exitosamente",
+      });
+      
+      // Refrescar la lista de tiendas
+      queryClient.invalidateQueries({ queryKey: ['/api/super-admin/stores'] });
+    } catch (error: any) {
+      toast({
+        title: "Error en reparación",
+        description: error.message || "No se pudo reparar el ecosistema",
         variant: "destructive",
       });
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, isActive: boolean) => {
+    if (!isActive || status === 'suspended') {
+      return <Badge variant="destructive">Suspendida</Badge>;
+    }
+    
     switch (status) {
-      case 'active': return <Badge className="bg-green-100 text-green-800">Activa</Badge>;
-      case 'inactive': return <Badge className="bg-gray-100 text-gray-800">Inactiva</Badge>;
-      case 'suspended': return <Badge className="bg-red-100 text-red-800">Suspendida</Badge>;
-      default: return <Badge>Desconocido</Badge>;
+      case 'active':
+        return <Badge variant="default">Activa</Badge>;
+      case 'inactive':
+        return <Badge variant="secondary">Inactiva</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  const getSubscriptionBadge = (status: string) => {
-    switch (status) {
-      case 'active': return <Badge className="bg-green-100 text-green-800">Activa</Badge>;
-      case 'trial': return <Badge className="bg-blue-100 text-blue-800">Prueba</Badge>;
-      case 'expired': return <Badge className="bg-red-100 text-red-800">Vencida</Badge>;
-      case 'cancelled': return <Badge className="bg-gray-100 text-gray-800">Cancelada</Badge>;
-      default: return <Badge>Desconocido</Badge>;
+  const getStatusIcon = (status: string, isActive: boolean) => {
+    if (!isActive || status === 'suspended') {
+      return <XCircle className="h-4 w-4 text-red-500" />;
     }
-  };
-
-  const getPlanBadge = (plan: string) => {
-    switch (plan) {
-      case 'basic': return <Badge variant="outline">Básico</Badge>;
-      case 'premium': return <Badge className="bg-blue-100 text-blue-800">Premium</Badge>;
-      case 'enterprise': return <Badge className="bg-purple-100 text-purple-800">Enterprise</Badge>;
-      default: return <Badge>Desconocido</Badge>;
+    
+    switch (status) {
+      case 'active':
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'inactive':
+        return <Pause className="h-4 w-4 text-gray-500" />;
+      default:
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Gestión de Tiendas</h1>
+        </div>
+        <div className="grid gap-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-20 bg-gray-200 rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Gestión de Tiendas</h1>
+        </div>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center text-red-600">
+              <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Error al cargar tiendas</h3>
+              <p className="text-sm">{error.message || 'Error desconocido'}</p>
+              <Button 
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/super-admin/stores'] })}
+                className="mt-4"
+              >
+                Reintentar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 p-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Gestión de Tiendas</h1>
-          <p className="text-muted-foreground">Administra todas las tiendas virtuales del ecosistema</p>
+          <p className="text-gray-600">
+            Administra las tiendas virtuales del sistema
+          </p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
@@ -320,12 +300,12 @@ export default function StoresManagement() {
             <DialogHeader>
               <DialogTitle>Crear Nueva Tienda</DialogTitle>
               <DialogDescription>
-                Configura una nueva tienda virtual en la plataforma
+                Completa la información para crear una nueva tienda virtual
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="name"
@@ -346,7 +326,7 @@ export default function StoresManagement() {
                       <FormItem>
                         <FormLabel>Dominio</FormLabel>
                         <FormControl>
-                          <Input placeholder="mi-tienda.com" {...field} />
+                          <Input placeholder="mitienda.com" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -361,14 +341,17 @@ export default function StoresManagement() {
                     <FormItem>
                       <FormLabel>Descripción</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Descripción de la tienda..." {...field} />
+                        <Textarea 
+                          placeholder="Descripción de la tienda..." 
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="contactEmail"
@@ -376,7 +359,11 @@ export default function StoresManagement() {
                       <FormItem>
                         <FormLabel>Email de Contacto</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="contacto@tienda.com" {...field} />
+                          <Input 
+                            type="email" 
+                            placeholder="contacto@mitienda.com" 
+                            {...field} 
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -387,9 +374,9 @@ export default function StoresManagement() {
                     name="contactPhone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Teléfono</FormLabel>
+                        <FormLabel>Teléfono de Contacto</FormLabel>
                         <FormControl>
-                          <Input placeholder="+52 55 1234 5678" {...field} />
+                          <Input placeholder="+1234567890" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -404,7 +391,10 @@ export default function StoresManagement() {
                     <FormItem>
                       <FormLabel>Dirección</FormLabel>
                       <FormControl>
-                        <Input placeholder="Dirección completa" {...field} />
+                        <Textarea 
+                          placeholder="Dirección completa de la tienda..." 
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -416,7 +406,7 @@ export default function StoresManagement() {
                   name="planType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Plan de Suscripción</FormLabel>
+                      <FormLabel>Tipo de Plan</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
@@ -424,9 +414,9 @@ export default function StoresManagement() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="basic">Básico - $29/mes</SelectItem>
-                          <SelectItem value="premium">Premium - $59/mes</SelectItem>
-                          <SelectItem value="enterprise">Enterprise - $99/mes</SelectItem>
+                          <SelectItem value="basic">Básico</SelectItem>
+                          <SelectItem value="premium">Premium</SelectItem>
+                          <SelectItem value="enterprise">Enterprise</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -434,11 +424,18 @@ export default function StoresManagement() {
                   )}
                 />
 
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCreateDialogOpen(false)}
+                  >
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={createStoreMutation.isPending}>
+                  <Button 
+                    type="submit" 
+                    disabled={createStoreMutation.isPending}
+                  >
                     {createStoreMutation.isPending ? "Creando..." : "Crear Tienda"}
                   </Button>
                 </div>
@@ -448,161 +445,180 @@ export default function StoresManagement() {
         </Dialog>
       </div>
 
-      {/* Filtros y Búsqueda */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-4 items-center">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Buscar tiendas..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="active">Activas</SelectItem>
-                <SelectItem value="inactive">Inactivas</SelectItem>
-                <SelectItem value="suspended">Suspendidas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Search and Filter */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Buscar tiendas..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filtrar por estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los estados</SelectItem>
+            <SelectItem value="active">Activas</SelectItem>
+            <SelectItem value="inactive">Inactivas</SelectItem>
+            <SelectItem value="suspended">Suspendidas</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-      {/* Lista de Tiendas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredStores.map((store) => {
-          console.log('Renderizando tienda:', store.id, 'Nombre:', store.name, 'Objeto completo:', store);
-          return (
-            <Card key={store.id} className="relative">
+      {/* Stores Grid */}
+      <div className="grid gap-6">
+        {filteredStores.length === 0 ? (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-600 mb-2">
+                No se encontraron tiendas
+              </h3>
+              <p className="text-gray-500">
+                {searchTerm || statusFilter !== "all" 
+                  ? "Intenta cambiar los filtros de búsqueda"
+                  : "Crea tu primera tienda para comenzar"
+                }
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          filteredStores.map((store) => (
+            <Card key={store.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{store.name || 'Sin nombre'}</CardTitle>
-                    <CardDescription className="mt-1">{store.domain}</CardDescription>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(store.status, store.isActive)}
+                      <CardTitle className="text-xl">{store.name}</CardTitle>
+                      {getStatusBadge(store.status, store.isActive)}
+                    </div>
+                    <CardDescription className="text-sm">
+                      {store.description}
+                    </CardDescription>
                   </div>
-                <div className="flex gap-2">
-                  {getStatusBadge(store.status)}
-                  {getPlanBadge(store.planType)}
-                </div>
-              </div>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">{store.description}</p>
-              
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <span>{store.contactEmail}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <span>{store.contactPhone}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="truncate">{store.address}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between text-sm">
-                <div>
-                  <div className="font-medium">{store.monthlyOrders}</div>
-                  <div className="text-muted-foreground">Pedidos/mes</div>
-                </div>
-                <div>
-                  <div className="font-medium">${store.monthlyRevenue.toLocaleString()}</div>
-                  <div className="text-muted-foreground">Ingresos/mes</div>
-                </div>
-              </div>
-
-              <div className="flex justify-between">
-                {getSubscriptionBadge(store.subscriptionStatus)}
-                {store.supportTickets > 0 && (
-                  <Badge variant="outline" className="text-orange-600">
-                    {store.supportTickets} tickets
-                  </Badge>
-                )}
-              </div>
-
-              <div className="space-y-2 pt-2">
-                <div className="flex gap-2">
-                  {store.status === 'active' ? (
+                  <div className="flex items-center space-x-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleToggleStore(store.id, 'disable')}
-                      className="flex-1"
+                      onClick={() => handleValidateStore(store.id)}
                     >
-                      <PowerOff className="h-4 w-4 mr-2" />
-                      Desactivar
+                      <Wrench className="h-4 w-4 mr-1" />
+                      Validar
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLocation(`/super-admin/stores/${store.id}/whatsapp`)}
+                      className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                    >
+                      <MessageSquare className="h-4 w-4 mr-1" />
+                      WhatsApp
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLocation(`/super-admin/store-settings?store=${store.id}`)}
+                    >
+                      <Settings className="h-4 w-4 mr-1" />
+                      Configurar
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <strong>Dominio:</strong>
+                    <p className="text-gray-600">{store.domain}</p>
+                  </div>
+                  <div>
+                    <strong>Plan:</strong>
+                    <p className="text-gray-600 capitalize">{store.planType}</p>
+                  </div>
+                  <div>
+                    <strong>Creada:</strong>
+                    <p className="text-gray-600">
+                      {new Date(store.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-2 mt-4">
+                  {store.status === 'active' ? (
+                    <>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Pause className="h-4 w-4 mr-1" />
+                            Pausar
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Pausar tienda?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              La tienda {store.name} será pausada temporalmente. 
+                              Los usuarios no podrán acceder hasta que la reactives.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleToggleStore(store.id, 'disable')}
+                            >
+                              Pausar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Suspender
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Suspender tienda?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              La tienda {store.name} será suspendida. Esta acción 
+                              requiere intervención manual para reactivar.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleToggleStore(store.id, 'suspend')}
+                            >
+                              Suspender
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </>
                   ) : (
                     <Button
-                      variant="outline"
+                      variant="default"
                       size="sm"
                       onClick={() => handleToggleStore(store.id, 'enable')}
-                      className="flex-1"
                     >
-                      <Power className="h-4 w-4 mr-2" />
+                      <Play className="h-4 w-4 mr-1" />
                       Activar
                     </Button>
                   )}
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      console.log('Navegando a configuración de tienda:', store.id);
-                      setLocation(`/super-admin/store-settings?store=${store.id}`);
-                    }}
-                    title="Configurar tienda"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
                 </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleValidateStore(store.id)}
-                  title="Validar ecosistema de BD"
-                  className="w-full bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
-                >
-                  <Database className="h-4 w-4 mr-2" />
-                  Validar Ecosistema de BD
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          )
-        })}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
-
-      {filteredStores.length === 0 && (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No se encontraron tiendas</h3>
-            <p className="text-muted-foreground">
-              {searchTerm || statusFilter !== "all" 
-                ? "Intenta ajustar los filtros de búsqueda"
-                : "Crea tu primera tienda para comenzar"
-              }
-            </p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

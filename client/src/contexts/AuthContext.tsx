@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { AuthUser } from '@shared/auth';
 import { apiRequest } from '@/lib/queryClient';
+import React from "react";
+
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -20,12 +22,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Verificar si hay una sesión activa al cargar la app
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
+  // ✅ Usar useCallback para evitar re-creación en cada render
+  const checkAuthStatus = useCallback(async () => {
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) {
@@ -47,35 +45,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser({
           id: payload.id,
           username: payload.username,
+          name: payload.name || payload.username,
           role: payload.role,
+          status: payload.status || 'active',
           storeId: payload.storeId,
           level: payload.level
         });
       } catch (tokenError) {
         console.log('Invalid or expired token');
         localStorage.removeItem('auth_token');
+        setUser(null);
       }
     } catch (error) {
       console.log('No active session found');
       localStorage.removeItem('auth_token');
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
 
   const login = async (username: string, password: string, companyId?: string) => {
     const loginData = companyId 
       ? { username, password, companyId }
       : { username, password };
       
+    // ✅ CORREGIDO: apiRequest ya maneja todo automáticamente
     const response = await apiRequest('POST', '/api/auth/login', loginData);
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Error de autenticación');
-    }
-
-    const { user: userData, token } = await response.json();
+    const { user: userData, token } = response as { user: AuthUser; token: string };
     
     localStorage.setItem('auth_token', token);
     setUser(userData);
@@ -86,13 +87,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, 100);
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('auth_token');
     setUser(null);
     // Recargar la página para limpiar cualquier estado persistente
     window.location.href = '/login';
-  };
+  }, []);
 
+  // ✅ CORREGIDO: Era `!AuthContext.tsx!user` (typo)
   const value = {
     user,
     isLoading,

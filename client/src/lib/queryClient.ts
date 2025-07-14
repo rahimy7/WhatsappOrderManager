@@ -1,87 +1,108 @@
-// client/src/lib/queryClient.ts - Asegurar headers correctos
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, DefaultOptions } from "@tanstack/react-query";
+
+/* -------------------------------------------------------------------------- */
+/* 1.  Configuración global de TanStack Query                                  */
+/* -------------------------------------------------------------------------- */
+const defaultQueryOptions: DefaultOptions = {
+  queries: {
+    retry: 3,
+    retryDelay: 1_000,
+    staleTime: 5 * 60_000,
+    queryFn: ({ queryKey }) => apiGet(queryKey[0] as string), // ✅ AGREGADO
+  },
+};
+
 
 export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 3,
-      retryDelay: 1000,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-    },
-  },
+  defaultOptions: defaultQueryOptions,
 });
 
-// Función helper para requests con headers correctos
-export async function apiRequest(
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+/* -------------------------------------------------------------------------- */
+/* 2.  Helper HTTP genérico — devuelve JSON tipado                             */
+/* -------------------------------------------------------------------------- */
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/**
+ * Realiza la petición y, si la respuesta es JSON, la parsea
+ * automáticamente devolviendo `Promise<T>`.
+ *
+ * Si no hay cuerpo (204) o no es JSON ⇒ devuelve `undefined as T`.
+ *
+ * Lanza `Error` con el mensaje recibido del backend cuando la
+ * respuesta no es OK.
+ */
+export async function apiRequest<T = unknown>(
+  method: HttpMethod,
   url: string,
-  data?: any,
-  options?: RequestInit
-): Promise<Response> {
-  const token = localStorage.getItem('auth_token');
-  
-  const defaultHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    // Forzar el Origin header en desarrollo
-    ...(process.env.NODE_ENV === 'development' && {
-      'Origin': window.location.origin
-    })
-  };
-  
-  if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
-  }
+  data?: unknown,
+  options: RequestInit = {},
+): Promise<T> {
+  /* ------------------------------ Headers --------------------------------- */
+  const token = localStorage.getItem("auth_token");
 
-  const config: RequestInit = {
-    method,
-    headers: {
-      ...defaultHeaders,
-      ...options?.headers,
-    },
-    credentials: 'include', // Importante para CORS
+  const headers: HeadersInit = {
+    Accept: "application/json",
+    ...(method !== "GET" && { "Content-Type": "application/json" }),
+    ...(process.env.NODE_ENV === "development" && { Origin: window.location.origin }),
+    ...options.headers,
+  };
+
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  /* ------------------------------ Fetch ----------------------------------- */
+  const fetchOptions: RequestInit = {
     ...options,
+    method,
+    headers,
+    credentials: "include",
   };
 
-  if (data && method !== 'GET') {
-    config.body = JSON.stringify(data);
+  if (data && method !== "GET") {
+    fetchOptions.body = JSON.stringify(data);
   }
 
-  // Construir URL completa si es relativa
-  const fullUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
-  
-  console.log(`🔗 API Request: ${method} ${fullUrl}`);
-  
-  try {
-    const response = await fetch(fullUrl, config);
-    
-    if (!response.ok) {
-      console.error(`❌ API Error: ${response.status} ${response.statusText}`);
+  const fullUrl = url.startsWith("http") ? url : `${window.location.origin}${url}`;
+  console.log(`🔗 ${method} ${fullUrl}`);
+
+  const response = await fetch(fullUrl, fetchOptions);
+
+  if (!response.ok) {
+    /* Intentamos sacar un mensaje de error amistoso */
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const errJson = await response.clone().json();
+      message = errJson?.message ?? JSON.stringify(errJson);
+    } catch {
+      /* body no-json → usamos statusText */
     }
-    
-    return response;
-  } catch (error) {
-    console.error('❌ Network Error:', error);
-    throw error;
+    throw new Error(message);
   }
+
+  /* -------------------------- Parse automático ---------------------------- */
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
 }
 
-// Función específica para requests GET
-export async function apiGet(url: string, options?: RequestInit): Promise<Response> {
-  return apiRequest('GET', url, undefined, options);
-}
+/* -------------------------------------------------------------------------- */
+/* 3.  Helpers por verbo (si prefieres sintaxis corta)                         */
+/* -------------------------------------------------------------------------- */
+export const apiGet   = <T = unknown>(url: string, options?: RequestInit) =>
+  apiRequest<T>("GET", url, undefined, options);
 
-// Función específica para requests POST
-export async function apiPost(url: string, data?: any, options?: RequestInit): Promise<Response> {
-  return apiRequest('POST', url, data, options);
-}
+export const apiPost  = <T = unknown>(url: string, data?: unknown, options?: RequestInit) =>
+  apiRequest<T>("POST", url, data, options);
 
-// Función específica para requests PUT
-export async function apiPut(url: string, data?: any, options?: RequestInit): Promise<Response> {
-  return apiRequest('PUT', url, data, options);
-}
+export const apiPut   = <T = unknown>(url: string, data?: unknown, options?: RequestInit) =>
+  apiRequest<T>("PUT", url, data, options);
 
-// Función específica para requests DELETE
-export async function apiDelete(url: string, options?: RequestInit): Promise<Response> {
-  return apiRequest('DELETE', url, undefined, options);
-}
+export const apiPatch = <T = unknown>(url: string, data?: unknown, options?: RequestInit) =>
+  apiRequest<T>("PATCH", url, data, options);
+
+export const apiDelete = <T = unknown>(url: string, options?: RequestInit) =>
+  apiRequest<T>("DELETE", url, undefined, options);

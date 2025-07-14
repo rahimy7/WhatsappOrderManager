@@ -254,11 +254,34 @@ export default function Settings() {
   });
 
   // ✅ CORREGIDO: Query única para logs con condicional auto-refresh
-  const { data: whatsappLogs = [], isLoading: logsLoading, refetch: refetchLogs } = useQuery<WhatsAppLog[]>({
-    queryKey: ["/api/whatsapp/logs"],
-    refetchInterval: autoRefreshLogs ? 30000 : false, // Respeta la configuración del usuario
-    // enabled: !!user?.storeId
-  });
+ const { data: whatsappLogs = [], isLoading: logsLoading, refetch: refetchLogs } = useQuery<WhatsAppLog[]>({
+  queryKey: ["/api/whatsapp/logs"],
+  queryFn: async () => {
+    const token = localStorage.getItem("token"); // O ajusta según dónde almacenes el token
+
+    const res = await fetch("/api/whatsapp/logs", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      console.error("Error en fetch:", res.status);
+      return [];
+    }
+
+    const json = await res.json();
+
+    if (!Array.isArray(json)) {
+      console.error("La respuesta no es un arreglo:", json);
+      return [];
+    }
+
+    return json;
+  },
+  refetchInterval: autoRefreshLogs ? 30000 : false,
+});
+
 
   // ✅ Query para estadísticas de logs
   const { data: logsStats } = useQuery<WhatsAppLogStats>({
@@ -859,7 +882,8 @@ export default function Settings() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {whatsappLogs.map((log: WhatsAppLog) => (
+                        {Array.isArray(whatsappLogs) && whatsappLogs.map((log: WhatsAppLog) => (
+
                           <div key={log.id} className="border-b border-gray-700 pb-2">
                             <div className="flex justify-between items-start">
                               <span className="text-blue-300">

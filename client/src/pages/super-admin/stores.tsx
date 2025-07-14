@@ -170,18 +170,52 @@ const [globalSettings, setGlobalSettings] = useState<GlobalWhatsAppSettings>({
   }
 });
   // ✅ QUERIES CON TIPOS EXPLÍCITOS
-  const { data: storesData, isLoading: storesLoading } = useQuery<Store[]>({
-    queryKey: ["/api/super-admin/stores"],
-    staleTime: 30000,
-  });
+// 1) Tiendas
+const {
+  data: storesData = [],
+  isLoading: storesLoading,
+  isError: storesError,
+  error: storesErrorObj,
+} = useQuery<Store[], Error>({
+  queryKey: ["/api/super-admin/stores"],
+  queryFn: () => 
+   apiRequest<Store[]>("GET", "/api/super-admin/stores"),
+  staleTime: 30_000,
+  initialData: [],
+});
+if (storesLoading) {
+  return <div>Loading tiendas…</div>;
+}
+if (storesError) {
+  return <div>Error: {storesErrorObj?.message || "No se pudieron cargar las tiendas"}</div>;
+}
 
-  const { data: configsData, isLoading: configsLoading } = useQuery<WhatsAppConfig[]>({
-    queryKey: ["/api/super-admin/whatsapp-configs"],
-    staleTime: 30000,
-  });
+// 2) Configs de WhatsApp
+const {
+  data: configsData = [],
+  isLoading: configsLoading,
+  isError: configsError,
+  error: configsErrorObj,
+} = useQuery<WhatsAppConfig[], Error>({
+  queryKey: ["/api/super-admin/whatsapp-configs"],
+  queryFn: () => 
+   apiRequest<WhatsAppConfig[]>("GET", "/api/super-admin/whatsapp-configs"),
+  staleTime: 30_000,
+  initialData: [],
+});
+if (configsLoading) {
+  return <div>Loading configs…</div>;
+}
+if (configsError) {
+  return <div>Error: {configsErrorObj?.message || "No se pudieron cargar las configuraciones"}</div>;
+}
 
-  const stores: Store[] = Array.isArray(storesData) ? storesData : [];
-  const whatsappConfigs: WhatsAppConfig[] = Array.isArray(configsData) ? configsData : [];
+
+ const stores = storesData;
+
+ const whatsappConfigs = configsData ?? [];
+
+
 
   const updateGlobalSettingsMutation = useMutation({
   mutationFn: (data: GlobalWhatsAppSettings) =>
@@ -426,7 +460,9 @@ const testWebhookMutation = useMutation({
   // ✅ WHATSAPP MUTATIONS
   const whatsappMutation = useMutation({
     mutationFn: (data: WhatsAppFormData) => {
-      const existingConfig = whatsappConfigs.find((config) => config.storeId === selectedStore?.id);
+      if (!selectedStore) return Promise.reject(new Error("No hay tienda seleccionada"));
+const existingConfig = whatsappConfigs.find((config) => config.storeId === selectedStore.id);
+
       
       if (existingConfig) {
         return apiRequest("PUT", `/api/super-admin/whatsapp-configs/${existingConfig.id}`, {
@@ -511,7 +547,9 @@ const testWebhookMutation = useMutation({
 
   const openWhatsAppDialog = (store: Store) => {
     setSelectedStore(store);
-    const existingConfig = whatsappConfigs.find((config) => config.storeId === store.id);
+    if (!selectedStore) return Promise.reject(new Error("No hay tienda seleccionada"));
+const existingConfig = whatsappConfigs.find((config) => config.storeId === selectedStore.id);
+
     if (existingConfig) {
       setWhatsappForm({
         accessToken: existingConfig.accessToken,

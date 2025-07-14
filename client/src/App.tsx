@@ -48,6 +48,11 @@ import StoreThemes from "@/pages/super-admin/store-themes";
 import WhatsAppManagement from "@/pages/super-admin/whatsapp-management";
 import SubscriptionPlans from "@/pages/super-admin/subscription-plans";
 import AppLayout from "@/components/layout/app-layout";
+import WhatsAppSettingsWrapper from "./pages/super-admin/whatsapp-settings-wrapper";
+import { useEffect, useRef } from 'react';
+import { ErrorBoundary } from "./ErrorBoundary";
+import React from "react";
+
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
   const { user, isLoading } = useAuth();
@@ -136,6 +141,23 @@ function Router() {
       <Route path="/super-admin/reports" component={() => <ProtectedRoute component={SuperAdminReports} permission="super_admin" />} />
       <Route path="/super-admin/support" component={() => <ProtectedRoute component={Support} permission="super_admin" />} />
       <Route path="/super-admin/stores" component={() => <ProtectedRoute component={StoresPage} permission="super_admin" />} />
+       <Route        path="/super-admin/stores/:storeId/whatsapp"
+       component={() => (
+         <ProtectedRoute
+           component={WhatsAppSettingsWrapper}
+           permission="super_admin"
+         />
+        )}
+      />
+      <Route 
+  path="/super-admin/whatsapp-settings"
+  component={() => (
+    <ProtectedRoute
+      component={WhatsAppSettingsWrapper}
+      permission="super_admin"
+    />
+  )}
+/>
       <Route path="/super-admin/store-settings" component={() => <ProtectedRoute component={StoreSettings} permission="super_admin" />} />
       <Route path="/super-admin/store-products" component={() => <ProtectedRoute component={StoreProducts} permission="super_admin" />} />
       <Route path="/super-admin/store-themes" component={() => <ProtectedRoute component={StoreThemes} permission="super_admin" />} />
@@ -186,17 +208,51 @@ function AppWithAuth() {
   );
 }
 
+export function ReactDebugComponent() {
+  const renderCount = useRef(0);
+  const maxRenders = 50; // Límite antes de mostrar error
+  
+  useEffect(() => {
+    renderCount.current += 1;
+    
+    if (renderCount.current > maxRenders) {
+      console.error('🚨 BUCLE INFINITO DETECTADO!');
+      console.error(`Componente re-renderizado ${renderCount.current} veces`);
+      console.trace('Stack trace del bucle infinito:');
+      
+      // Mostrar información útil para debugging
+      console.group('🔍 INFORMACIÓN DE DEBUG');
+      console.log('URL actual:', window.location.href);
+      
+      console.log('Re-renders:', renderCount.current);
+      console.groupEnd();
+      
+      // Opcional: lanzar error para detener la ejecución
+      throw new Error(`Bucle infinito detectado: ${renderCount.current} re-renders`);
+    }
+    
+    if (renderCount.current > 10) {
+      console.warn(`⚠️ Muchos re-renders detectados: ${renderCount.current}`);
+    }
+  });
+  
+  return null; // Este componente no renderiza nada
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Toaster />
-          <AppWithAuth />
+          <ErrorBoundary>
+            <Toaster />
+            <AppWithAuth />
+          </ErrorBoundary>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
 }
+
 
 export default App;

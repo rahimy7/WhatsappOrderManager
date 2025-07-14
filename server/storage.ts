@@ -69,6 +69,8 @@ import { insertUserSchema } from "@shared/schema";
 
 
 
+
+
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
@@ -298,6 +300,7 @@ export interface IStorage {
 // Database Storage Implementation
 export class DatabaseStorage implements IStorage {
   
+  
   // Users
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -313,7 +316,6 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
-
 
 
   async getUsersByRole(role: string): Promise<User[]> {
@@ -1283,9 +1285,15 @@ async getDashboardMetrics(storeId?: number): Promise<{
   activeTechnicians: number;
   dailyRevenue: number;
 }> {
-  // Usar la implementación existente
-  return await this.getDashboardMetrics();
+  // Ejemplo de métricas simuladas por ahora
+  return {
+    ordersToday: 10,
+    activeConversations: 5,
+    activeTechnicians: 3,
+    dailyRevenue: 2500,
+  };
 }
+
 
 async getMessagesByConversation(conversationId: number, storeId?: number): Promise<Message[]> {
   return await this.getMessages(conversationId);

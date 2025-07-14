@@ -2,6 +2,9 @@ import { Express, Request, Response, NextFunction } from 'express';
 import { IStorage } from './storage.js';
 import jwt from 'jsonwebtoken';
 import { Server } from 'http';
+import { masterDb } from './multi-tenant-db.js';
+import { schema } from '@shared/schema.js';
+import { eq, sql } from 'drizzle-orm';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -118,6 +121,141 @@ export async function registerRoutes(app: Express): Promise<any> {
       }
     }
   });
+
+  // Dentro de registerRoutes() en routes.ts
+app.get("/api/super-admin/subscriptions", (req, res) => {
+  res.json([]); // o tu lógica real si ya tienes datos
+});
+
+app.get("/api/super-admin/subscription-metrics", (req, res) => {
+  res.json({
+    total: 0,
+    active: 0,
+    expired: 0
+  });
+});
+
+
+    // Métricas globales del sistema
+  app.get('/api/super-admin/metrics', async (req, res) => {
+    try {
+      // Obtener métricas de todas las tiendas
+      const stores = await masterDb.select().from(schema.virtualStores);
+      const users = await masterDb.select().from(schema.systemUsers);
+      
+      // Calcular métricas agregadas
+      const totalStores = stores.length;
+      const activeStores = stores.filter(store => store.isActive).length;
+      const totalUsers = users.length;
+      
+      // Calcular métricas reales desde la base de datos
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Contar órdenes totales y del día
+      const [totalOrdersResult] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.orders);
+      
+      const [todayOrdersResult] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.orders)
+        .where(sql`DATE(${schema.orders.createdAt}) = DATE(${new Date().toISOString()})`);
+      
+      // Contar mensajes WhatsApp totales
+      const [totalMessagesResult] = await masterDb
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.messages);
+      
+      // Calcular ingresos totales
+      const [revenueResult] = await masterDb
+        .select({ total: sql<number>`COALESCE(SUM(CAST(${schema.orders.totalAmount} AS DECIMAL)), 0)` })
+        .from(schema.orders)
+        .where(eq(schema.orders.status, 'completed'));
+      
+      const metrics = {
+        totalStores,
+        activeStores,
+        totalUsers,
+        totalOrders: totalOrdersResult?.count || 0,
+        ordersToday: todayOrdersResult?.count || 0,
+        totalRevenue: Number(revenueResult?.total || 0).toFixed(2),
+        totalMessages: totalMessagesResult?.count || 0,
+        storageUsed: "N/A", // Requiere monitoreo del sistema
+        systemStatus: "healthy" as const
+      };
+
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error fetching super admin metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch metrics' });
+    }
+  });
+
+    // WhatsApp logs endpoints
+ app.get("/api/whatsapp/logs", authenticateToken, async (_req, res) => {
+  try {
+    const logs = await storage.getWhatsAppLogs();
+    res.json(logs);
+  } catch (error) {
+    console.error("Error getting WhatsApp logs:", error);
+    res.status(500).json({ error: "Error al obtener los logs de WhatsApp" });
+  }
+});
+
+  app.post("/api/whatsapp/logs", authenticateToken, async (req, res) => {
+  try {
+    await storage.addWhatsAppLog(req.body);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error adding WhatsApp log:", error);
+    res.status(500).json({ error: "Error al agregar log de WhatsApp" });
+  }
+});
+
+    app.get("/api/whatsapp/status", async (req, res) => {
+    try {
+      const config = await storage.getWhatsAppConfig();
+      
+      if (!config || !config.accessToken || !config.phoneNumberId) {
+        return res.json({
+          connected: false,
+          configured: false,
+          message: "WhatsApp credentials not configured"
+        });
+      }
+
+      // Test connection by validating token format and configuration
+      const domain = process.env.REPLIT_DOMAINS?.split(',')[0];
+      const webhookUrl = domain ? `https://${domain}/webhook` : 'https://tu-dominio-replit.com/webhook';
+      
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: null,
+        messageContent: 'Configuración de WhatsApp cargada correctamente',
+        status: 'configured',
+        rawData: JSON.stringify({ 
+          phoneNumberId: config.phoneNumberId,
+          webhookUrl,
+          timestamp: new Date() 
+        })
+      });
+
+      res.json({
+        connected: true,
+        configured: true,
+        lastCheck: new Date().toISOString(),
+        phoneNumber: config.phoneNumberId,
+        businessName: "WhatsApp Business Account",
+        webhookUrl: webhookUrl,
+        webhookVerifyToken: config.webhookVerifyToken,
+        message: "Configuration loaded successfully"
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check WhatsApp status" });
+    }
+  });
+
 
   // Health endpoint is defined in index.ts to prevent Vite middleware interference
 

@@ -50,9 +50,13 @@ interface WhatsAppStatus {
   message?: string;
 }
 
-export default function WhatsAppSettings() {
+interface Props { 
+  storeId?: number; // Hacer opcional para compatibilidad
+}
+
+export default function WhatsAppSettings({ storeId: propStoreId }: Props) {
   const { toast } = useToast();
- const { user } = useAuth();
+  const { user } = useAuth();
   const [showTokens, setShowTokens] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<WhatsAppConfig>({
     accessToken: "",
@@ -63,556 +67,364 @@ export default function WhatsAppSettings() {
     isActive: true
   });
 
-  // Obtener configuración actual
- // Obtener configuración actual
-// Obtener configuración actual
-const { data: config, isLoading: configLoading, refetch: refetchConfig } = useQuery<WhatsAppConfig>({
-  queryKey: ["/api/whatsapp-settings"]
-});
+  // Determinar storeId efectivo
+  const effectiveStoreId = propStoreId || user?.storeId;
 
-// Obtener estado de conexión
-const { data: status, refetch: refetchStatus } = useQuery<WhatsAppStatus>({
-  queryKey: ["/api/whatsapp/status"],
-  refetchInterval: 30000
-});
+  // ✅ CORREGIDO: Obtener configuración sin .then(res => res.json())
+  const { data: config, isLoading: configLoading, refetch: refetchConfig } =
+    useQuery<WhatsAppConfig>({
+      queryKey: ["whatsapp-config", effectiveStoreId],
+      queryFn: () => apiRequest<WhatsAppConfig>("GET", `/api/super-admin/whatsapp-configs/${effectiveStoreId}`),
+      staleTime: 5 * 60_000,
+      enabled: !!effectiveStoreId,
+    });
 
-  // Actualizar formData cuando se obtiene la configuración
+  // ✅ CORREGIDO: Obtener estado sin .then(res => res.json())
+  const { data: status, refetch: refetchStatus } =
+    useQuery<WhatsAppStatus>({
+      queryKey: ["whatsapp-status", effectiveStoreId],
+      queryFn: () => apiRequest<WhatsAppStatus>("GET", `/api/super-admin/whatsapp-configs/${effectiveStoreId}/status`),
+      refetchInterval: 30_000,
+      enabled: !!effectiveStoreId,
+    });
+
+  // ✅ CORREGIDO: Mutation para guardar configuración
+  const saveConfigMutation = useMutation({
+    mutationFn: (data: WhatsAppConfig) =>
+      apiRequest("PUT", `/api/super-admin/whatsapp-configs/${effectiveStoreId}`, data),
+    onSuccess: () => {
+      toast({
+        title: "Configuración guardada",
+        description: "La configuración de WhatsApp se guardó exitosamente.",
+      });
+      refetchConfig();
+      refetchStatus();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Error al guardar la configuración",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ✅ CORREGIDO: Mutation para probar conexión
+  const testConnectionMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/super-admin/whatsapp-configs/${effectiveStoreId}/test`),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Conexión exitosa",
+        description: data.message || "La conexión se estableció correctamente",
+      });
+      refetchStatus();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error de conexión",
+        description: error.message || "No se pudo establecer la conexión",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ✅ CORREGIDO: useEffect optimizado para evitar loops
   useEffect(() => {
     if (config && typeof config === 'object') {
-      setFormData({
-        accessToken: (config as any).accessToken || "",
-        phoneNumberId: (config as any).phoneNumberId || "",
-        webhookVerifyToken: (config as any).webhookVerifyToken || "",
-        businessAccountId: (config as any).businessAccountId || "",
-        appId: (config as any).appId || "",
-        isActive: (config as any).isActive ?? true
+      setFormData(prevData => {
+        const newData = {
+          accessToken: config.accessToken || "",
+          phoneNumberId: config.phoneNumberId || "",
+          webhookVerifyToken: config.webhookVerifyToken || "",
+          businessAccountId: config.businessAccountId || "",
+          appId: config.appId || "",
+          isActive: config.isActive ?? true
+        };
+        
+        // Solo actualizar si los datos han cambiado
+        if (JSON.stringify(prevData) !== JSON.stringify(newData)) {
+          return newData;
+        }
+        return prevData;
       });
     }
-  }, [config]);
+  }, [config]); // Solo depender de config
 
-  // Mutación para actualizar configuración
-
-const updateConfigMutation = useMutation({
-  mutationFn: (data: WhatsAppConfig) => 
-    apiRequest("PUT", "/api/whatsapp-settings", data),
-  onSuccess: () => {
-    toast({
-      title: "Configuración actualizada",
-      description: "Los cambios se guardaron correctamente"
-    });
-    refetchConfig();
-    refetchStatus();
-  },
-  onError: (error: any) => {
-    toast({
-      title: "Error",
-      description: error?.message || "No se pudo actualizar la configuración",
-      variant: "destructive"
-    });
-  }
-});
-
-const testConnectionMutation = useMutation({
-  mutationFn: () => apiRequest("POST", "/api/super-admin/whatsapp-test", {
-    storeId: user?.storeId || user?.storeId,
-    phoneNumberId: formData.phoneNumberId || config?.phoneNumberId
-  }),
-  onSuccess: (data: any) => {
-    toast({
-      title: "Prueba de conexión",
-      description: data.success ? (data.message || "Conexión exitosa") : (data.message || "Error en la conexión"),
-      variant: data.success ? "default" : "destructive"
-    });
-    refetchStatus();
-  },
-  onError: (error: any) => {
-    toast({
-      title: "Error de conexión",
-      description: error?.message || "No se pudo probar la conexión",
-      variant: "destructive"
-    });
-  }
-});
-
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateConfigMutation.mutate(formData);
-  };
-
-  const handleInputChange = (field: keyof WhatsAppConfig, value: string | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
+  // Función para alternar visibilidad de tokens
   const toggleTokenVisibility = (field: string) => {
-    setShowTokens(prev => ({ ...prev, [field]: !prev[field] }));
+    setShowTokens(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: "Copiado",
-      description: `${label} copiado al portapapeles`
+  // Función para copiar al portapapeles
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "Copiado",
+        description: "Texto copiado al portapapeles",
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "No se pudo copiar al portapapeles",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSave = () => {
+    saveConfigMutation.mutate({
+      ...formData,
+      storeId: effectiveStoreId
     });
   };
 
-  const maskToken = (token: string) => {
-    if (!token || token.length < 10) return token;
-    return token.slice(0, 12) + "••••••••••••••••" + token.slice(-6);
+  const handleTestConnection = () => {
+    testConnectionMutation.mutate();
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "No disponible";
-    return new Date(dateString).toLocaleString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const updateFormData = (field: keyof WhatsAppConfig, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
+
+  if (!effectiveStoreId) {
+    return (
+      <div className="p-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-600 mb-4">
+            ID de tienda requerido
+          </h1>
+          <p className="text-gray-500">
+            No se pudo determinar la tienda para configurar WhatsApp
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (configLoading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-6 h-6 animate-spin mr-2" />
-          <span>Cargando configuración...</span>
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-4 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center space-x-3">
-        <Settings className="h-7 w-7 text-green-600" />
-        <div>
-          <h1 className="text-3xl font-bold">Configuración de WhatsApp Business API</h1>
-          <p className="text-muted-foreground">Gestiona la configuración y estado de tu integración con WhatsApp</p>
-        </div>
-      </div>
-
-      {/* Información actual de la configuración */}
-      <Card className="border-green-200 bg-green-50/50">
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2 text-green-800">
-            <Activity className="h-5 w-5" />
-            <span>Configuración Actual</span>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => { refetchConfig(); refetchStatus(); }}
-              className="ml-auto"
-            >
-              <RefreshCw className="w-4 h-4 mr-1" />
-              Actualizar
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Store Info */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Server className="h-4 w-4 text-blue-600" />
-                <span className="font-medium">Información de Tienda</span>
-              </div>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Store ID:</span>
-                  <span className="ml-2 font-mono">{config?.storeId || user?.storeId || 'No definido'}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Usuario:</span>
-                  <span className="ml-2">{user?.username || 'No autenticado'}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Nivel:</span>
-                 <Badge variant="outline" className="ml-2">{user?.role || 'N/A'}</Badge>
-                </div>
-              </div>
-            </div>
-
-            {/* WhatsApp API Info */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Phone className="h-4 w-4 text-green-600" />
-                <span className="font-medium">Información de API</span>
-              </div>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Phone Number ID:</span>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                      {config?.phoneNumberId || 'No configurado'}
-                    </span>
-                    {config?.phoneNumberId && (
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => copyToClipboard(config.phoneNumberId, 'Phone Number ID')}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Business Account ID:</span>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                      {config?.businessAccountId || 'No configurado'}
-                    </span>
-                    {config?.businessAccountId && (
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => copyToClipboard(config.businessAccountId, 'Business Account ID')}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">App ID:</span>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                      {config?.appId || 'No configurado'}
-                    </span>
-                    {config?.appId && (
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => copyToClipboard(config.appId, 'App ID')}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Status and Timestamps */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <span className="font-medium">Estado y Fechas</span>
-              </div>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Estado:</span>
-                  <Badge 
-                    variant={config?.isActive ? "default" : "destructive"} 
-                    className="ml-2"
-                  >
-                    {config?.isActive ? "Activo" : "Inactivo"}
-                  </Badge>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Creado:</span>
-                  <div className="text-xs mt-1">{formatDate(config?.createdAt)}</div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Actualizado:</span>
-                  <div className="text-xs mt-1">{formatDate(config?.updatedAt)}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Access Token Display */}
-          <Separator className="my-4" />
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-4 w-4 text-orange-600" />
-              <span className="font-medium">Token de Acceso</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="flex-1 bg-gray-100 p-2 rounded font-mono text-xs">
-                {showTokens.accessToken ? config?.accessToken : maskToken(config?.accessToken || '')}
-              </div>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => toggleTokenVisibility('accessToken')}
-              >
-                {showTokens.accessToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </Button>
-              {config?.accessToken && (
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => copyToClipboard(config.accessToken, 'Token de Acceso')}
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Webhook Verify Token Display */}
-          <div className="space-y-2 mt-4">
-            <div className="flex items-center space-x-2">
-              <Key className="h-4 w-4 text-purple-600" />
-              <span className="font-medium">Webhook Verify Token</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="flex-1 bg-gray-100 p-2 rounded font-mono text-xs">
-                {showTokens.verifyToken ? config?.webhookVerifyToken : (config?.webhookVerifyToken ? '••••••••••••' : 'No configurado')}
-              </div>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => toggleTokenVisibility('verifyToken')}
-              >
-                {showTokens.verifyToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </Button>
-              {config?.webhookVerifyToken && (
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => copyToClipboard(config.webhookVerifyToken, 'Verify Token')}
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div className="space-y-6">
       {/* Estado de conexión */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Globe className="h-5 w-5 text-blue-600" />
-            <span>Estado de Conexión</span>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Estado de Conexión WhatsApp
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="flex items-center space-x-2">
-              <Badge variant={(status as any)?.connected ? "default" : "destructive"}>
-                {(status as any)?.connected ? "Conectado" : "Desconectado"}
+              <Badge variant={status?.connected ? "default" : "destructive"}>
+                {status?.connected ? "Conectado" : "Desconectado"}
               </Badge>
               <span className="text-sm text-muted-foreground">Estado API</span>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={(status as any)?.configured ? "default" : "secondary"}>
-                {(status as any)?.configured ? "Configurado" : "Pendiente"}
+              <Badge variant={status?.configured ? "default" : "secondary"}>
+                {status?.configured ? "Configurado" : "Pendiente"}
               </Badge>
               <span className="text-sm text-muted-foreground">Configuración</span>
             </div>
             <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium">{(status as any)?.phoneNumber || 'N/A'}</span>
+              <span className="text-sm font-medium">{status?.phoneNumber || 'N/A'}</span>
               <span className="text-sm text-muted-foreground">Número</span>
             </div>
             <div className="flex items-center space-x-2">
               <Button 
                 size="sm" 
-                onClick={() => testConnectionMutation.mutate()}
+                onClick={handleTestConnection}
                 disabled={testConnectionMutation.isPending}
                 className="bg-green-600 hover:bg-green-700"
               >
                 {testConnectionMutation.isPending ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
-                    Probando...
-                  </>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
-                  "Probar Conexión"
+                  <Activity className="h-4 w-4 mr-2" />
                 )}
+                Probar
               </Button>
             </div>
           </div>
-          
-          {(status as any)?.webhookUrl && (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium flex items-center space-x-1">
-                <Globe className="w-4 h-4" />
-                <span>URL del Webhook</span>
-              </Label>
-              <div className="flex items-center space-x-2">
-                <Input 
-                  value={(status as any).webhookUrl} 
-                  readOnly 
-                  className="font-mono text-xs bg-gray-50"
-                />
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => copyToClipboard((status as any).webhookUrl, 'URL del Webhook')}
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
 
-          {(status as any)?.message && (
+          {status?.message && (
             <Alert className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{(status as any).message}</AlertDescription>
+              <AlertDescription>{status.message}</AlertDescription>
             </Alert>
           )}
         </CardContent>
       </Card>
 
-      {/* Formulario de configuración */}
+      {/* Configuración */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
+          <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            <span>Actualizar Configuración</span>
+            Configuración de WhatsApp Business API
           </CardTitle>
           <CardDescription>
-            Modifica los tokens y identificadores de tu aplicación de WhatsApp Business
+            Configura la conexión con WhatsApp Business API
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Token de Acceso */}
-            <div className="space-y-2">
-              <Label htmlFor="accessToken" className="flex items-center space-x-2">
-                <Shield className="h-4 w-4" />
-                <span>Token de Acceso Permanente</span>
-              </Label>
+        <CardContent className="space-y-4">
+          {/* Access Token */}
+          <div className="space-y-2">
+            <Label htmlFor="accessToken">Access Token</Label>
+            <div className="flex space-x-2">
               <Input
                 id="accessToken"
-                type={showTokens.editAccessToken ? "text" : "password"}
+                type={showTokens.accessToken ? "text" : "password"}
                 value={formData.accessToken}
-                onChange={(e) => handleInputChange("accessToken", e.target.value)}
-                placeholder="Ingresa tu token de acceso permanente de Meta Developer Console"
-                className="font-mono pr-10"
+                onChange={(e) => updateFormData('accessToken', e.target.value)}
+                placeholder="Ingresa tu Access Token"
               />
-              <div className="flex items-center justify-between">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => toggleTokenVisibility('editAccessToken')}
-                >
-                  {showTokens.editAccessToken ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
-                  {showTokens.editAccessToken ? 'Ocultar' : 'Mostrar'}
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  Usa tokens permanentes (no caducan)
-                </span>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Phone Number ID */}
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumberId" className="flex items-center space-x-2">
-                  <Smartphone className="h-4 w-4" />
-                  <span>Phone Number ID</span>
-                </Label>
-                <Input
-                  id="phoneNumberId"
-                  value={formData.phoneNumberId}
-                  onChange={(e) => handleInputChange("phoneNumberId", e.target.value)}
-                  placeholder="667993026397854"
-                  className="font-mono"
-                />
-              </div>
-
-              {/* Business Account ID */}
-              <div className="space-y-2">
-                <Label htmlFor="businessAccountId">Business Account ID</Label>
-                <Input
-                  id="businessAccountId"
-                  value={formData.businessAccountId || ""}
-                  onChange={(e) => handleInputChange("businessAccountId", e.target.value)}
-                  placeholder="444239435931422"
-                  className="font-mono"
-                />
-              </div>
-
-              {/* App ID */}
-              <div className="space-y-2">
-                <Label htmlFor="appId">App ID</Label>
-                <Input
-                  id="appId"
-                  value={formData.appId || ""}
-                  onChange={(e) => handleInputChange("appId", e.target.value)}
-                  placeholder="711755744667781"
-                  className="font-mono"
-                />
-              </div>
-
-              {/* Webhook Verify Token */}
-              <div className="space-y-2">
-                <Label htmlFor="webhookVerifyToken">Webhook Verify Token</Label>
-                <Input
-                  id="webhookVerifyToken"
-                  type={showTokens.editVerifyToken ? "text" : "password"}
-                  value={formData.webhookVerifyToken}
-                  onChange={(e) => handleInputChange("webhookVerifyToken", e.target.value)}
-                  placeholder="verifytoken12345"
-                  className="font-mono"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => toggleTokenVisibility('editVerifyToken')}
-                >
-                  {showTokens.editVerifyToken ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
-                  {showTokens.editVerifyToken ? 'Ocultar' : 'Mostrar'}
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex space-x-4">
-              <Button 
-                type="submit" 
-                disabled={updateConfigMutation.isPending}
-                className="flex-1 bg-green-600 hover:bg-green-700"
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => toggleTokenVisibility('accessToken')}
               >
-                {updateConfigMutation.isPending ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  "Guardar Configuración"
-                )}
+                {showTokens.accessToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+              {formData.accessToken && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyToClipboard(formData.accessToken)}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Phone Number ID */}
+          <div className="space-y-2">
+            <Label htmlFor="phoneNumberId">Phone Number ID</Label>
+            <Input
+              id="phoneNumberId"
+              value={formData.phoneNumberId}
+              onChange={(e) => updateFormData('phoneNumberId', e.target.value)}
+              placeholder="Ingresa el Phone Number ID"
+            />
+          </div>
+
+          {/* Webhook Verify Token */}
+          <div className="space-y-2">
+            <Label htmlFor="webhookVerifyToken">Webhook Verify Token</Label>
+            <div className="flex space-x-2">
+              <Input
+                id="webhookVerifyToken"
+                type={showTokens.webhookVerifyToken ? "text" : "password"}
+                value={formData.webhookVerifyToken}
+                onChange={(e) => updateFormData('webhookVerifyToken', e.target.value)}
+                placeholder="Token para verificar webhook"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => toggleTokenVisibility('webhookVerifyToken')}
+              >
+                {showTokens.webhookVerifyToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-          </form>
+          </div>
+
+          {/* Business Account ID */}
+          <div className="space-y-2">
+            <Label htmlFor="businessAccountId">Business Account ID (Opcional)</Label>
+            <Input
+              id="businessAccountId"
+              value={formData.businessAccountId || ""}
+              onChange={(e) => updateFormData('businessAccountId', e.target.value)}
+              placeholder="ID de la cuenta de negocio"
+            />
+          </div>
+
+          {/* App ID */}
+          <div className="space-y-2">
+            <Label htmlFor="appId">App ID (Opcional)</Label>
+            <Input
+              id="appId"
+              value={formData.appId || ""}
+              onChange={(e) => updateFormData('appId', e.target.value)}
+              placeholder="ID de la aplicación"
+            />
+          </div>
+
+          <Separator />
+
+          {/* Botones de acción */}
+          <div className="flex justify-end space-x-2">
+            <Button
+              onClick={handleSave}
+              disabled={saveConfigMutation.isPending}
+            >
+              {saveConfigMutation.isPending ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Shield className="h-4 w-4 mr-2" />
+              )}
+              Guardar Configuración
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Instrucciones */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Instrucciones de Configuración</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              <strong>Para obtener estos valores:</strong>
-              <ol className="list-decimal list-inside mt-2 space-y-1">
-                <li>Ve a <strong>Meta Developer Console</strong> (developers.facebook.com)</li>
-                <li>Selecciona tu aplicación de WhatsApp Business</li>
-                <li>En <strong>"Configuración"</strong> encontrarás el Token de Acceso</li>
-                <li>En <strong>"Números de teléfono"</strong> encontrarás el Phone Number ID</li>
-                <li>En <strong>"Configuración de la aplicación"</strong> encontrarás el App ID</li>
-                <li>Configura el webhook URL: <code>{(status as any)?.webhookUrl}</code></li>
-                <li>Usa el verify token configurado para verificar el webhook</li>
-              </ol>
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+      {/* Información del Webhook */}
+      {status?.webhookUrl && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Información del Webhook
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label>URL del Webhook</Label>
+              <div className="flex space-x-2">
+                <Input
+                  value={status.webhookUrl}
+                  readOnly
+                  className="bg-gray-50"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyToClipboard(status.webhookUrl)}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-sm text-gray-600">
+                Usa esta URL en la configuración de tu webhook en Meta Developers
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

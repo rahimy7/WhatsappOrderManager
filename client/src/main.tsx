@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import React from "react";
+
 
 // Override WebSocket to prevent invalid URL construction in development
 if (import.meta.env.DEV && typeof window !== 'undefined') {

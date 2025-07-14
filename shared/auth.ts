@@ -20,13 +20,13 @@ export interface AuthUser {
   department?: string;
   storeId?: number;
   storeName?: string;
+  level?: 'global' | 'store' | 'tenant'; // ✅ AGREGADO: propiedad level
 }
 
 export interface AuthResponse {
   user: AuthUser;
   token: string;
 }
-
 
 /**
  * Tipos de autenticación para el sistema multi-tenant
@@ -49,6 +49,7 @@ declare global {
     }
   }
 }
+
 // Definición de permisos por rol
 export const rolePermissions = {
   super_admin: [
