@@ -256,9 +256,227 @@ app.get("/api/super-admin/subscription-metrics", (req, res) => {
     }
   });
 
+// ==========================================
+// 🧪 RUTAS HTTP PARA PRUEBAS AUTO-RESPUESTAS (CORREGIDAS)
+// ==========================================
+
+// Verificar estado completo de la tienda
+app.get('/api/test/store-status/:storeId', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    console.log(`🧪 TESTING AUTO-RESPONSES - Store ID: ${storeId}`);
+    
+    // ✅ CORRECCIÓN: Obtener tenantDb primero, luego crear storage
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Verificar auto-respuestas en base de datos
+    const autoResponses = await tenantStorage.getAllAutoResponses();
+    
+    console.log(`📋 AUTO-RESPONSES FOUND: ${autoResponses.length}`);
+    
+    // Verificar configuración de WhatsApp
+    const whatsappConfig = await storage.getWhatsAppConfig(storeId);
+    
+    // Verificar respuesta de bienvenida
+    const welcomeResponse = autoResponses.find((resp: any) => 
+      resp.isActive && resp.trigger === 'welcome'
+    );
+    
+    res.json({
+      success: true,
+      storeId,
+      autoResponsesCount: autoResponses.length,
+      autoResponses: autoResponses.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        trigger: r.trigger,
+        isActive: r.isActive,
+        messagePreview: r.messageText.substring(0, 50) + "..."
+      })),
+      whatsappConfigured: !!whatsappConfig,
+      phoneNumberId: whatsappConfig?.phoneNumberId || null,
+      hasWelcomeResponse: !!welcomeResponse,
+      readyForMessages: !!(whatsappConfig && welcomeResponse)
+    });
+    
+  } catch (error) {
+    console.error('❌ ERROR TESTING AUTO-RESPONSES:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Simular webhook de mensaje
+app.post('/api/test/simulate-webhook/:storeId', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    const { phoneNumber = '18494553242', messageText = 'Hola' } = req.body;
+    
+    console.log(`🎭 SIMULATING MESSAGE WEBHOOK - Store: ${storeId}, Phone: ${phoneNumber}, Message: "${messageText}"`);
+    
+    // Obtener configuración de WhatsApp
+    const whatsappConfig = await storage.getWhatsAppConfig(storeId);
+    
+    if (!whatsappConfig) {
+      return res.json({
+        success: false,
+        error: "No WhatsApp config found - Cannot simulate webhook"
+      });
+    }
+    
+    // Crear webhook simulado
+    const simulatedWebhook = {
+      object: "whatsapp_business_account",
+      entry: [{
+        id: "TEST_BUSINESS_ACCOUNT_ID",
+        changes: [{
+          value: {
+            messaging_product: "whatsapp",
+            metadata: {
+              display_phone_number: whatsappConfig.phoneNumberId,
+              phone_number_id: whatsappConfig.phoneNumberId
+            },
+            messages: [{
+              from: phoneNumber,
+              id: `test_${Date.now()}`,
+              timestamp: Math.floor(Date.now() / 1000).toString(),
+              text: {
+                body: messageText
+              },
+              type: "text"
+            }]
+          },
+          field: "messages"
+        }]
+      }]
+    };
+    
+    console.log(`📤 PROCESSING SIMULATED WEBHOOK...`);
+    
+    // Procesar webhook simulado
+    const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
+    await processWhatsAppMessageSimple(simulatedWebhook);
+    
+    console.log(`✅ WEBHOOK SIMULATION COMPLETED`);
+    
+    res.json({
+      success: true,
+      message: "Webhook simulado exitosamente",
+      details: {
+        storeId,
+        phoneNumber,
+        messageText,
+        phoneNumberId: whatsappConfig.phoneNumberId
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ ERROR SIMULATING WEBHOOK:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Crear respuesta de bienvenida por defecto
+app.post('/api/test/create-welcome/:storeId', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    console.log(`🏗️ CREATING DEFAULT WELCOME RESPONSE - Store ID: ${storeId}`);
+    
+    // ✅ CORRECCIÓN: Obtener tenantDb primero, luego crear storage
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Verificar si ya existe
+    const autoResponses = await tenantStorage.getAllAutoResponses();
+    const welcomeExists = autoResponses.find((resp: any) => resp.trigger === 'welcome');
+    
+    if (welcomeExists) {
+      return res.json({
+        success: true,
+        message: "Welcome response already exists",
+        response: {
+          id: welcomeExists.id,
+          name: welcomeExists.name,
+          trigger: welcomeExists.trigger
+        }
+      });
+    }
+    
+    // Crear respuesta de bienvenida usando el tenantDb directamente
+    const welcomeResponse = {
+      name: "Bienvenida",
+      trigger: "welcome",
+      isActive: true,
+      priority: 1,
+      messageText: `¡Hola! 👋 Bienvenido a MAS QUE SALUD
+
+¿En qué puedo ayudarte hoy?
+
+💊 Ver productos
+📞 Contactar con soporte
+📍 Ubicación de tienda
+🕒 Horarios de atención
+
+Simplemente escribe lo que necesitas y te ayudaré.`,
+      requiresRegistration: false,
+      menuOptions: "Ver productos,Contactar soporte,Ubicación,Horarios",
+      nextAction: null,
+      menuType: "buttons",
+      showBackButton: false,
+      allowFreeText: true,
+      responseTimeout: 300,
+      maxRetries: 3,
+      fallbackMessage: "Lo siento, no entendí tu mensaje. ¿Podrías repetirlo?",
+      conditionalDisplay: null
+    };
+    
+    // Insertar usando tenantDb
+    const { schema } = await import('../shared/schema.js');
+    const [newResponse] = await tenantDb.insert(schema.autoResponses)
+      .values(welcomeResponse)
+      .returning();
+    
+    console.log(`✅ DEFAULT WELCOME RESPONSE CREATED: "${newResponse.name}" (ID: ${newResponse.id})`);
+    
+    res.json({
+      success: true,
+      message: "Default welcome response created successfully",
+      response: {
+        id: newResponse.id,
+        name: newResponse.name,
+        trigger: newResponse.trigger
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ ERROR CREATING WELCOME RESPONSE:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+
+
+
+
 
   // Health endpoint is defined in index.ts to prevent Vite middleware interference
 
   // Routes registered successfully - server managed by index.ts
   return app as any;
 }
+

@@ -92,8 +92,8 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
   try {
     console.log(`🤖 PROCESSING AUTO-RESPONSE - Store ID: ${storeId}, Message: "${messageText}"`);
 
-    // 1. Obtener respuestas automáticas desde la base de datos de la tienda
-    const autoResponses = await tenantStorage.getAutoResponses();
+    // 1. ✅ CORRECCIÓN: Usar getAllAutoResponses() en lugar de getAutoResponses()
+    const autoResponses = await tenantStorage.getAllAutoResponses();
     
     if (!autoResponses || autoResponses.length === 0) {
       console.log(`❌ NO AUTO-RESPONSES CONFIGURED - Store ${storeId}: No responses found in tenant database`);
@@ -145,6 +145,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
     console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
 
     // 4. Obtener configuración de WhatsApp desde la base de datos global
+    const { storage } = await import('./storage.js');
     const globalWhatsAppConfig = await storage.getWhatsAppConfig(storeId);
     
     if (!globalWhatsAppConfig) {
@@ -152,48 +153,101 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
       throw new Error('WhatsApp configuration not found in global database. Please configure WhatsApp API in store settings.');
     }
 
-    // 5. Enviar mensaje usando la configuración de la base de datos
-    const success = await sendWhatsAppMessage(
-      phoneNumber, 
-      autoResponse.messageText, 
-      globalWhatsAppConfig
-    );
+    // 5. Preparar el payload del mensaje
+    let messagePayload;
+    
+    if (autoResponse.menuOptions) {
+      const menuButtons = autoResponse.menuOptions.split(',').map((option: string, index: number) => ({
+        type: 'reply',
+        reply: {
+          id: `option_${index}`,
+          title: option.trim()
+        }
+      }));
 
-    if (success) {
-      console.log(`✅ AUTO-RESPONSE SENT - Store ${storeId}: Message sent successfully`);
-      
-      // Registrar envío exitoso
+      if (menuButtons.length > 0) {
+        messagePayload = {
+          messaging_product: 'whatsapp',
+          to: phoneNumber,
+          type: 'interactive',
+          interactive: {
+            type: 'button',
+            body: { text: autoResponse.messageText },
+            action: { buttons: menuButtons }
+          }
+        };
+      } else {
+        messagePayload = {
+          messaging_product: 'whatsapp',
+          to: phoneNumber,
+          type: 'text',
+          text: { body: autoResponse.messageText }
+        };
+      }
+    } else {
+      messagePayload = {
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'text',
+        text: { body: autoResponse.messageText }
+      };
+    }
+
+    // 6. Enviar mensaje a través de WhatsApp API
+    console.log('📤 SENDING MESSAGE WITH GLOBAL CONFIG - Store', storeId, 'phoneNumberId:', globalWhatsAppConfig.phoneNumberId);
+    
+    const response = await fetch(`https://graph.facebook.com/v21.0/${globalWhatsAppConfig.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${globalWhatsAppConfig.accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(messagePayload)
+    });
+
+    const result = await response.json();
+    console.log('📤 WhatsApp API Response:', result);
+
+    if (response.ok) {
+      console.log(`✅ AUTO-RESPONSE SENT SUCCESSFULLY - Store ${storeId}`);
       await storage.addWhatsAppLog({
         type: 'outgoing',
         phoneNumber: phoneNumber,
-        messageContent: autoResponse.messageText,
+        messageContent: `Auto-response sent: ${autoResponse.name}`,
         status: 'sent',
-        rawData: JSON.stringify({ 
-          storeId, 
-          autoResponseId: autoResponse.id,
-          phoneNumberId: globalWhatsAppConfig.phoneNumberId 
-        })
+        storeId: storeId,
+        rawData: JSON.stringify(result)
       });
     } else {
-      console.log(`❌ FAILED TO SEND AUTO-RESPONSE - Store ${storeId}: WhatsApp API error`);
-      
-      // Registrar error de envío
+      console.error(`❌ WHATSAPP API ERROR - Store ${storeId}:`, result);
       await storage.addWhatsAppLog({
         type: 'error',
         phoneNumber: phoneNumber,
-        messageContent: autoResponse.messageText,
+        messageContent: `Failed to send auto-response: ${autoResponse.name}`,
         status: 'failed',
-        errorMessage: 'Failed to send via WhatsApp API',
-        rawData: JSON.stringify({ 
-          storeId, 
-          autoResponseId: autoResponse.id,
-          phoneNumberId: globalWhatsAppConfig.phoneNumberId 
-        })
+        storeId: storeId,
+        errorMessage: JSON.stringify(result),
+        rawData: JSON.stringify(messagePayload)
       });
+      throw new Error(`WhatsApp API Error: ${JSON.stringify(result)}`);
     }
 
   } catch (error) {
-    console.error(`❌ ERROR IN AUTO-RESPONSE - Store ${storeId}:`, error);
+    console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
+    
+    // Log del error
+    const { storage } = await import('./storage.js');
+    await storage.addWhatsAppLog({
+      type: 'error',
+      phoneNumber: phoneNumber,
+      messageContent: `Error processing auto-response: ${messageText}`,
+      status: 'failed',
+      storeId: storeId,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      rawData: JSON.stringify({ messageText, error: error instanceof Error ? error.stack : error })
+    });
+    
+    throw error;
   }
 }
 
