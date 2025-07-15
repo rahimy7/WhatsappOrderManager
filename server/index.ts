@@ -1775,11 +1775,14 @@ apiRouter.delete('/cart/:productId', authenticateToken, async (req, res) => {
 // CATEGORIES
 apiRouter.get('/categories', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    const { getTenantDb } = await import('./multi-tenant-db.js');
     
     const user = (req as any).user;
-    const categories = await storage.getAllCategories(user.storeId);
+    const tenantDb = await getTenantDb(user.storeId);
+    const storage = createTenantStorage(tenantDb);
+    
+    const categories = await storage.getAllCategories();
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -1789,13 +1792,14 @@ apiRouter.get('/categories', authenticateToken, async (req, res) => {
 
 apiRouter.post('/categories', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    const { getTenantDb } = await import('./multi-tenant-db.js');
     
     const user = (req as any).user;
-    const categoryData = { ...req.body, storeId: user.storeId };
+    const tenantDb = await getTenantDb(user.storeId);
+    const storage = createTenantStorage(tenantDb);
     
-    const category = await storage.createCategory(categoryData);
+    const category = await storage.createCategory(req.body);
     res.status(201).json(category);
   } catch (error) {
     console.error('Error creating category:', error);

@@ -144,22 +144,14 @@ export default function ProductManagement() {
     queryFn: () => apiRequest("GET", "/api/products")
   });
 
-  const { data: categories = [], isLoading: isLoadingCategories, refetch: refetchCategories } = useQuery({
-    queryKey: ["/api/categories"],
-    queryFn: async () => {
-      const response = await fetch("/api/categories", {
-        credentials: "include"
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.json();
-    },
-    staleTime: 0, // Siempre considerar datos como obsoletos
-    gcTime: 0,    // TanStack Query v5 usa gcTime en lugar de cacheTime
-    refetchOnMount: true,
-    refetchOnWindowFocus: true
-  });
+const { data: categories = [], isLoading: isLoadingCategories, refetch: refetchCategories } = useQuery({
+  queryKey: ["/api/categories"],
+  queryFn: () => apiRequest("GET", "/api/categories"),  // ✅ Usa apiRequest con token
+  staleTime: 0,
+  gcTime: 0,
+  refetchOnMount: true,
+  refetchOnWindowFocus: true
+});
 
   // Asegurar que los datos sean arrays
   const productsList = Array.isArray(products) ? products : [];
