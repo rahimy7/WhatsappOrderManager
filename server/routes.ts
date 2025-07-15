@@ -3,8 +3,14 @@ import { IStorage } from './storage.js';
 import jwt from 'jsonwebtoken';
 import { Server } from 'http';
 import { masterDb } from './multi-tenant-db.js';
-import { schema } from '@shared/schema.js';
+import { insertUserSchema, schema } from '@shared/schema.js';
 import { eq, sql } from 'drizzle-orm';
+import z from 'zod';
+import {  requireSuperAdmin } from './authMiddleware';
+
+import bcrypt from 'bcrypt';
+import { AuthUser } from './multi-tenant-auth';
+
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -45,10 +51,325 @@ function authenticateToken(req: any, res: any, next: any) {
   });
 }
 
+// server/routes.ts - Actualizaciones para usar nuevos métodos
+
+
+
+export function setupUserManagementRoutes(app: any, storage: any) {
+
+  // ========================================
+  // ENDPOINTS PARA USUARIOS GLOBALES (Super Admins)
+  // ========================================
+
+  // Crear super admin o system admin
+  app.post('/api/super-admin/global-users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { name, username, email, password, role } = req.body;
+
+      // Validar que el rol sea apropiado para usuarios globales
+      if (!['super_admin', 'system_admin'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role for global user' });
+      }
+
+      // Hash de la contraseña
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Crear usuario global
+      const newUser = await storage.createGlobalUser({
+        name,
+        username,
+        email,
+        password: hashedPassword,
+        role,
+        status: 'active',
+        isActive: true
+      });
+
+      res.status(201).json({
+        id: newUser.id,
+        username: newUser.username,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        message: 'Global user created successfully'
+      });
+
+    } catch (error) {
+      console.error('Error creating global user:', error);
+      if (error instanceof Error && error.message.includes('already exists')) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: 'Failed to create global user' });
+    }
+  });
+
+  // Listar usuarios globales
+  app.get('/api/super-admin/global-users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const users = await storage.listGlobalUsers();
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching global users:', error);
+      res.status(500).json({ error: 'Failed to fetch global users' });
+    }
+  });
+
+  // ========================================
+  // ENDPOINTS PARA USUARIOS DE TIENDA (Store Users)
+  // ========================================
+
+  // Crear usuario de tienda (store_owner, store_admin) - ACTUALIZADO
+  app.post('/api/super-admin/users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { name, email, role, storeId, username, password, sendInvitation, invitationMessage } = req.body;
+
+      // Validar que la tienda existe
+      const [store] = await masterDb
+        .select()
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, storeId))
+        .limit(1);
+
+      if (!store) {
+        return res.status(400).json({ error: 'Store not found' });
+      }
+
+      // Generar username automáticamente si no se proporciona
+      const finalUsername = username || `${name.toLowerCase().replace(/\s+/g, '')}_${Date.now()}`;
+
+      // Generar contraseña temporal si no se proporciona
+      const tempPassword = password || Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
+
+      // Hash de la contraseña
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+      // ✅ USAR NUEVO MÉTODO: createStoreUser
+      const newUser = await storage.createStoreUser({
+        name,
+        username: finalUsername,
+        email,
+        password: hashedPassword,
+        role,
+        storeId,
+        isActive: true
+      });
+
+      // TODO: Implementar envío de email si sendInvitation es true
+      const invitationSent = false;
+
+      res.status(201).json({
+        id: newUser.id,
+        username: newUser.username,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        storeId: newUser.storeId,
+        isActive: newUser.isActive,
+        tempPassword: tempPassword,
+        storeName: store.name,
+        invitationSent: invitationSent
+      });
+
+    } catch (error) {
+      console.error('Error creating store user:', error);
+      if (error instanceof Error && error.message.includes('already exists')) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: 'Failed to create store user' });
+    }
+  });
+
+  // Listar usuarios de tienda - ACTUALIZADO
+  app.get('/api/super-admin/users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+  try {
+    const users = await storage.listStoreUsers(); // ← Este ahora retorna StoreUserListItem[]
+    res.json(users);
+  } catch (error) {
+      console.error('Error fetching store users:', error);
+      res.status(500).json({ error: 'Failed to fetch store users' });
+    }
+  });
+
+  // Obtener usuarios de una tienda específica
+  app.get('/api/super-admin/stores/:storeId/store-users', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const storeId = parseInt(req.params.storeId);
+      
+      // ✅ USAR NUEVO MÉTODO: getStoreUsersByStoreId
+      const users = await storage.getStoreUsersByStoreId(storeId);
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching store users:', error);
+      res.status(500).json({ error: 'Failed to fetch store users' });
+    }
+  });
+
+  // ========================================
+  // ENDPOINTS PARA USUARIOS OPERACIONALES (Tenant Users)
+  // ========================================
+
+  // Obtener usuarios operacionales de una tienda
+  app.get('/api/stores/:storeId/users', authenticateToken, async (req: Request, res: Response) => {
+    try {
+      const storeId = parseInt(req.params.storeId);
+      const user = req.user as AuthUser;
+
+      // Verificar permisos
+      if (user.role !== 'super_admin' && user.storeId !== storeId) {
+        return res.status(403).json({ error: 'Access denied to this store' });
+      }
+
+      // ✅ USAR NUEVO MÉTODO: listTenantUsers
+      const users = await storage.listTenantUsers(storeId);
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching tenant users:', error);
+      res.status(500).json({ error: 'Failed to fetch tenant users' });
+    }
+  });
+
+  // Crear usuario operacional en schema de tienda - ACTUALIZADO
+  app.post('/api/stores/:storeId/users', authenticateToken, async (req: Request, res: Response) => {
+    try {
+      const storeId = parseInt(req.params.storeId);
+      const user = req.user as AuthUser;
+      const { username, name, email, role, department, password } = req.body;
+
+      // Verificar permisos
+      if (user.role !== 'super_admin' && user.storeId !== storeId) {
+        return res.status(403).json({ error: 'Access denied to this store' });
+      }
+
+      // Hash de la contraseña
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // ✅ USAR NUEVO MÉTODO: createTenantUser
+      const newUser = await storage.createTenantUser(storeId, {
+        username,
+        name,
+        email,
+        password: hashedPassword,
+        role,
+        department,
+        status: 'active',
+        isActive: true
+      });
+
+      res.status(201).json(newUser);
+    } catch (error) {
+      console.error('Error creating tenant user:', error);
+      if (error instanceof Error && error.message.includes('already exists')) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: 'Failed to create tenant user' });
+    }
+  });
+
+  // ========================================
+  // ENDPOINTS DE UTILIDAD
+  // ========================================
+
+  // Buscar usuario en todos los niveles
+  app.get('/api/super-admin/users/search/:username', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { username } = req.params;
+      
+      // ✅ USAR NUEVO MÉTODO: findUserAnyLevel
+      const result = await storage.findUserAnyLevel(username);
+      
+      if (!result.user) {
+        return res.status(404).json({ error: 'User not found in any level' });
+      }
+
+      res.json({
+        user: result.user,
+        level: result.level,
+        storeId: result.storeId
+      });
+    } catch (error) {
+      console.error('Error searching user:', error);
+      res.status(500).json({ error: 'Failed to search user' });
+    }
+  });
+
+  // Estadísticas de usuarios
+  app.get('/api/super-admin/user-metrics', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      // ✅ USAR NUEVO MÉTODO: getUserStats
+      const stats = await storage.getUserStats();
+      
+      res.json({
+        totalUsers: stats.globalUsers + stats.storeUsers,
+        activeUsers: stats.activeStoreUsers,
+        storeOwners: stats.usersByRole.store_owner || 0,
+        superAdmins: stats.globalUsers,
+        suspendedUsers: stats.storeUsers - stats.activeStoreUsers,
+        newUsersThisMonth: 0, // TODO: implementar lógica de fecha
+        globalUsers: stats.globalUsers,
+        storeUsers: stats.storeUsers,
+        usersByRole: stats.usersByRole
+      });
+    } catch (error) {
+      console.error('Error fetching user metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch user metrics' });
+    }
+  });
+
+  // ========================================
+  // ENDPOINT DE MIGRACIÓN/COMPATIBILIDAD
+  // ========================================
+
+  // Migrar usuario de tabla users a system_users (si fuera necesario)
+  app.post('/api/super-admin/migrate-user/:userId', authenticateToken, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const { targetStoreId } = req.body;
+
+      // Obtener usuario de tabla users
+      const globalUser = await masterDb
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1);
+
+      if (globalUser.length === 0) {
+        return res.status(404).json({ error: 'Global user not found' });
+      }
+
+      const user = globalUser[0];
+
+      // Verificar que no sea super_admin
+      if (user.role === 'super_admin') {
+        return res.status(400).json({ error: 'Cannot migrate super admin users' });
+      }
+
+      // Crear en system_users
+      const migratedUser = await storage.createStoreUser({
+        name: user.name,
+        username: `migrated_${user.username}`,
+        email: user.email,
+        password: user.password, // Ya está hasheada
+        role: user.role,
+        storeId: targetStoreId,
+        isActive: user.isActive
+      });
+
+      res.json({
+        message: 'User migrated successfully',
+        originalUser: user,
+        migratedUser: migratedUser
+      });
+
+    } catch (error) {
+      console.error('Error migrating user:', error);
+      res.status(500).json({ error: 'Failed to migrate user' });
+    }
+  });
+}
+
 export async function registerRoutes(app: Express): Promise<any> {
   // Import storage dynamically to avoid dependency issues
-  const { DatabaseStorage } = await import('./storage.js');
-  const storage = new DatabaseStorage();
+  const { storage } = await import('./storage.js');
   // Multi-tenant WhatsApp message processing function
   async function processWhatsAppMessage(value: any) {
     console.log('🎯 PROCESSWHATSAPPMESSAGE - Iniciando procesamiento');
@@ -122,6 +443,92 @@ export async function registerRoutes(app: Express): Promise<any> {
     }
   });
 
+
+  // Users routes
+  app.get("/api/users", async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+// En routes.ts, línea 147 aproximadamente:
+app.post("/api/users", authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const userData = { ...req.body, storeId: user.storeId }; // ✅ Asegurar storeId
+    
+    // ✅ Usar storage principal en lugar de tenant storage
+    const { storage } = await import('./storage.js');
+    
+    const newUser = await storage.createStoreUser(userData); // ✅ Esto funciona
+    res.status(201).json(newUser);
+  } catch (error) {
+    console.error("Error creating user:", error);
+    res.status(500).json({ error: "Failed to create user" });
+  }
+});
+
+  app.patch("/api/users/:id/status", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status } = z.object({ status: z.string() }).parse(req.body);
+      
+      const user = await storage.updateUserStatus(id, status);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid status data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update user status" });
+    }
+  });
+
+// ✅ USA SCHEMA DE TIENDA
+app.get("/api/registration-flows", authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    // Usar tenant storage en lugar de storage global
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const flows = await tenantStorage.getAllRegistrationFlows(); // ← Schema de tienda
+    res.json(flows);
+  } catch (error) {
+    console.error("Error getting registration flows:", error);
+    res.status(500).json({ error: "Failed to fetch registration flows" });
+  }
+});
+
+// ✅ USA SCHEMA DE TIENDA
+app.post("/api/registration-flows", authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const flowData = req.body;
+    
+    // Usar tenant storage
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const flow = await tenantStorage.createRegistrationFlow(flowData); // ← Schema de tienda
+    res.status(201).json(flow);
+  } catch (error) {
+    console.error("Error creating registration flow:", error);
+    res.status(500).json({ error: "Failed to create registration flow" });
+  }
+});
   // Dentro de registerRoutes() en routes.ts
 app.get("/api/super-admin/subscriptions", (req, res) => {
   res.json([]); // o tu lógica real si ya tienes datos
@@ -256,6 +663,43 @@ app.get("/api/super-admin/subscription-metrics", (req, res) => {
     }
   });
 
+  // Endpoints que el frontend está esperando:
+app.get("/api/conversations", authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const conversations = await storage.getAllConversations(user.storeId); // ✅ Pasar storeId
+    res.json(conversations);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch conversations" });
+  }
+});
+
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await storage.getAllProducts();
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+app.get("/api/customers", async (req, res) => {
+  try {
+    const customers = await storage.getAllCustomers();
+    res.json(customers);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch customers" });
+  }
+});
+
+app.get("/api/employees", async (req, res) => {
+  try {
+    const employees = await storage.getAllEmployees();
+    res.json(employees);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch employees" });
+  }
+});
 // ==========================================
 // 🧪 RUTAS HTTP PARA PRUEBAS AUTO-RESPUESTAS (CORREGIDAS)
 // ==========================================

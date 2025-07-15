@@ -16,7 +16,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, User, Users, Briefcase, Truck, Headphones, Shield, Search, Filter, Edit2, Trash2 } from "lucide-react";
-import type { User as UserType, EmployeeProfile, InsertEmployeeProfile, InsertUser } from "@shared/schema";
+import type { User as UserType, EmployeeProfile, InsertEmployeeProfile, InsertUser, CustomerRegistrationFlow } from "@shared/schema";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Validation schemas
 const createEmployeeSchema = z.object({
@@ -96,6 +97,7 @@ const departmentLabels = {
 
 export default function Employees() {
   const { toast } = useToast();
+  const { user } = useAuth(); 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDepartment, setFilterDepartment] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
@@ -111,7 +113,7 @@ export default function Employees() {
   });
 
   // Fetch registration flows
-  const { data: registrationFlows = [] } = useQuery({
+  const { data: registrationFlows = [] } = useQuery<CustomerRegistrationFlow[]>({
     queryKey: ["/api/registration-flows"],
   });
 
@@ -130,16 +132,16 @@ export default function Employees() {
         isActive: true,
         department: employeeData.department,
         permissions: [],
+        storeId: user.storeId, 
       };
 
-      const userResponse = await apiRequest("POST", "/api/users", userData);
-      const newUser = await userResponse.json();
+      // Type assertion simple para usuario
+      const newUser = await apiRequest("POST", "/api/users", userData) as { id: number };
 
       // Generate employee ID
-      const empIdResponse = await apiRequest("POST", "/api/employees/generate-id", { 
+      const { employeeId } = await apiRequest("POST", "/api/employees/generate-id", { 
         department: employeeData.department 
-      });
-      const { employeeId } = await empIdResponse.json();
+      }) as { employeeId: string };
 
       // Then create the employee profile
       const profileData: InsertEmployeeProfile = {
@@ -182,7 +184,7 @@ export default function Employees() {
   const updateEmployeeMutation = useMutation({
     mutationFn: async (data: { employeeId: number; updates: any }) => {
       const response = await apiRequest("PUT", `/api/employees/${data.employeeId}`, data.updates);
-      return response.json();
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
@@ -206,7 +208,7 @@ export default function Employees() {
   const deleteEmployeeMutation = useMutation({
     mutationFn: async (employeeId: number) => {
       const response = await apiRequest("DELETE", `/api/employees/${employeeId}`);
-      return response.json();
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
@@ -281,7 +283,7 @@ export default function Employees() {
       phone: employee.user?.phone || "",
       email: employee.user?.email || "",
       address: employee.user?.address || "",
-      department: employee.department,
+      department: employee.department as "admin" | "delivery" | "support" | "technical" | "sales", // ✅ Type assertion
       position: employee.position,
       specializations: employee.specializations?.join(', ') || "",
       emergencyContact: employee.emergencyContact || "",

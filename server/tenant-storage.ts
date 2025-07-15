@@ -143,6 +143,12 @@ export function createTenantStorage(tenantDb: any) {
       await tenantDb.delete(schema.customers).where(eq(schema.customers.id, id));
     },
 
+    
+async getAllRegistrationFlows() {
+  return await tenantDb.select().from(schema.customerRegistrationFlows)
+    .orderBy(desc(schema.customerRegistrationFlows.createdAt));
+},
+
     // Conversations
     async getAllConversations() {
       return await tenantDb.select().from(schema.conversations).orderBy(desc(schema.conversations.lastMessageAt));

@@ -42,3 +42,62 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
     return res.status(403).json({ error: 'Token inválido o expirado' });
   }
 };
+
+/**
+ * Middleware para verificar que el usuario es super admin
+ */
+export const requireSuperAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  if (user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Super admin access required' });
+  }
+  
+  next();
+};
+
+/**
+ * Middleware para verificar que el usuario es admin (super_admin o system_admin)
+ */
+export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  if (!['super_admin', 'system_admin'].includes(user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  
+  next();
+};
+
+/**
+ * Middleware para verificar acceso a tienda específica
+ */
+export const requireStoreAccess = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const storeId = parseInt(req.params.storeId || req.body.storeId);
+  
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  // Super admin puede acceder a cualquier tienda
+  if (user.role === 'super_admin') {
+    return next();
+  }
+  
+  // Usuarios de tienda solo pueden acceder a su tienda
+  if (user.storeId === storeId) {
+    return next();
+  }
+  
+  return res.status(403).json({ error: 'Access denied to this store' });
+};
+

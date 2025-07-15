@@ -66,11 +66,30 @@ import { db } from "./db";
 import { eq, desc, and, count, isNull, gte, lt } from "drizzle-orm";
 import { insertUserSchema } from "@shared/schema";
 
+import { drizzle } from "drizzle-orm/neon-serverless";
+import { Pool } from "@neondatabase/serverless";
+import { asc, sql } from "drizzle-orm";
+import * as schema from "@shared/schema";
+import { getTenantDb } from './multi-tenant-db';
 
+// Tipos específicos para cada nivel de usuario
+type InsertGlobalUser = typeof schema.users.$inferInsert;
+type InsertStoreUser = typeof schema.systemUsers.$inferInsert;
+type GlobalUser = typeof schema.users.$inferSelect;
+type StoreUser = typeof schema.systemUsers.$inferSelect;
 
-
-
-
+// Tipo específico para listStoreUsers (solo las propiedades que realmente devolvemos)
+export interface StoreUserListItem {
+  id: number;
+  username: string;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  storeId: number;
+  createdAt: Date;
+  storeName?: string;
+}
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
@@ -217,6 +236,7 @@ export interface IStorage {
   
   // Customer Registration Flows
   getRegistrationFlow(phoneNumber: string): Promise<CustomerRegistrationFlow | undefined>;
+  getAllRegistrationFlows(storeId?: number): Promise<CustomerRegistrationFlow[]>;
   createRegistrationFlow(flow: InsertCustomerRegistrationFlow): Promise<CustomerRegistrationFlow>;
   updateRegistrationFlow(phoneNumber: string, updates: Partial<InsertCustomerRegistrationFlow>): Promise<CustomerRegistrationFlow | undefined>;
   deleteRegistrationFlow(phoneNumber: string): Promise<void>;
@@ -298,7 +318,335 @@ export interface IStorage {
 }
 
 // Database Storage Implementation
-export class DatabaseStorage implements IStorage {
+export class DatabaseStorage {
+  private db: ReturnType<typeof drizzle>;
+
+  constructor(connectionString: string) {
+    const pool = new Pool({ connectionString });
+    this.db = drizzle(pool, { schema });
+  }
+
+  // ========================================
+  // MÉTODOS PARA USUARIOS GLOBALES (Super Admins)
+  // ========================================
+
+  /**
+   * Crear usuario global (super_admin, system_admin)
+   * Inserta en tabla 'users' del schema público
+   */
+  async createGlobalUser(insertUser: InsertGlobalUser): Promise<GlobalUser> {
+    try {
+      const [user] = await this.db.insert(schema.users).values(insertUser).returning();
+      console.log(`✅ Global user created: ${user.username} (${user.role})`);
+      return user;
+    } catch (error) {
+      console.error('❌ Error creating global user:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener usuario global por username
+   */
+  async getGlobalUser(username: string): Promise<GlobalUser | null> {
+    const [user] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.username, username))
+      .limit(1);
+    
+    return user || null;
+  }
+
+  /**
+   * Listar todos los usuarios globales
+   */
+  async listGlobalUsers(): Promise<GlobalUser[]> {
+    return await this.db
+      .select()
+      .from(schema.users)
+      .orderBy(desc(schema.users.createdAt));
+  }
+
+  // ========================================
+  // MÉTODOS PARA USUARIOS DE TIENDA (Store Users)
+  // ========================================
+
+  /**
+   * Crear usuario de tienda (store_owner, store_admin)
+   * Inserta en tabla 'system_users' del schema público
+   */
+  async createStoreUser(insertUser: InsertStoreUser): Promise<StoreUser> {
+    try {
+      // Verificar que no exista el username en system_users
+      const existingUser = await this.db
+        .select()
+        .from(schema.systemUsers)
+        .where(eq(schema.systemUsers.username, insertUser.username))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        throw new Error(`Username '${insertUser.username}' already exists in system_users`);
+      }
+
+      // Verificar que no exista el email en system_users
+      if (insertUser.email) {
+        const existingEmail = await this.db
+          .select()
+          .from(schema.systemUsers)
+          .where(eq(schema.systemUsers.email, insertUser.email))
+          .limit(1);
+
+        if (existingEmail.length > 0) {
+          throw new Error(`Email '${insertUser.email}' already exists in system_users`);
+        }
+      }
+
+      const [user] = await this.db.insert(schema.systemUsers).values(insertUser).returning();
+      console.log(`✅ Store user created: ${user.username} (${user.role}) for store ${user.storeId}`);
+      return user;
+    } catch (error) {
+      console.error('❌ Error creating store user:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener usuario de tienda por username
+   */
+  async getStoreUser(username: string): Promise<StoreUser | null> {
+    const [user] = await this.db
+      .select()
+      .from(schema.systemUsers)
+      .where(eq(schema.systemUsers.username, username))
+      .limit(1);
+    
+    return user || null;
+  }
+
+  /**
+   * Listar usuarios de tienda con información de la tienda
+   */
+  async listStoreUsers(): Promise<StoreUserListItem[]> {
+    return await this.db
+      .select({
+        id: schema.systemUsers.id,
+        username: schema.systemUsers.username,
+        name: schema.systemUsers.name,
+        email: schema.systemUsers.email,
+        role: schema.systemUsers.role,
+        isActive: schema.systemUsers.isActive,
+        storeId: schema.systemUsers.storeId,
+        createdAt: schema.systemUsers.createdAt,
+        storeName: schema.virtualStores.name,
+      })
+      .from(schema.systemUsers)
+      .leftJoin(schema.virtualStores, eq(schema.systemUsers.storeId, schema.virtualStores.id))
+      .orderBy(desc(schema.systemUsers.createdAt));
+  }
+
+  /**
+   * Obtener usuarios de una tienda específica
+   */
+  async getStoreUsersByStoreId(storeId: number): Promise<StoreUser[]> {
+    return await this.db
+      .select()
+      .from(schema.systemUsers)
+      .where(eq(schema.systemUsers.storeId, storeId))
+      .orderBy(desc(schema.systemUsers.createdAt));
+  }
+
+  // ========================================
+  // MÉTODOS PARA USUARIOS OPERACIONALES (Tenant Users)
+  // ========================================
+
+  /**
+   * Crear usuario operacional en schema específico de tienda
+   * Inserta en tabla 'users' del schema de la tienda
+   */
+  async createTenantUser(storeId: number, userData: {
+    username: string;
+    name: string;
+    email: string;
+    password: string;
+    role: string;
+    department?: string;
+    status?: string;
+    isActive?: boolean;
+  }): Promise<any> {
+    try {
+      // Obtener información de la tienda
+      const [store] = await this.db
+        .select()
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, storeId))
+        .limit(1);
+
+      if (!store) {
+        throw new Error(`Store with ID ${storeId} not found`);
+      }
+
+      // Extraer schema name de la URL
+      const schemaMatch = store.databaseUrl?.match(/schema=([^&?]+)/);
+      if (!schemaMatch) {
+        throw new Error('Invalid store configuration - no schema found');
+      }
+
+      const schemaName = schemaMatch[1];
+      const tenantDb = await getTenantDb(storeId);
+
+      // Verificar si el username ya existe en el schema de la tienda
+      const existingUserCheck = await tenantDb.execute(`
+        SELECT id FROM ${schemaName}.users WHERE username = $1 LIMIT 1
+      `, [userData.username]);
+
+      if (existingUserCheck.rows.length > 0) {
+        throw new Error(`Username '${userData.username}' already exists in store ${storeId}`);
+      }
+
+      // Crear usuario en el schema de la tienda
+      const result = await tenantDb.execute(`
+        INSERT INTO ${schemaName}.users (
+          username, name, email, password, role, status, is_active, department, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        RETURNING id, username, name, email, role, department, is_active, created_at
+      `, [
+        userData.username,
+        userData.name,
+        userData.email,
+        userData.password,
+        userData.role,
+        userData.status || 'active',
+        userData.isActive ?? true,
+        userData.department || null
+      ]);
+
+      const user = result.rows[0];
+      console.log(`✅ Tenant user created: ${userData.username} in store ${storeId} (${schemaName})`);
+      return user;
+    } catch (error) {
+      console.error('❌ Error creating tenant user:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Listar usuarios operacionales de una tienda
+   */
+  async listTenantUsers(storeId: number): Promise<any[]> {
+    try {
+      // Obtener información de la tienda
+      const [store] = await this.db
+        .select()
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, storeId))
+        .limit(1);
+
+      if (!store) {
+        throw new Error(`Store with ID ${storeId} not found`);
+      }
+
+      const schemaMatch = store.databaseUrl?.match(/schema=([^&?]+)/);
+      if (!schemaMatch) {
+        return [];
+      }
+
+      const schemaName = schemaMatch[1];
+      const tenantDb = await getTenantDb(storeId);
+
+      const result = await tenantDb.execute(`
+        SELECT id, username, name, email, role, status, is_active, department, hire_date, created_at
+        FROM ${schemaName}.users 
+        ORDER BY created_at DESC
+      `);
+
+      return result.rows || [];
+    } catch (error) {
+      console.error('❌ Error listing tenant users:', error);
+      return [];
+    }
+  }
+
+  // ========================================
+  // MÉTODOS DE COMPATIBILIDAD Y UTILIDAD
+  // ========================================
+
+  /**
+   * @deprecated Usar createStoreUser() en su lugar
+   * Método legacy mantenido por compatibilidad
+   */
+  async createUser(insertUser: InsertStoreUser): Promise<StoreUser> {
+    console.warn('⚠️ createUser() is deprecated. Use createStoreUser() instead.');
+    return this.createStoreUser(insertUser);
+  }
+
+  /**
+   * Buscar usuario en todos los niveles
+   */
+  async findUserAnyLevel(username: string): Promise<{
+    user: any;
+    level: 'global' | 'store' | null;
+    storeId?: number;
+  }> {
+    // 1. Buscar en usuarios globales
+    const globalUser = await this.getGlobalUser(username);
+    if (globalUser) {
+      return { user: globalUser, level: 'global' };
+    }
+
+    // 2. Buscar en usuarios de tienda
+    const storeUser = await this.getStoreUser(username);
+    if (storeUser) {
+      return { user: storeUser, level: 'store', storeId: storeUser.storeId };
+    }
+
+    return { user: null, level: null };
+  }
+
+  /**
+   * Estadísticas de usuarios por nivel
+   */
+  async getUserStats(): Promise<{
+    globalUsers: number;
+    storeUsers: number;
+    activeStoreUsers: number;
+    usersByRole: Record<string, number>;
+  }> {
+    const [globalCount] = await this.db
+      .select({ count: count() })
+      .from(schema.users);
+
+    const [storeCount] = await this.db
+      .select({ count: count() })
+      .from(schema.systemUsers);
+
+    const [activeStoreCount] = await this.db
+      .select({ count: count() })
+      .from(schema.systemUsers)
+      .where(eq(schema.systemUsers.isActive, true));
+
+    // Contar por roles en system_users
+    const roleStats = await this.db
+      .select({
+        role: schema.systemUsers.role,
+        count: count()
+      })
+      .from(schema.systemUsers)
+      .groupBy(schema.systemUsers.role);
+
+    const usersByRole = roleStats.reduce((acc, stat) => {
+      acc[stat.role] = stat.count;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      globalUsers: globalCount.count,
+      storeUsers: storeCount.count,
+      activeStoreUsers: activeStoreCount.count,
+      usersByRole
+    };
+  }
   
   
   // Users
@@ -312,10 +660,7 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
-  }
+
 
 
   async getUsersByRole(role: string): Promise<User[]> {
@@ -1423,6 +1768,15 @@ async getReports(storeId: number, filters: any): Promise<any> {
     return flow || undefined;
   }
 
+  // Agregar este método en tu clase DatabaseStorage en storage.ts
+async getAllRegistrationFlows(storeId?: number): Promise<CustomerRegistrationFlow[]> {
+  let query = db.select().from(customerRegistrationFlows);
+  
+ 
+  
+  return await query.orderBy(desc(customerRegistrationFlows.createdAt));
+}
+
   async createRegistrationFlow(flow: InsertCustomerRegistrationFlow): Promise<CustomerRegistrationFlow> {
     const [newFlow] = await db.insert(customerRegistrationFlows).values(flow).returning();
     return newFlow;
@@ -1496,27 +1850,35 @@ async getReports(storeId: number, filters: any): Promise<any> {
     }));
   }
 
-  async generateEmployeeId(department: string): Promise<string> {
-    const prefixes: Record<string, string> = {
-      'admin': 'ADM',
+ // En storage.ts, agregar este método:
+async generateEmployeeId(department: string, storeId?: number): Promise<string> {
+  try {
+    // Obtener el prefijo según el departamento
+    const prefixes = {
       'technical': 'TEC',
-      'sales': 'VEN',
+      'sales': 'VEN', 
       'delivery': 'DEL',
       'support': 'SUP',
+      'admin': 'ADM'
     };
-
-    const prefix = prefixes[department] || 'EMP';
     
-    const existingProfiles = await db.select()
+    const prefix = prefixes[department as keyof typeof prefixes] || 'EMP';
+    
+    // Contar empleados existentes del mismo departamento
+    const existingEmployees = await db.select({ count: count() })
       .from(employeeProfiles)
       .where(eq(employeeProfiles.department, department));
-
-    const nextNumber = existingProfiles.length + 1;
-    const formattedNumber = nextNumber.toString().padStart(3, '0');
     
-    return `${prefix}-${formattedNumber}`;
+    const nextNumber = (existingEmployees[0]?.count || 0) + 1;
+    const paddedNumber = nextNumber.toString().padStart(3, '0');
+    
+    return `${prefix}-${paddedNumber}`;
+  } catch (error) {
+    console.error('Error generating employee ID:', error);
+    // Fallback a un ID único basado en timestamp
+    return `EMP-${Date.now().toString().slice(-6)}`;
   }
-
+}
   // Customer History methods
   async getCustomerHistory(customerId: number): Promise<CustomerHistory[]> {
     return await db.select()
@@ -2238,4 +2600,4 @@ async getReports(storeId: number, filters: any): Promise<any> {
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new DatabaseStorage(process.env.DATABASE_URL!);

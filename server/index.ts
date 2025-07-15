@@ -260,6 +260,29 @@ apiRouter.get('/auth/me', (req, res) => {
   }
 });
 
+
+// EMPLOYEES/TECHNICIANS - agregar después de los endpoints existentes
+apiRouter.post('/employees/generate-id', authenticateToken, async (req, res) => {
+  try {
+    const { DatabaseStorage } = await import('./storage.js');
+    const storage = new DatabaseStorage();
+    
+    const user = (req as any).user;
+    const { department } = req.body;
+    
+    if (!department) {
+      return res.status(400).json({ error: 'Department is required' });
+    }
+    
+    // Generar ID basado en departamento
+    const employeeId = await storage.generateEmployeeId(department, user.storeId);
+    
+    res.json({ employeeId });
+  } catch (error) {
+    console.error('Error generating employee ID:', error);
+    res.status(500).json({ error: 'Failed to generate employee ID' });
+  }
+});
 // Auto-responses endpoints
 apiRouter.get(
   '/store-responses',

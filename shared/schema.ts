@@ -317,12 +317,16 @@ export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   conversationId: integer("conversation_id").references(() => conversations.id).notNull(),
   senderId: integer("sender_id").references(() => users.id),
+  sender: text("sender"), // ✅ Agregar
   senderType: text("sender_type").notNull(), // 'customer', 'user'
   messageType: text("message_type").notNull().default("text"), // 'text', 'image', 'document'
   content: text("content").notNull(),
   whatsappMessageId: text("whatsapp_message_id"),
-  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  metadata: text("metadata"), // ✅ Agregar
+  storeId: integer("store_id"), // ✅ Agregar
   isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(), // ✅ Agregar
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
 });
 
 export const whatsappSettings = pgTable("whatsapp_settings", {
@@ -374,9 +378,10 @@ export const autoResponses = pgTable("auto_responses", {
 
 export const customerRegistrationFlows = pgTable("customer_registration_flows", {
   id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id), // ✅ Agregar
   phoneNumber: text("phone_number").notNull(),
-  currentStep: text("current_step").notNull(), // name, email, address, location, confirmation
-  collectedData: text("collected_data"), // JSON object with collected information
+  currentStep: text("current_step").notNull(),
+  collectedData: text("collected_data"),
   requestedService: text("requested_service"),
   isCompleted: boolean("is_completed").default(false),
   expiresAt: timestamp("expires_at").notNull(),
