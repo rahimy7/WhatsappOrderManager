@@ -262,24 +262,121 @@ apiRouter.get('/auth/me', (req, res) => {
 
 
 // EMPLOYEES/TECHNICIANS - agregar después de los endpoints existentes
+apiRouter.get('/employees', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const storeId = user.storeId;
+    
+    // ✅ USAR TENANT STORAGE
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const employees = await tenantStorage.getAllEmployeeProfiles();
+    res.json(employees);
+  } catch (error) {
+    console.error('Error fetching tenant employees:', error);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
+// POST /api/employees - Crear perfil de empleado en esquema de tienda
+apiRouter.post('/employees', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const storeId = user.storeId;
+    
+    // ✅ USAR TENANT STORAGE - SE GUARDA EN ESQUEMA DE TIENDA
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const employee = await tenantStorage.createEmployeeProfile(req.body);
+    res.status(201).json(employee);
+  } catch (error) {
+    console.error('Error creating tenant employee profile:', error);
+    res.status(500).json({ error: 'Failed to create employee profile' });
+  }
+});
+
+// PUT /api/employees/:id - Actualizar empleado en esquema de tienda
+apiRouter.put('/employees/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const storeId = user.storeId;
+    const id = parseInt(req.params.id);
+    
+    // ✅ USAR TENANT STORAGE
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const employee = await tenantStorage.updateEmployeeProfile(id, req.body);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    res.json(employee);
+  } catch (error) {
+    console.error('Error updating tenant employee:', error);
+    res.status(500).json({ error: 'Failed to update employee' });
+  }
+});
+
+// DELETE /api/employees/:id - Eliminar empleado de esquema de tienda
+apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const storeId = user.storeId;
+    const id = parseInt(req.params.id);
+    
+    // ✅ USAR TENANT STORAGE
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const success = await tenantStorage.deleteEmployeeProfile(id);
+    if (!success) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting tenant employee:', error);
+    res.status(500).json({ error: 'Failed to delete employee' });
+  }
+});
+
+// POST /api/employees/generate-id - Generar ID en contexto de tienda
 apiRouter.post('/employees/generate-id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
     const user = (req as any).user;
+    const storeId = user.storeId;
     const { department } = req.body;
     
     if (!department) {
       return res.status(400).json({ error: 'Department is required' });
     }
     
-    // Generar ID basado en departamento
-    const employeeId = await storage.generateEmployeeId(department, user.storeId);
+    // ✅ USAR TENANT STORAGE PARA GENERAR ID
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const employeeId = await tenantStorage.generateEmployeeId(department);
     res.json({ employeeId });
   } catch (error) {
-    console.error('Error generating employee ID:', error);
+    console.error('Error generating tenant employee ID:', error);
     res.status(500).json({ error: 'Failed to generate employee ID' });
   }
 });
@@ -290,7 +387,7 @@ apiRouter.get(
   async (req, res) => {
     try {
       const { DatabaseStorage } = await import('./storage.js');
-      const storage = new DatabaseStorage();
+      const storage = new DatabaseStorage(process.env.DATABASE_URL!);
 
       // 1) Recover el usuario ya validado
       const user = (req as any).user as { storeId: number };
@@ -311,7 +408,7 @@ apiRouter.get(
 apiRouter.post('/store-responses', async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     // Extract user from token
     const authHeader = req.headers.authorization;
@@ -340,7 +437,7 @@ apiRouter.post('/store-responses', async (req, res) => {
 apiRouter.put('/store-responses/:id', async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     // Extract user from token
     const authHeader = req.headers.authorization;
@@ -366,7 +463,7 @@ apiRouter.put('/store-responses/:id', async (req, res) => {
 apiRouter.delete('/store-responses/:id', authenticateToken, async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
 
     const user = req.user as AuthUser;
 
@@ -419,7 +516,7 @@ apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
     } */
 
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const configs = await storage.getAllWhatsAppConfigs();
     const stores = await storage.getAllVirtualStores();
@@ -456,7 +553,7 @@ apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
     }).parse(req.body);
 
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const config = await storage.updateWhatsAppConfig(configData, configData.storeId);
     res.json({ success: true, config });
   } catch (error: any) {
@@ -488,7 +585,7 @@ apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
     }).parse(req.body);
 
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const config = await storage.updateWhatsAppConfigById(id, configData);
     res.json({ success: true, config });
   } catch (error: any) {
@@ -509,7 +606,7 @@ apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
 
     const id = parseInt(req.params.id);
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const success = await storage.deleteWhatsAppConfig(id);
     
     if (success) {
@@ -533,7 +630,7 @@ apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
     const { storeId } = req.body;
     
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const config = await storage.getWhatsAppConfig(storeId);
     
     if (!config) {
@@ -584,7 +681,7 @@ apiRouter.get('/super-admin/stores', async (req, res) => {
     }  */
 
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const stores = await storage.getAllVirtualStores();
     
     res.json(stores);
@@ -773,7 +870,7 @@ apiRouter.get('/super-admin/validate-all-whatsapp', async (req, res) => {
     } */
 
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const stores = await storage.getAllVirtualStores();
     const configs = await storage.getAllWhatsAppConfigs();
@@ -886,8 +983,7 @@ apiRouter.get('/debug/token-info', (req, res) => {
 // Endpoint para obtener logs de WhatsApp
 apiRouter.get('/whatsapp/logs', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     
@@ -942,8 +1038,7 @@ apiRouter.get('/whatsapp/logs', authenticateToken, async (req, res) => {
 // Endpoint adicional para obtener estadísticas de logs
 apiRouter.get('/whatsapp/logs/stats', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     
@@ -988,8 +1083,7 @@ apiRouter.delete('/whatsapp/logs/cleanup', authenticateToken, async (req, res) =
       });
     }
     
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const { days = 30 } = req.body;
     
@@ -1013,8 +1107,7 @@ apiRouter.delete('/whatsapp/logs/cleanup', authenticateToken, async (req, res) =
 // CONVERSACIONES
 apiRouter.get('/conversations', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const conversations = await storage.getAllConversations(user.storeId);
@@ -1027,8 +1120,7 @@ apiRouter.get('/conversations', authenticateToken, async (req, res) => {
 
 apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const conversation = await storage.getConversation(id);
@@ -1061,8 +1153,7 @@ apiRouter.get('/products', authenticateToken, async (req, res) => {
       res.json(products);
     } else {
       // Use main storage for global access
-      const { DatabaseStorage } = await import('./storage.js');
-      const storage = new DatabaseStorage();
+      const { storage } = await import('./storage.js');
       
       const products = await storage.getAllProducts(user.storeId);
       res.json(products);
@@ -1091,8 +1182,7 @@ apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
       }
       res.json(product);
     } else {
-      const { DatabaseStorage } = await import('./storage.js');
-      const storage = new DatabaseStorage();
+      const { storage } = await import('./storage.js');
       
       const product = await storage.getProduct(id, user.storeId);
       if (!product) {
@@ -1120,8 +1210,7 @@ apiRouter.post('/products', authenticateToken, async (req, res) => {
       const product = await tenantStorage.createProduct(req.body);
       res.status(201).json(product);
     } else {
-      const { DatabaseStorage } = await import('./storage.js');
-      const storage = new DatabaseStorage();
+      const { storage } = await import('./storage.js');
       
       const product = await storage.createProduct(req.body, user.storeId);
       res.status(201).json(product);
@@ -1134,8 +1223,7 @@ apiRouter.post('/products', authenticateToken, async (req, res) => {
 
 apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1154,8 +1242,7 @@ apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
 
 apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1175,8 +1262,7 @@ apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
 // CLIENTES
 apiRouter.get('/customers', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const customers = await storage.getAllCustomers(user.storeId);
@@ -1189,8 +1275,7 @@ apiRouter.get('/customers', authenticateToken, async (req, res) => {
 
 apiRouter.post('/customers', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const customerData = { ...req.body, storeId: user.storeId };
@@ -1205,8 +1290,7 @@ apiRouter.post('/customers', authenticateToken, async (req, res) => {
 
 apiRouter.put('/customers/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1225,8 +1309,7 @@ apiRouter.put('/customers/:id', authenticateToken, async (req, res) => {
 
 apiRouter.delete('/customers/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1246,8 +1329,7 @@ apiRouter.delete('/customers/:id', authenticateToken, async (req, res) => {
 // MÉTRICAS
 apiRouter.get('/metrics', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const metrics = await storage.getDashboardMetrics(user.storeId);
@@ -1260,8 +1342,7 @@ apiRouter.get('/metrics', authenticateToken, async (req, res) => {
 
 apiRouter.get('/dashboard/metrics', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const metrics = await storage.getDashboardMetrics(user.storeId);
@@ -1275,8 +1356,7 @@ apiRouter.get('/dashboard/metrics', authenticateToken, async (req, res) => {
 // ÓRDENES
 apiRouter.get('/orders', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const orders = await storage.getAllOrders(user.storeId);
@@ -1289,8 +1369,7 @@ apiRouter.get('/orders', authenticateToken, async (req, res) => {
 
 apiRouter.get('/orders/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1309,8 +1388,7 @@ apiRouter.get('/orders/:id', authenticateToken, async (req, res) => {
 
 apiRouter.post('/orders', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
 
     const user = (req as any).user;
     // Separamos items del resto de campos
@@ -1343,8 +1421,7 @@ apiRouter.post('/orders', authenticateToken, async (req, res) => {
 // USUARIOS (para gestión interna de tienda)
 apiRouter.get('/users', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const users = await storage.getAllUsers(user.storeId);
@@ -1358,8 +1435,7 @@ apiRouter.get('/users', authenticateToken, async (req, res) => {
 // NOTIFICACIONES
 apiRouter.get('/notifications', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const notifications = await storage.getUserNotifications(user.id, user.storeId);
@@ -1373,8 +1449,7 @@ apiRouter.get('/notifications', authenticateToken, async (req, res) => {
 // Add this to your index.ts API routes
 apiRouter.get('/notifications/count', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const userId = parseInt(req.query.userId as string) || user.id;
@@ -1389,8 +1464,7 @@ apiRouter.get('/notifications/count', authenticateToken, async (req, res) => {
 // CONFIGURACIONES DE TIENDA
 apiRouter.get('/settings', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const settings = await storage.getStoreConfig(user.storeId);
@@ -1403,8 +1477,7 @@ apiRouter.get('/settings', authenticateToken, async (req, res) => {
 
 apiRouter.put('/settings', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const settings = await storage.updateStoreSettings(user.storeId, req.body);
@@ -1418,8 +1491,7 @@ apiRouter.put('/settings', authenticateToken, async (req, res) => {
 // CONFIGURACIÓN WHATSAPP (específica de tienda)
 apiRouter.get('/whatsapp-settings', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const config = await storage.getWhatsAppConfig(user.storeId);
@@ -1432,8 +1504,7 @@ apiRouter.get('/whatsapp-settings', authenticateToken, async (req, res) => {
 
 apiRouter.put('/whatsapp-settings', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const config = await storage.updateWhatsAppConfig(req.body, user.storeId);
@@ -1447,8 +1518,7 @@ apiRouter.put('/whatsapp-settings', authenticateToken, async (req, res) => {
 // DASHBOARD STATS
 apiRouter.get('/dashboard/stats', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const stats = await storage.getDashboardStats(user.storeId);
@@ -1463,7 +1533,7 @@ apiRouter.get('/dashboard/stats', authenticateToken, async (req, res) => {
 apiRouter.get('/messages', authenticateToken, async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const user = (req as any).user;
     const conversationId = req.query.conversationId as string;
@@ -1484,7 +1554,7 @@ apiRouter.get('/messages', authenticateToken, async (req, res) => {
 apiRouter.post('/messages', authenticateToken, async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const user = (req as any).user;
     const messageData = { ...req.body, storeId: user.storeId };
@@ -1537,7 +1607,7 @@ apiRouter.get('/stores', authenticateToken, async (req, res) => {
     if (user.level === 'global') {
       // Super admin puede ver todas las tiendas
       const { DatabaseStorage } = await import('./storage.js');
-      const storage = new DatabaseStorage();
+      const storage = new DatabaseStorage(process.env.DATABASE_URL!);
       const stores = await storage.getAllVirtualStores();
       res.json(stores);
     } else {
@@ -1551,6 +1621,19 @@ apiRouter.get('/stores', authenticateToken, async (req, res) => {
   }
 });
 
+apiRouter.get('/store-responses', authenticateToken, async (req, res) => {
+  try {
+    const { storage } = await import('./storage.js'); // ✅ CORREGIDO
+    const user = (req as any).user as { storeId: number };
+    const responses = await storage.getAllAutoResponses(user.storeId);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(responses);
+  } catch (error) {
+    console.error('Error fetching auto-responses:', error);
+    res.status(500).json({ error: 'Failed to fetch auto-responses' });
+  }
+});
+
 // ================================
 // ENDPOINTS ADICIONALES QUE PUEDEN ESTAR FALTANDO
 // ================================
@@ -1559,7 +1642,7 @@ apiRouter.get('/stores', authenticateToken, async (req, res) => {
 apiRouter.get('/auto-responses', authenticateToken, async (req, res) => {
   try {
     const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const user = (req as any).user;
     const responses = await storage.getAllAutoResponses(user.storeId);
@@ -1572,8 +1655,7 @@ apiRouter.get('/auto-responses', authenticateToken, async (req, res) => {
 
 apiRouter.post('/auto-responses', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const responseData = { ...req.body, storeId: user.storeId };
@@ -1588,8 +1670,7 @@ apiRouter.post('/auto-responses', authenticateToken, async (req, res) => {
 
 apiRouter.put('/auto-responses/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1604,8 +1685,7 @@ apiRouter.put('/auto-responses/:id', authenticateToken, async (req, res) => {
 
 apiRouter.delete('/auto-responses/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
 
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1621,8 +1701,7 @@ apiRouter.delete('/auto-responses/:id', authenticateToken, async (req, res) => {
 // ASSIGNMENT RULES
 apiRouter.get('/assignment-rules', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const rules = await storage.getAllAssignmentRules(user.storeId);
@@ -1634,81 +1713,17 @@ apiRouter.get('/assignment-rules', authenticateToken, async (req, res) => {
 });
 
 // EMPLOYEES/TECHNICIANS
-apiRouter.get('/employees', authenticateToken, async (req, res) => {
-  try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
-    const user = (req as any).user;
-    const employees = await storage.getAllEmployees(user.storeId);
-    res.json(employees);
-  } catch (error) {
-    console.error('Error fetching employees:', error);
-    res.status(500).json({ error: 'Failed to fetch employees' });
-  }
-});
 
-apiRouter.post('/employees', authenticateToken, async (req, res) => {
-  try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
-    const user = (req as any).user;
-    const employeeData = { ...req.body, storeId: user.storeId };
-    
-    const employee = await storage.createEmployee(employeeData);
-    res.status(201).json(employee);
-  } catch (error) {
-    console.error('Error creating employee:', error);
-    res.status(500).json({ error: 'Failed to create employee' });
-  }
-});
 
-apiRouter.put('/employees/:id', authenticateToken, async (req, res) => {
-  try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const employee = await storage.updateEmployee(id, req.body, user.storeId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-    
-    res.json(employee);
-  } catch (error) {
-    console.error('Error updating employee:', error);
-    res.status(500).json({ error: 'Failed to update employee' });
-  }
-});
 
-apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
-  try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
-    
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const success = await storage.deleteEmployee(id, user.storeId);
-    if (!success) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting employee:', error);
-    res.status(500).json({ error: 'Failed to delete employee' });
-  }
-});
+
+
+
 
 // CART/SHOPPING CART
 apiRouter.get('/cart', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const sessionId = req.query.sessionId as string;
@@ -1724,8 +1739,7 @@ apiRouter.get('/cart', authenticateToken, async (req, res) => {
 
 apiRouter.post('/cart', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
 
     const user = (req as any).user;
     const { sessionId, productId, quantity } = req.body as {
@@ -1754,8 +1768,7 @@ apiRouter.post('/cart', authenticateToken, async (req, res) => {
 
 apiRouter.put('/cart/:id', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const id = parseInt(req.params.id);
     const user = (req as any).user;
@@ -1774,8 +1787,7 @@ apiRouter.put('/cart/:id', authenticateToken, async (req, res) => {
 
 apiRouter.delete('/cart/:productId', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
 
     const user = (req as any).user as { id: number; storeId: number };
     const sessionId = req.query.sessionId as string;           // ej. /cart/42?sessionId=abc123
@@ -1833,8 +1845,7 @@ apiRouter.post('/categories', authenticateToken, async (req, res) => {
 // REPORTS/ANALYTICS
 apiRouter.get('/reports', authenticateToken, async (req, res) => {
   try {
-    const { DatabaseStorage } = await import('./storage.js');
-    const storage = new DatabaseStorage();
+    const { storage } = await import('./storage.js');
     
     const user = (req as any).user;
     const { type, startDate, endDate } = req.query;
@@ -1915,7 +1926,7 @@ app.use('/api', apiRouter);
         }
 
         const { DatabaseStorage } = await import('./storage.js');
-        const storage = new DatabaseStorage();
+        const storage = new DatabaseStorage(process.env.DATABASE_URL!);
         
         const storeData = {
           name: req.body.name,

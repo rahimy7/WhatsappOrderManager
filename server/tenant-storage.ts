@@ -144,10 +144,10 @@ export function createTenantStorage(tenantDb: any) {
     },
 
     
-async getAllRegistrationFlows() {
-  return await tenantDb.select().from(schema.customerRegistrationFlows)
+     async getAllRegistrationFlows() {
+    return await tenantDb.select().from(schema.customerRegistrationFlows)
     .orderBy(desc(schema.customerRegistrationFlows.createdAt));
-},
+        },
 
     // Conversations
     async getAllConversations() {
@@ -458,6 +458,65 @@ async getAllRegistrationFlows() {
         .orderBy(desc(schema.whatsappSettings.createdAt))
         .limit(1);
       return configs[0] || null;
+    },
+
+     async getAllEmployeeProfiles() {
+      const results = await tenantDb.select()
+        .from(schema.employeeProfiles)
+        .innerJoin(schema.users, eq(schema.employeeProfiles.userId, schema.users.id))
+        .orderBy(schema.employeeProfiles.createdAt);
+
+      return results.map((result: any) => ({
+        ...result.employee_profiles,
+        user: result.users
+      }));
+    },
+
+    async createEmployeeProfile(profile: any) {
+      const [newProfile] = await tenantDb.insert(schema.employeeProfiles)
+        .values(profile)
+        .returning();
+      return newProfile;
+    },
+
+    async updateEmployeeProfile(id: number, updates: any) {
+      const [updatedProfile] = await tenantDb.update(schema.employeeProfiles)
+        .set(updates)
+        .where(eq(schema.employeeProfiles.id, id))
+        .returning();
+      return updatedProfile;
+    },
+
+    async deleteEmployeeProfile(id: number) {
+      await tenantDb.delete(schema.employeeProfiles)
+        .where(eq(schema.employeeProfiles.id, id));
+      return true;
+    },
+
+    async getEmployeeProfile(userId: number) {
+      const [profile] = await tenantDb.select()
+        .from(schema.employeeProfiles)
+        .where(eq(schema.employeeProfiles.userId, userId));
+      return profile || null;
+    },
+
+    async generateEmployeeId(department: string) {
+      // Generar ID basado en departamento y timestamp
+      const prefix = {
+        'technical': 'TEC',
+        'sales': 'VEN',
+        'delivery': 'DEL',
+        'support': 'SUP',
+        'admin': 'ADM'
+      }[department] || 'EMP';
+
+      // Obtener count actual de empleados del departamento
+      const count = await tenantDb.select({ count: sql`count(*)` })
+        .from(schema.employeeProfiles)
+        .where(eq(schema.employeeProfiles.department, department));
+      
+      const nextNumber = (parseInt(count[0]?.count || '0') + 1).toString().padStart(3, '0');
+      return `${prefix}-${nextNumber}`;
     }
   };
 }

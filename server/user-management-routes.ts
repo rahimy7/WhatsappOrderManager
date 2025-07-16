@@ -1,7 +1,3 @@
-/**
- * Rutas específicas para gestión de usuarios multi-tenant
- * Separadas de routes.ts para mejor organización
- */
 
 import { Express, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
@@ -343,11 +339,11 @@ app.get('/api/super-admin/user-metrics', authenticateToken, requireSuperAdmin, a
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // Insertar usuario en schema específico
-      const result = await masterDb.execute(`
-        INSERT INTO ${schemaName}.users (username, name, email, password, role, status, is_active, department)
-        VALUES ($1, $2, $3, $4, $5, 'active', true, $6)
-        RETURNING id, username, name, email, role, department, is_active
-      `, [username, name, email, hashedPassword, role, department]);
+     const result = await masterDb.execute(`
+  INSERT INTO ${schemaName}.users (username, name, email, password, role, status, is_active, department)
+  VALUES ('${username}', '${name}', '${email}', '${hashedPassword}', '${role}', 'active', true, '${department}')
+  RETURNING id, username, name, email, role, department, is_active
+`);
 
       res.status(201).json(result.rows?.[0] || {});
     } catch (error) {
