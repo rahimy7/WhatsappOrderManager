@@ -3,16 +3,672 @@ import { IStorage } from './storage.js';
 import jwt from 'jsonwebtoken';
 import { Server } from 'http';
 import { masterDb } from './multi-tenant-db.js';
-import { insertUserSchema, schema } from '@shared/schema.js';
+import { insertNotificationSchema, insertUserSchema, ProductSchema, schema } from '@shared/schema.js';
 import { eq, sql } from 'drizzle-orm';
 import z from 'zod';
 import {  requireSuperAdmin } from './authMiddleware';
-
 import bcrypt from 'bcrypt';
-import { AuthUser } from './multi-tenant-auth';
+import express from 'express';
+import multer from 'multer';
+import { SupabaseStorageManager } from './supabase-storage';
+import type { AuthUser } from '@shared/auth';
+import { getTenantDb } from './multi-tenant-db.js';
+import { createTenantStorage } from './tenant-storage.js';
+
 
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+
+
+const router = express.Router();
+
+
+// Configurar multer para manejo de archivos en memoria
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { 
+    fileSize: 5 * 1024 * 1024, // 5MB por archivo
+    files: 5 // Máximo 5 archivos
+  },
+  // ✅ CORRECCIÓN del error en routes.ts:
+fileFilter: (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    // ✅ CORREGIDO: Solo Error, sin false
+    cb(new Error(`Tipo de archivo no permitido: ${file.mimetype}`));
+  }
+}
+});
+
+
+
+async function processProductImages(
+  files: Express.Multer.File[],
+  imageUrls: string[],
+  storeId: number,
+  productId?: number
+): Promise<string[]> {
+  const processedImages: string[] = [];
+
+  try {
+    // OPCIÓN 1: Con Supabase Storage (cuando esté listo)
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const storageManager = new SupabaseStorageManager(storeId);
+      
+      // Procesar archivos subidos
+      for (const file of files) {
+        const fileObject = new File([file.buffer], file.originalname, { type: file.mimetype });
+        const imageUrl = await storageManager.uploadFile(fileObject, productId);
+        processedImages.push(imageUrl);
+      }
+
+      // Procesar URLs de imágenes
+      for (const url of imageUrls) {
+        const imageUrl = await storageManager.uploadFromUrl(url, productId);
+        processedImages.push(imageUrl);
+      }
+    } 
+    // OPCIÓN 2: Placeholder para desarrollo (tu versión actual)
+    else {
+      console.log('📁 USING PLACEHOLDER STORAGE - Configure Supabase for production');
+      
+      // Procesar archivos subidos
+      for (const file of files) {
+        const imageUrl = `https://storage.example.com/store-${storeId}/product-${productId}/${Date.now()}-${file.originalname}`;
+        processedImages.push(imageUrl);
+      }
+
+      // Procesar URLs de imágenes
+      for (const url of imageUrls) {
+        try {
+          const response = await fetch(url, { method: 'HEAD' });
+          if (response.ok) {
+            processedImages.push(url);
+          }
+        } catch (error) {
+          console.warn(`Error validating image URL: ${url}`, error);
+        }
+      }
+    }
+
+    return processedImages;
+  } catch (error) {
+    console.error('Error processing images:', error);
+    throw error;
+  }
+}
+
+
+
+const createProductHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const files = req.files as Express.Multer.File[] || [];
+    
+    console.log('📦 Creating product for store:', user.storeId);
+    
+    // Parsear datos del producto
+    const productData = {
+      ...req.body,
+      isActive: req.body.isActive === 'true',
+      stock: parseInt(req.body.stock) || 0,
+      warrantyMonths: parseInt(req.body.warrantyMonths) || 0,
+    };
+
+    // Parsear URLs de imágenes si existen
+    let imageUrls: string[] = [];
+    if (req.body.imageUrls) {
+      try {
+        imageUrls = JSON.parse(req.body.imageUrls);
+      } catch {
+        imageUrls = [];
+      }
+    }
+
+    // Validar datos
+    const validatedData = ProductSchema.parse({
+      ...productData,
+      imageUrls
+    });
+
+    // Validar límite total de imágenes
+    const totalImages = files.length + imageUrls.length;
+    if (totalImages > 5) {
+      return res.status(400).json({
+        error: "Máximo 5 imágenes permitidas en total"
+      });
+    }
+
+    // ✅ USAR SOLO TENANT STORAGE - ESQUEMA INDEPENDIENTE
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // ✅ NO AGREGAR storeId - cada esquema ES la tienda
+    const productToCreate = {
+      ...validatedData,
+      images: [] // Temporal, se actualizará después
+      // ❌ NO INCLUIR: storeId: user.storeId (innecesario en esquema independiente)
+    };
+
+    console.log('💾 Creating product in tenant schema:', productToCreate);
+
+    const product = await tenantStorage.createProduct(productToCreate);
+
+    // Procesar y subir imágenes
+    let finalImageUrls: string[] = [];
+    if (totalImages > 0) {
+      finalImageUrls = await processProductImages(
+        files,
+        imageUrls,
+        user.storeId!,
+        product.id
+      );
+
+      // ✅ Actualizar usando TENANT STORAGE
+      await tenantStorage.updateProduct(product.id, {
+        images: finalImageUrls
+      });
+    }
+
+    console.log('✅ Product created in independent schema for store:', user.storeId);
+
+    res.status(201).json({
+      ...product,
+      images: finalImageUrls
+    });
+
+  } catch (error) {
+    console.error('Error creating product:', error);
+    
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: "Datos inválidos",
+        details: error.errors
+      });
+    }
+
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({
+        error: error.message
+      });
+    }
+
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+const deleteProductHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const productId = parseInt(req.params.id);
+
+    console.log('🗑️ Deleting product', productId, 'from store schema:', user.storeId);
+
+    // ✅ USAR SOLO TENANT STORAGE - ESQUEMA INDEPENDIENTE
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Verificar que el producto existe EN EL SCHEMA DE LA TIENDA
+    const product = await tenantStorage.getProductById(productId);
+
+    if (!product) {
+      console.log('❌ Product not found in store schema:', user.storeId);
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    // ✅ Eliminar del schema independiente (retorna void)
+    await tenantStorage.deleteProduct(productId);
+
+    console.log('✅ Product deleted from independent schema');
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    
+    // Manejar errores específicos
+    if (error instanceof Error) {
+      if (error.message.includes('constraint') || error.message.includes('foreign key')) {
+        return res.status(400).json({ 
+          error: "No se puede eliminar: el producto está siendo usado en órdenes existentes" 
+        });
+      }
+    }
+    
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+
+const getProductsHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    
+    console.log('📋 Getting products for store schema:', user.storeId);
+    
+    // ✅ USAR SOLO TENANT STORAGE - VE SOLO SUS PRODUCTOS
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const products = await tenantStorage.getAllProducts();
+    
+    console.log(`✅ Retrieved ${products.length} products from independent schema`);
+    res.json(products);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+
+const getProductByIdHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const productId = parseInt(req.params.id);
+
+    console.log('🔍 Getting product', productId, 'for store schema:', user.storeId);
+
+    // ✅ USAR SOLO TENANT STORAGE - BÚSQUEDA EN ESQUEMA INDEPENDIENTE
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const product = await tenantStorage.getProductById(productId);
+
+    if (!product) {
+      console.log('❌ Product not found in store schema:', user.storeId);
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    console.log('✅ Product found in independent schema');
+    res.json(product);
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+
+
+const getCategoriesHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    
+    console.log('📂 Getting categories for store schema:', user.storeId);
+    
+    // ✅ USAR TENANT STORAGE
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const categories = await tenantStorage.getAllCategories();
+    
+    console.log(`✅ Retrieved ${categories.length} categories from independent schema`);
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+
+const createCategoryHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    
+    console.log('📁 Creating category for store schema:', user.storeId);
+    
+    // ✅ USAR TENANT STORAGE
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // ✅ NO AGREGAR storeId - cada esquema ES la tienda
+    const categoryData = { ...req.body };
+    
+    const category = await tenantStorage.createCategory(categoryData);
+
+    console.log('✅ Category created in independent schema');
+    res.status(201).json(category);
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+
+const updateCategoryHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const categoryId = parseInt(req.params.id);
+    
+    console.log('✏️ Updating category', categoryId, 'in store schema:', user.storeId);
+    
+    // ✅ USAR TENANT STORAGE
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // ✅ NO AGREGAR storeId
+    const updateData = { ...req.body };
+    
+    const category = await tenantStorage.updateCategory(categoryId, updateData);
+
+    if (!category) {
+      return res.status(404).json({ error: "Categoría no encontrada" });
+    }
+
+    console.log('✅ Category updated in independent schema');
+    res.json(category);
+  } catch (error) {
+    console.error('Error updating category:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+
+const deleteCategoryHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const categoryId = parseInt(req.params.id);
+    
+    console.log('🗑️ Deleting category', categoryId, 'from store schema:', user.storeId);
+    
+    // ✅ USAR TENANT STORAGE
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Verificar existencia
+    const category = await tenantStorage.getCategoryById(categoryId);
+    if (!category) {
+      return res.status(404).json({ error: "Categoría no encontrada" });
+    }
+    
+    // ✅ Eliminar (retorna void)
+    await tenantStorage.deleteCategory(categoryId);
+    
+    console.log('✅ Category deleted from independent schema');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    
+    if (error instanceof Error && error.message.includes('constraint')) {
+      return res.status(400).json({ 
+        error: "No se puede eliminar: la categoría tiene productos asociados" 
+      });
+    }
+    
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
+
+// ✅ QUICK FIX - Reemplace el updateProductHandler incompleto con este código
+
+// 🔥 DIAGNÓSTICO COMPLETO BACKEND - Reemplazar updateProductHandler en routes.ts
+
+// 🚀 FIX INMEDIATO - updateProductHandler SIMPLIFICADO
+// REEMPLAZAR en routes.ts - Este DEBE funcionar
+
+const updateProductHandler = async (req: any, res: any) => {
+  console.log('🚀 SIMPLE FIX - Starting update for product:', req.params.id);
+  console.log('🚀 Store ID:', req.user?.storeId);
+  console.log('🚀 Body keys received:', Object.keys(req.body || {}));
+  
+  try {
+    const user = req.user as AuthUser;
+    const productId = parseInt(req.params.id);
+
+    // ✅ VALIDACIONES BÁSICAS
+    if (!user || !user.storeId) {
+      console.error('❌ No user or storeId');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!req.body || Object.keys(req.body).length === 0) {
+      console.error('❌ Empty request body');
+      return res.status(400).json({ error: 'Empty request body' });
+    }
+
+    // ✅ EXTRAER DATOS BÁSICOS (solo los que sabemos que funcionan)
+    const productData: any = {};
+
+    // Campos básicos que aparecen en el Network tab
+    if (req.body.name && req.body.name.trim()) {
+      productData.name = req.body.name.trim();
+      console.log('✅ Added name:', productData.name);
+    }
+
+    if (req.body.description && req.body.description.trim()) {
+      productData.description = req.body.description.trim();
+      console.log('✅ Added description');
+    }
+
+    if (req.body.price) {
+      productData.price = parseFloat(req.body.price);
+      console.log('✅ Added price:', productData.price);
+    }
+
+    if (req.body.category && req.body.category.trim()) {
+      productData.category = req.body.category.trim();
+      console.log('✅ Added category:', productData.category);
+    }
+
+    if (req.body.type && req.body.type.trim()) {
+      productData.type = req.body.type.trim();
+      console.log('✅ Added type:', productData.type);
+    }
+
+    if (req.body.brand && req.body.brand.trim()) {
+      productData.brand = req.body.brand.trim();
+      console.log('✅ Added brand:', productData.brand);
+    }
+
+    if (req.body.sku && req.body.sku.trim()) {
+      productData.sku = req.body.sku.trim();
+      console.log('✅ Added sku:', productData.sku);
+    }
+
+    if (req.body.stock !== undefined) {
+      productData.stock = parseInt(req.body.stock) || 0;
+      console.log('✅ Added stock:', productData.stock);
+    }
+
+    if (req.body.warrantyMonths !== undefined) {
+      productData.warrantyMonths = parseInt(req.body.warrantyMonths) || 0;
+      console.log('✅ Added warrantyMonths:', productData.warrantyMonths);
+    }
+
+    if (req.body.isActive !== undefined) {
+      productData.isActive = req.body.isActive === 'true' || req.body.isActive === true;
+      console.log('✅ Added isActive:', productData.isActive);
+    }
+
+    console.log('📊 Final productData:', productData);
+    console.log('📊 Fields count:', Object.keys(productData).length);
+
+    // ✅ VERIFICACIÓN CRÍTICA
+    if (Object.keys(productData).length === 0) {
+      console.error('❌ No valid fields extracted');
+      console.error('❌ Original body:', req.body);
+      return res.status(400).json({
+        error: "No valid data to update",
+        debug: {
+          bodyKeys: Object.keys(req.body),
+          extractedKeys: Object.keys(productData)
+        }
+      });
+    }
+
+    // ✅ USAR TENANT STORAGE
+    console.log('🏪 Getting tenant storage...');
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+
+    // ✅ VERIFICAR PRODUCTO EXISTE
+    console.log('🔍 Checking if product exists...');
+    const existingProduct = await tenantStorage.getProductById(productId);
+    if (!existingProduct) {
+      console.error('❌ Product not found:', productId);
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    console.log('✅ Product found:', existingProduct.name);
+
+    // ✅ ACTUALIZAR PRODUCTO
+    console.log('💾 Updating product with data:', Object.keys(productData));
+    const updatedProduct = await tenantStorage.updateProduct(productId, productData);
+
+    console.log('🎉 UPDATE SUCCESSFUL!');
+
+    res.json({
+      success: true,
+      product: updatedProduct
+    });
+
+  } catch (error) {
+    console.error('💥 ERROR in updateProductHandler:', error);
+    console.error('💥 Error message:', error.message);
+    console.error('💥 Error stack:', error.stack);
+
+    if (error.message && error.message.includes('No values to set')) {
+      console.error('🎯 DRIZZLE ERROR: This means productData was empty when passed to updateProduct');
+    }
+
+    res.status(500).json({
+      error: error.message || "Error interno del servidor",
+      debug: error.message
+    });
+  }
+};
+
+// ✅ SOLUCIÓN DEFINITIVA - Compatible con tenant-storage.ts
+
+
+const deleteOrderHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const orderId = parseInt(req.params.id);
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Verificar existencia
+    const order = await tenantStorage.getOrderById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: "Orden no encontrada" });
+    }
+    
+    // ✅ Eliminar - retorna void
+    await tenantStorage.deleteOrder(orderId);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+
+const deleteCustomerHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const customerId = parseInt(req.params.id);
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Verificar existencia
+    const customer = await tenantStorage.getCustomerById(customerId);
+    if (!customer) {
+      return res.status(404).json({ error: "Cliente no encontrado" });
+    }
+    
+    // ✅ Eliminar - retorna void
+    await tenantStorage.deleteCustomer(customerId);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Error deleting customer:', error);
+    
+    if (error instanceof Error && error.message.includes('constraint')) {
+      return res.status(400).json({ 
+        error: "No se puede eliminar: el cliente tiene órdenes asociadas" 
+      });
+    }
+    
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const validateImageUrlHandler = async (req: any, res: any) => {
+  try {
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: "URL requerida" });
+    }
+
+    // Validar formato de URL
+    try {
+      new URL(url);
+    } catch {
+      return res.status(400).json({ error: "URL inválida" });
+    }
+
+    // Verificar que sea una imagen accesible
+    const response = await fetch(url, { method: 'HEAD' });
+    
+    if (!response.ok) {
+      return res.status(400).json({ error: "No se pudo acceder a la imagen" });
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.startsWith('image/')) {
+      return res.status(400).json({ error: "La URL no apunta a una imagen" });
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(contentType)) {
+      return res.status(400).json({ error: "Formato de imagen no permitido" });
+    }
+
+    // Verificar tamaño si está disponible
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength) > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: "La imagen es muy grande (máximo 5MB)" });
+    }
+
+    res.json({ 
+      valid: true, 
+      contentType,
+      size: contentLength ? parseInt(contentLength) : null
+    });
+
+  } catch (error) {
+    console.error('Error validating image URL:', error);
+    res.status(500).json({
+      error: "Error al validar la URL"
+    });
+  }
+};
+
+
+
+
+
+/**
+ * ENDPOINT PARA VALIDAR URL DE IMAGEN
+ */
+
 
 function generateGoogleMapsLink(latitude: string | number, longitude: string | number, address?: string): string {
   const lat = parseFloat(latitude.toString());
@@ -382,6 +1038,7 @@ export async function registerRoutes(app: Express): Promise<any> {
     return;
   }
 
+  
   // Function to process customer messages and responses
   async function processCustomerMessage(customer: any, conversation: any, message: any, from: string, isNewCustomer: boolean = false, storeId?: number, phoneNumberId?: string) {
     try {
@@ -406,6 +1063,7 @@ export async function registerRoutes(app: Express): Promise<any> {
     }
   }
 
+  
   // Additional utility functions
   async function isOrderMessage(text: string): Promise<boolean> {
     return text.startsWith('🛍️ *NUEVO PEDIDO*');
@@ -663,6 +1321,90 @@ app.get("/api/super-admin/subscription-metrics", (req, res) => {
     }
   });
 
+ app.get("/api/notifications/unread", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "User ID is required" });
+      }
+      
+      const notifications = await storage.getUnreadNotifications(parseInt(userId));
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching unread notifications:", error);
+      res.status(500).json({ error: "Failed to fetch unread notifications" });
+    }
+  });
+
+  app.get("/api/notifications/count", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: "User ID is required" });
+      }
+      
+      const counts = await storage.getNotificationCount(parseInt(userId));
+      res.json(counts);
+    } catch (error) {
+      console.error("Error fetching notification counts:", error);
+      res.status(500).json({ error: "Failed to fetch notification counts" });
+    }
+  });
+
+  app.post("/api/notifications", async (req, res) => {
+    try {
+      const notificationData = insertNotificationSchema.parse(req.body);
+      const notification = await storage.createNotification(notificationData);
+      res.status(201).json(notification);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid notification data", details: error.errors });
+      }
+      console.error("Error creating notification:", error);
+      res.status(500).json({ error: "Failed to create notification" });
+    }
+  });
+
+  app.put("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const notification = await storage.markNotificationAsRead(id);
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  app.put("/api/notifications/read-all", async (req, res) => {
+    try {
+      const userId = req.body.userId;
+      if (!userId) {
+        return res.status(400).json({ error: "User ID is required" });
+      }
+      
+      await storage.markAllNotificationsAsRead(parseInt(userId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteNotification(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ error: "Failed to delete notification" });
+    }
+  });
+
   // Endpoints que el frontend está esperando:
 app.get("/api/conversations", authenticateToken, async (req, res) => {
   try {
@@ -674,14 +1416,6 @@ app.get("/api/conversations", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/api/products", async (req, res) => {
-  try {
-    const products = await storage.getAllProducts();
-    res.json(products);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch products" });
-  }
-});
 
 app.get("/api/customers", async (req, res) => {
   try {
@@ -700,9 +1434,170 @@ app.get("/api/employees", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch employees" });
   }
 });
-// ==========================================
-// 🧪 RUTAS HTTP PARA PRUEBAS AUTO-RESPUESTAS (CORREGIDAS)
-// ==========================================
+
+/**
+ * CREAR PRODUCTO con imágenes (archivos + URLs)
+ */
+
+router.post('/products', authenticateToken, (req: any, res: any, next: any) => {
+  // Usar multer como middleware inline
+  upload.array('images', 5)(req, res, (err: any) => {
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    createProductHandler(req, res);
+  });
+});
+
+
+
+router.delete('/products/:id', authenticateToken, deleteProductHandler);
+router.get('/products', authenticateToken, getProductsHandler);
+router.get('/products/:id', authenticateToken, getProductByIdHandler);
+router.post('/validate-image-url', authenticateToken, validateImageUrlHandler);
+
+// 2. SOLUCIÓN PARA ERRORES DE LÍNEAS 1241 y 1263 (Storage methods)
+// Corrige las llamadas a métodos de storage:
+
+// Rutas para categorías (CORREGIDAS)
+router.get('/categories', authenticateToken, async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    
+   const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
+    
+    // ✅ CORRECCIÓN: Sin pasar storeId como segundo parámetro
+    const categories = await tenantStorage.getAllCategories();
+
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+router.post('/categories', authenticateToken, async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const categoryData = { ...req.body };
+    
+    const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
+    
+    // ✅ CORRECCIÓN: Solo un parámetro
+    const category = await tenantStorage.createCategory(categoryData);
+
+    res.status(201).json(category);
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+router.put('/categories/:id', authenticateToken, async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const categoryId = parseInt(req.params.id);
+    
+    const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
+    
+    // ✅ CORRECCIÓN: Estructura correcta para updateCategory
+    const updateData = { ...req.body };
+    const category = await tenantStorage.updateCategory(categoryId, updateData);
+
+    if (!category) {
+      return res.status(404).json({ error: "Categoría no encontrada" });
+    }
+
+    res.json(category);
+  } catch (error) {
+    console.error('Error updating category:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+router.delete('/categories/:id', authenticateToken, async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const categoryId = parseInt(req.params.id);
+    
+    const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Eliminar categoría (método void)
+    await tenantStorage.deleteCategory(categoryId);
+    
+    // Si no hay excepción, fue exitoso
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+router.post('/upload-image', (req: any, res: any, next: any) => {
+  // Aplicar authenticateToken primero
+  authenticateToken(req, res, (err: any) => {
+    if (err) return next(err);
+    
+    // Luego aplicar multer
+    upload.single('image')(req, res, (err: any) => {
+      if (err) return next(err);
+      
+      // Handler principal
+      uploadImageHandler(req, res);
+    });
+  });
+});
+
+const uploadImageHandler = async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const file = req.file;
+    
+    if (!file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    const imageUrls = await processProductImages([file], [], user.storeId!);
+    
+    res.json({
+      success: true,
+      imageUrl: imageUrls[0]
+    });
+  } catch (error) {
+    console.error('Error uploading single image:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+  router.post('/process-image-url', authenticateToken, async (req: any, res: any) => {
+  try {
+    const user = req.user as AuthUser;
+    const { imageUrl } = req.body;
+    
+    const processedUrls = await processProductImages([], [imageUrl], user.storeId!);
+    
+    res.json({
+      success: true,
+      imageUrl: processedUrls[0]
+    });
+  } catch (error) {
+    console.error('Error processing image URL:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Verificar estado completo de la tienda
 app.get('/api/test/store-status/:storeId', async (req, res) => {
@@ -915,7 +1810,7 @@ Simplemente escribe lo que necesitas y te ayudaré.`,
 
 
 
-
+app.use('/api', router);
 
 
   // Health endpoint is defined in index.ts to prevent Vite middleware interference

@@ -17,6 +17,9 @@ import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import setupCorsForRailway from './cors-config-railway.js';
 import { storage } from './storage.js';
+import multer from 'multer';
+import fs from 'fs';
+import { SupabaseStorageManager } from './supabase-storage.js';
 
 
 const app = express();
@@ -26,6 +29,23 @@ const server = createServer(app);
 // Get the __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB máximo
+  },
+  fileFilter: (req, file, cb) => {
+    // Validar tipos de archivo
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      // ✅ CORREGIDO: Solo pasar el Error, no el false
+      cb(new Error('Tipo de archivo no permitido'));
+    }
+  }
+});
 
 app.use((req, res, next) => {
   const origin = req.headers.origin || req.headers.referer || req.get('host') || 'localhost:5000';
@@ -69,7 +89,8 @@ app.use((req, res, next) => {
   next();
 });
 
-
+// En server/index.ts, agregar:
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // CRITICAL: Parse JSON bodies globally BEFORE any routes
 app.use(express.json());
@@ -260,6 +281,148 @@ apiRouter.get('/auth/me', (req, res) => {
   }
 });
 
+
+// Productos de una tienda específica - PÚBLICO
+app.get('/api/public/stores/:storeId/products', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    // Verificar que la tienda existe y está activa
+    const { storage } = await import('./storage.js');
+    const store = await storage.getVirtualStore(storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    // Usar tenant storage para obtener productos de la tienda específica
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Obtener solo productos activos para el catálogo público
+    const products = await tenantStorage.getAllProducts();
+    const activeProducts = products.filter((product: any) => product.isActive !== false);
+    
+    res.json(activeProducts);
+  } catch (error) {
+    console.error('Error fetching public products:', error);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+// Categorías de una tienda específica - PÚBLICO
+app.get('/api/public/stores/:storeId/categories', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    // Verificar que la tienda existe y está activa
+    const { storage } = await import('./storage.js');
+    const store = await storage.getVirtualStore(storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    // Usar tenant storage para obtener categorías de la tienda específica
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const categories = await tenantStorage.getAllCategories();
+    
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching public categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// Información básica de la tienda - PÚBLICO
+app.get('/api/public/stores/:storeId/info', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    // ✅ CORREGIDO: Obtener tienda usando getAllVirtualStores
+    const { storage } = await import('./storage.js');
+    const allStores = await storage.getAllVirtualStores();
+    const store = allStores.find((s: any) => s.id === storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    // Devolver solo información pública de la tienda
+    const publicInfo = {
+      id: store.id,
+      name: store.name,
+      description: store.description,
+      domain: store.domain,
+      phone: store.whatsappNumber,  // ✅ Campo correcto del schema
+      address: store.address,
+      logoUrl: store.logo,          // ✅ Campo correcto del schema
+      timezone: store.timezone,
+      currency: store.currency,
+      isActive: store.isActive
+    };
+    
+    res.json(publicInfo);
+  } catch (error) {
+    console.error('Error fetching public store info:', error);
+    res.status(500).json({ error: 'Failed to fetch store info' });
+  }
+});
+
+// Configuración del catálogo - PÚBLICO
+app.get('/api/public/stores/:storeId/catalog-config', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    // ✅ CORREGIDO: Obtener tienda usando getAllVirtualStores
+    const { storage } = await import('./storage.js');
+    const allStores = await storage.getAllVirtualStores();
+    const store = allStores.find((s: any) => s.id === storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    // Configuración específica para el catálogo
+    const catalogConfig = {
+      storeName: store.name,
+      whatsappNumber: store.whatsappNumber,  // ✅ Campo correcto del schema
+      showPrices: true, // Esto podría venir de configuración de la tienda
+      allowOrders: true,
+      currency: store.currency || 'MXN',
+      timezone: store.timezone || 'America/Mexico_City'
+    };
+    
+    res.json(catalogConfig);
+  } catch (error) {
+    console.error('Error fetching catalog config:', error);
+    res.status(500).json({ error: 'Failed to fetch catalog config' });
+  }
+});
 
 // EMPLOYEES/TECHNICIANS - agregar después de los endpoints existentes
 apiRouter.get('/employees', authenticateToken, async (req, res) => {
@@ -1137,127 +1300,300 @@ apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
 });
 
 // PRODUCTOS - using tenant storage
+
+// ✅ PRODUCTOS - GET (ya está correcto, pero aquí está la versión optimizada)
 apiRouter.get('/products', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
     
-    if (user.level === 'tenant' && user.storeId) {
-      // Use tenant storage for store-specific products
-      const { getTenantDb } = await import('./multi-tenant-db.js');
-      const { createTenantStorage } = await import('./tenant-storage.js');
-      
-      const tenantDb = await getTenantDb(user.storeId);
-      const tenantStorage = createTenantStorage(tenantDb);
-      
-      const products = await tenantStorage.getAllProducts();
-      res.json(products);
-    } else {
-      // Use main storage for global access
-      const { storage } = await import('./storage.js');
-      
-      const products = await storage.getAllProducts(user.storeId);
-      res.json(products);
-    }
+    // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const products = await tenantStorage.getAllProducts();
+    res.json(products);
   } catch (error) {
     console.error('Error fetching products:', error);
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
 
+// ✅ PRODUCTOS - GET BY ID
 apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
     const id = parseInt(req.params.id);
     
-    if (user.level === 'tenant' && user.storeId) {
-      const { getTenantDb } = await import('./multi-tenant-db.js');
-      const { createTenantStorage } = await import('./tenant-storage.js');
-      
-      const tenantDb = await getTenantDb(user.storeId);
-      const tenantStorage = createTenantStorage(tenantDb);
-      
-      const product = await tenantStorage.getProductById(id);
-      if (!product) {
-        return res.status(404).json({ error: 'Product not found' });
-      }
-      res.json(product);
-    } else {
-      const { storage } = await import('./storage.js');
-      
-      const product = await storage.getProduct(id, user.storeId);
-      if (!product) {
-        return res.status(404).json({ error: 'Product not found' });
-      }
-      res.json(product);
-    }
-  } catch (error) {
-    console.error('Error fetching product:', error);
-    res.status(500).json({ error: 'Failed to fetch product' });
-  }
-});
-
-apiRouter.post('/products', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
+    // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    if (user.level === 'tenant' && user.storeId) {
-      const { getTenantDb } = await import('./multi-tenant-db.js');
-      const { createTenantStorage } = await import('./tenant-storage.js');
-      
-      const tenantDb = await getTenantDb(user.storeId);
-      const tenantStorage = createTenantStorage(tenantDb);
-      
-      const product = await tenantStorage.createProduct(req.body);
-      res.status(201).json(product);
-    } else {
-      const { storage } = await import('./storage.js');
-      
-      const product = await storage.createProduct(req.body, user.storeId);
-      res.status(201).json(product);
-    }
-  } catch (error) {
-    console.error('Error creating product:', error);
-    res.status(500).json({ error: 'Failed to create product' });
-  }
-});
-
-apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
-  try {
-    const { storage } = await import('./storage.js');
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const product = await storage.updateProduct(id, req.body, user.storeId);
+    const product = await tenantStorage.getProductById(id);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
     
     res.json(product);
   } catch (error) {
-    console.error('Error updating product:', error);
-    res.status(500).json({ error: 'Failed to update product' });
+    console.error('Error fetching product:', error);
+    res.status(500).json({ error: 'Failed to fetch product' });
   }
 });
 
-apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
+// ✅ PRODUCTOS - POST (ya está correcto, pero aquí está la versión optimizada)
+apiRouter.post('/products', authenticateToken, async (req, res) => {
   try {
-    const { storage } = await import('./storage.js');
-    
-    const id = parseInt(req.params.id);
     const user = (req as any).user;
     
-    const success = await storage.deleteProduct(id, user.storeId);
-    if (!success) {
+    // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const product = await tenantStorage.createProduct(req.body);
+    res.status(201).json(product);
+  } catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: 'Failed to create product' });
+  }
+});
+
+// ✅ PRODUCTOS - PUT (CORREGIDO para usar tenant storage)
+
+// ✅ PRODUCTOS - PUT (CORREGIDO COMPLETAMENTE)
+apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔄 PUT /products/:id called');
+    
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    console.log('📋 Update product request:', { 
+      productId: id, 
+      userId: user.id, 
+      storeId: user.storeId,
+      bodyKeys: Object.keys(req.body)
+    });
+
+    // Usar tenant storage
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+
+    // Procesar datos del producto
+    const updateData = { ...req.body };
+
+    // ✅ PROCESAR IMÁGENES CORRECTAMENTE
+    if (updateData.images && Array.isArray(updateData.images)) {
+      console.log('🖼️ Processing images:', updateData.images);
+      
+      // Validar que todas las URLs sean válidas
+      const validUrls = updateData.images.filter(url => {
+        try {
+          new URL(url);
+          return true;
+        } catch {
+          console.warn('⚠️ Invalid image URL:', url);
+          return false;
+        }
+      });
+
+      updateData.images = validUrls;
+      console.log('✅ Valid image URLs:', validUrls.length);
+    }
+
+    // Actualizar producto en base de datos
+    const product = await tenantStorage.updateProduct(id, updateData);
+    
+    if (!product) {
+      console.log('❌ Product not found:', id);
       return res.status(404).json({ error: 'Product not found' });
     }
+
+    console.log('✅ Product updated successfully:', product.id);
+    res.json(product);
+
+  } catch (error) {
+    console.error('❌ Error updating product:', error);
+    res.status(500).json({ 
+      error: 'Failed to update product',
+      message: error.message 
+    });
+  }
+});
+// ✅ PRODUCTOS - DELETE (CORREGIDO para usar tenant storage)
+apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
     
+    // ✅ CORREGIDO: Usar tenant storage en lugar de storage global
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    await tenantStorage.deleteProduct(id);
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting product:', error);
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });
+
+// Endpoint para probar Supabase Storage
+apiRouter.get('/debug/supabase-storage', async (req, res) => {
+  try {
+    console.log('🔍 Testing Supabase Storage...');
+    
+    // Verificar variables de entorno
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    console.log('Environment check:', {
+      hasUrl: !!supabaseUrl,
+      hasServiceKey: !!serviceKey,
+      urlPreview: supabaseUrl ? supabaseUrl.substring(0, 50) + '...' : null
+    });
+
+    if (!supabaseUrl || !serviceKey) {
+      return res.json({
+        status: 'error',
+        message: 'Missing Supabase environment variables',
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!serviceKey
+      });
+    }
+
+    // Importar y probar Supabase
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    console.log('✅ Supabase client created');
+
+    // Listar buckets
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+    
+    if (bucketsError) {
+      console.error('❌ Buckets error:', bucketsError);
+      return res.json({
+        status: 'error',
+        message: 'Failed to list buckets',
+        error: bucketsError.message
+      });
+    }
+
+    console.log('✅ Buckets retrieved:', buckets?.length);
+
+    // Buscar bucket products
+    const productsBucket = buckets?.find(b => b.name === 'products');
+    console.log('Products bucket found:', !!productsBucket);
+
+    // Probar subida de un archivo PNG válido
+    let uploadTest = null;
+    try {
+      // Crear un pixel transparente PNG válido (1x1 pixel)
+      const pngBuffer = Buffer.from([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x04, 0x00, 0x00, 0x00, 0xB5, 0x1C, 0x0C, 0x02, 0x00, 0x00, 0x00, 0x0B,
+        0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01,
+        0xE5, 0x27, 0xDE, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+      ]);
+      
+      const testFileName = `debug/test-${Date.now()}.png`;
+      
+      console.log('🔄 Testing PNG upload...');
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('products')
+        .upload(testFileName, pngBuffer, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: 'image/png'
+        });
+
+      if (uploadError) {
+        console.error('❌ Upload error:', uploadError);
+        uploadTest = { success: false, error: uploadError.message };
+      } else {
+        console.log('✅ Upload successful:', uploadData.path);
+        uploadTest = { success: true, path: uploadData.path };
+        
+        // Obtener URL pública
+        const { data: urlData } = supabase.storage
+          .from('products')
+          .getPublicUrl(uploadData.path);
+        
+        uploadTest.publicUrl = urlData.publicUrl;
+        console.log('🔗 Public URL:', urlData.publicUrl);
+        
+        // Limpiar archivo de prueba
+        const { error: deleteError } = await supabase.storage
+          .from('products')
+          .remove([uploadData.path]);
+          
+        if (deleteError) {
+          console.warn('⚠️ Could not delete test file:', deleteError.message);
+        } else {
+          console.log('🧹 Test file cleaned up');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Upload test error:', error);
+      uploadTest = { success: false, error: error.message };
+    }
+
+    const result = {
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      config: {
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!serviceKey,
+        urlPreview: supabaseUrl ? supabaseUrl.substring(0, 50) + '...' : null
+      },
+      buckets: buckets?.map(b => ({ 
+        name: b.name, 
+        public: b.public,
+        created_at: b.created_at 
+      })) || [],
+      productsBucket: productsBucket ? {
+        name: productsBucket.name,
+        public: productsBucket.public,
+        created_at: productsBucket.created_at
+      } : null,
+      uploadTest
+    };
+
+    console.log('📊 Final result:', result);
+    res.json(result);
+
+  } catch (error) {
+    console.error('💥 Supabase debug error:', error);
+    res.json({
+      status: 'error',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+
 
 // CLIENTES
 apiRouter.get('/customers', authenticateToken, async (req, res) => {
@@ -1808,16 +2144,20 @@ apiRouter.delete('/cart/:productId', authenticateToken, async (req, res) => {
 
 
 // CATEGORIES
+
+// ✅ CATEGORÍAS - GET (ya está correcto, pero aquí está la versión optimizada)
 apiRouter.get('/categories', authenticateToken, async (req, res) => {
   try {
-    const { createTenantStorage } = await import('./tenant-storage.js');
-    const { getTenantDb } = await import('./multi-tenant-db.js');
-    
     const user = (req as any).user;
-    const tenantDb = await getTenantDb(user.storeId);
-    const storage = createTenantStorage(tenantDb);
     
-    const categories = await storage.getAllCategories();
+    // SIEMPRE usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const categories = await tenantStorage.getAllCategories();
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -1825,22 +2165,188 @@ apiRouter.get('/categories', authenticateToken, async (req, res) => {
   }
 });
 
+// ✅ CATEGORÍAS - GET BY ID
+apiRouter.get('/categories/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const category = await tenantStorage.getCategoryById(id);
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    res.json(category);
+  } catch (error) {
+    console.error('Error fetching category:', error);
+    res.status(500).json({ error: 'Failed to fetch category' });
+  }
+});
+
+// ✅ CATEGORÍAS - POST (NUEVO/CORREGIDO)
 apiRouter.post('/categories', authenticateToken, async (req, res) => {
   try {
-    const { createTenantStorage } = await import('./tenant-storage.js');
-    const { getTenantDb } = await import('./multi-tenant-db.js');
-    
     const user = (req as any).user;
-    const tenantDb = await getTenantDb(user.storeId);
-    const storage = createTenantStorage(tenantDb);
     
-    const category = await storage.createCategory(req.body);
+    // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const category = await tenantStorage.createCategory(req.body);
     res.status(201).json(category);
   } catch (error) {
     console.error('Error creating category:', error);
     res.status(500).json({ error: 'Failed to create category' });
   }
 });
+
+// ✅ CATEGORÍAS - PUT (NUEVO/CORREGIDO)
+apiRouter.put('/categories/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    const category = await tenantStorage.updateCategory(id, req.body);
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    res.json(category);
+  } catch (error) {
+    console.error('Error updating category:', error);
+    res.status(500).json({ error: 'Failed to update category' });
+  }
+});
+
+// ✅ CATEGORÍAS - DELETE (NUEVO/CORREGIDO)
+apiRouter.delete('/categories/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    await tenantStorage.deleteCategory(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    res.status(500).json({ error: 'Failed to delete category' });
+  }
+});
+
+// ================================
+// ENDPOINT DE VALIDACIÓN DE SCHEMA
+// ================================
+
+// ✅ NUEVO: Endpoint para validar que la tienda usa esquema correcto
+apiRouter.get('/store/schema-status', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    // Obtener información de la tienda
+    const { storage } = await import('./storage.js');
+    const allStores = await storage.getAllVirtualStores();
+    const store = allStores.find((s: any) => s.id === user.storeId);
+    
+    if (!store) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    
+    // Verificar si tiene schema separado
+    const schemaMatch = store.databaseUrl?.match(/schema=([^&]+)/);
+    const hasSchema = !!schemaMatch;
+    const schemaName = schemaMatch ? schemaMatch[1] : null;
+    
+    // Verificar conectividad con tenant storage
+    let tenantConnectionValid = false;
+    try {
+      const { getTenantDb } = await import('./multi-tenant-db.js');
+      const { createTenantStorage } = await import('./tenant-storage.js');
+      
+      const tenantDb = await getTenantDb(user.storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
+      
+      // Test básico
+      await tenantStorage.getAllProducts();
+      tenantConnectionValid = true;
+    } catch (error) {
+      console.error('Tenant connection test failed:', error);
+    }
+    
+    res.json({
+      storeId: user.storeId,
+      storeName: store.name,
+      hasSchema,
+      schemaName,
+      tenantConnectionValid,
+      status: hasSchema && tenantConnectionValid ? 'ready' : 'needs_migration',
+      databaseUrl: store.databaseUrl
+    });
+  } catch (error) {
+    console.error('Error checking schema status:', error);
+    res.status(500).json({ error: 'Failed to check schema status' });
+  }
+});
+
+// ================================
+// MIDDLEWARE DE VALIDACIÓN ADICIONAL
+// ================================
+
+// ✅ NUEVO: Middleware para validar que la tienda tenga tenant storage
+const validateTenantStorage = async (req: any, res: any, next: any) => {
+  try {
+    const user = req.user;
+    
+    if (!user.storeId) {
+      return res.status(400).json({ error: 'Store ID is required' });
+    }
+    
+    // Verificar que la tienda existe y tiene schema separado
+    const { storage } = await import('./storage.js');
+    const allStores = await storage.getAllVirtualStores();
+    const store = allStores.find((s: any) => s.id === user.storeId);
+    
+    if (!store) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    
+    if (!store.databaseUrl?.includes('schema=')) {
+      return res.status(400).json({ 
+        error: 'Store not configured for tenant storage',
+        storeId: user.storeId,
+        storeName: store.name,
+        needsMigration: true
+      });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Error validating tenant storage:', error);
+    res.status(500).json({ error: 'Failed to validate tenant storage' });
+  }
+};
+
 
 // REPORTS/ANALYTICS
 apiRouter.get('/reports', authenticateToken, async (req, res) => {
@@ -2033,6 +2539,150 @@ app.use('/api', apiRouter);
         });
       }
     });
+
+apiRouter.post('/upload-image', authenticateToken, upload.single('image') as any, async (req, res) => {
+  try {
+    console.log('🔄 Upload image endpoint called');
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const user = (req as any).user;
+    console.log('📋 User:', { id: user.id, storeId: user.storeId });
+    console.log('📁 File:', { 
+      name: req.file.originalname, 
+      size: req.file.size, 
+      type: req.file.mimetype 
+    });
+
+    // Crear instancia del storage manager
+    const storageManager = new SupabaseStorageManager(user.storeId);
+
+    // Convertir buffer a File-like object para Supabase
+    const file = {
+      name: req.file.originalname,
+      size: req.file.size,
+      type: req.file.mimetype,
+      arrayBuffer: async () => req.file!.buffer.buffer.slice(
+        req.file!.buffer.byteOffset,
+        req.file!.buffer.byteOffset + req.file!.buffer.byteLength
+      )
+    } as File;
+
+    // Subir a Supabase Storage
+    const imageUrl = await storageManager.uploadFile(file);
+    
+    console.log('✅ Image uploaded successfully:', imageUrl);
+    
+    res.json({ 
+      success: true, 
+      imageUrl: imageUrl,
+      message: 'Imagen subida exitosamente'
+    });
+
+  } catch (error) {
+    console.error('❌ Error uploading image:', error);
+    res.status(500).json({ 
+      error: 'Failed to upload image',
+      message: (error as Error).message 
+    });
+  }
+});
+
+// 🔥 ENDPOINT FALTANTE: POST /api/process-image-url
+apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔄 Process image URL endpoint called');
+    
+    const { imageUrl } = req.body;
+    
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'No imageUrl provided' });
+    }
+
+    const user = (req as any).user;
+    console.log('📋 User:', { id: user.id, storeId: user.storeId });
+    console.log('🔗 URL to process:', imageUrl);
+
+    // Validar URL básica
+    try {
+      new URL(imageUrl);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Crear instancia del storage manager
+    const storageManager = new SupabaseStorageManager(user.storeId);
+
+    // Procesar URL (descargar y subir a Supabase)
+    const processedImageUrl = await storageManager.uploadFromUrl(imageUrl);
+    
+    console.log('✅ URL processed successfully:', processedImageUrl);
+    
+    res.json({ 
+      success: true, 
+      imageUrl: processedImageUrl,
+      originalUrl: imageUrl,
+      message: 'URL procesada exitosamente'
+    });
+
+  } catch (error) {
+    console.error('❌ Error processing image URL:', error);
+    res.status(500).json({ 
+      error: 'Failed to process image URL',
+      message: (error as Error).message 
+    });
+  }
+});
+
+
+// 🔥 ENDPOINT FALTANTE: POST /api/process-image-url
+apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔄 Process image URL endpoint called');
+    
+    const { imageUrl } = req.body;
+    
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'No imageUrl provided' });
+    }
+
+    const user = (req as any).user;
+    console.log('📋 User:', { id: user.id, storeId: user.storeId });
+    console.log('🔗 URL to process:', imageUrl);
+
+    // Validar URL básica
+    try {
+      new URL(imageUrl);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Crear instancia del storage manager
+    const storageManager = new SupabaseStorageManager(user.storeId);
+
+    // Procesar URL (descargar y subir a Supabase)
+    const processedImageUrl = await storageManager.uploadFromUrl(imageUrl);
+    
+    console.log('✅ URL processed successfully:', processedImageUrl);
+    
+    res.json({ 
+      success: true, 
+      imageUrl: processedImageUrl,
+      originalUrl: imageUrl,
+      message: 'URL procesada exitosamente'
+    });
+
+  } catch (error) {
+    console.error('❌ Error processing image URL:', error);
+    res.status(500).json({ 
+      error: 'Failed to process image URL',
+      message: error.message 
+    });
+  }
+});
+
 
     app.get('/api/super-admin/stores/:id/validate-migration', async (req, res) => {
       try {

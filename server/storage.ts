@@ -368,6 +368,36 @@ export class DatabaseStorage {
       .orderBy(desc(schema.users.createdAt));
   }
 
+  /**
+ * Obtener una tienda virtual específica por ID
+ */
+async getVirtualStore(storeId: number): Promise<VirtualStore | null> {
+  try {
+    const [store] = await this.db
+      .select()
+      .from(schema.virtualStores)
+      .where(eq(schema.virtualStores.id, storeId))
+      .limit(1);
+    
+    return store || null;
+  } catch (error) {
+    console.error('Error getting virtual store:', error);
+    return null;
+  }
+}
+
+/**
+ * Verificar si una tienda existe y está activa
+ */
+async isStoreActive(storeId: number): Promise<boolean> {
+  try {
+    const store = await this.getVirtualStore(storeId);
+    return !!(store && store.isActive);
+  } catch (error) {
+    console.error('Error checking if store is active:', error);
+    return false;
+  }
+}
   // ========================================
   // MÉTODOS PARA USUARIOS DE TIENDA (Store Users)
   // ========================================
@@ -410,6 +440,8 @@ export class DatabaseStorage {
       throw error;
     }
   }
+
+  
 
   /**
    * Obtener usuario de tienda por username
@@ -801,13 +833,23 @@ export class DatabaseStorage {
     return newProduct;
   }
 
-  async updateProduct(id: number, product: InsertProduct, storeId?: number): Promise<Product | undefined> {
-    const [updatedProduct] = await db.update(products)
-      .set(product)
-      .where(eq(products.id, id))
-      .returning();
-    return updatedProduct || undefined;
+async updateProduct(id: number, data: Partial<any>): Promise<any> {
+  console.log('🔄 Storage updateProduct called with:', { id, data });
+  
+  // Verificar que hay datos para actualizar
+  if (!data || Object.keys(data).length === 0) {
+    throw new Error('No data provided for update');
   }
+
+  const [updatedProduct] = await this.db
+    .update(schema.products)
+    .set(data)
+    .where(eq(schema.products.id, id))
+    .returning();
+
+  console.log('✅ Product updated in database:', updatedProduct);
+  return updatedProduct;
+}
 
   async deleteProduct(id: number, storeId?: number): Promise<boolean> {
     const result = await db.delete(products).where(eq(products.id, id));

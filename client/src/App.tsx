@@ -27,7 +27,6 @@ import PublicCatalogClean from "@/pages/public-catalog-clean";
 import SimpleCatalog from "@/pages/simple-catalog";
 import Cart from "@/pages/cart";
 import Billing from "@/pages/billing";
-import ProductManagement from "@/pages/product-management-new";
 import OrderManagement from "@/pages/order-management";
 import StoreManagement from "@/pages/store-management";
 import MultiTenantLogin from "@/pages/multi-tenant-login";
@@ -52,6 +51,8 @@ import WhatsAppSettingsWrapper from "./pages/super-admin/whatsapp-settings-wrapp
 import { useEffect, useRef } from 'react';
 import { ErrorBoundary } from "./ErrorBoundary";
 import React from "react";
+import { ToastProvider } from '@/components/ui/use-toast';
+import { ProductManagement } from "./pages/product-management";
 
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -241,6 +242,7 @@ export function ReactDebugComponent() {
 
 function App() {
   return (
+    <ToastProvider>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
@@ -251,6 +253,7 @@ function App() {
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
+    </ToastProvider>
   );
 }
 

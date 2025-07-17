@@ -338,70 +338,84 @@ export default function PublicCatalogFixed() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredProducts.map((product: Product) => (
-              <Card 
-                key={product.id} 
-                className="overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 bg-white border-0 cursor-pointer"
-                onClick={() => openProductModal(product)}
-              >
-                <div className="relative h-64 bg-gray-100 overflow-hidden">
-                  {product.images && product.images.length > 0 ? (
-                    <>
-                      <img
-                        src={product.images[0]}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallback = target.nextElementSibling as HTMLDivElement;
-                          if (fallback) fallback.style.display = 'flex';
-                        }}
-                      />
-                      <div className="w-full h-full bg-gray-100 flex items-center justify-center absolute inset-0" style={{ display: 'none' }}>
-                        <ShoppingBag className="w-16 h-16 text-gray-400" />
-                      </div>
-                      {product.images.length > 1 && (
-                        <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm">
-                          +{product.images.length - 1}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ShoppingBag className="w-16 h-16 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-                
-                <CardContent className="p-4">
-                  <h3 className="font-semibold text-gray-900 text-lg mb-1 line-clamp-1">
-                    {product.name}
-                  </h3>
-                  <p className="text-gray-600 text-sm mb-3 line-clamp-2 min-h-[2.5rem]">
-                    {product.description || "Sin descripción"}
-                  </p>
-                  
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-2xl font-bold text-teal-600">
-                      ${formatCurrency(product.price)}
-                    </div>
-                    <Badge className="bg-teal-100 text-teal-700 border-0 text-xs uppercase">
-                      {product.category}
-                    </Badge>
-                  </div>
-                  
-                  <Button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addToCart(product.id);
-                    }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0 h-10 rounded-full font-medium"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Agregar
-                  </Button>
-                </CardContent>
-              </Card>
+            <Card
+  key={product.id}
+  className="overflow-hidden hover:shadow-lg transition-shadow"
+>
+  <div
+    onClick={() => openProductModal(product)}
+    className="cursor-pointer"
+  >
+    <CardHeader className="pb-4">
+      <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg overflow-hidden relative">
+        {product.images.length ? (
+          <>
+            <img
+              src={product.images[0]}
+              alt={product.name}
+              className="w-full h-full object-cover"
+              crossOrigin="anonymous"            {/* ← evita 403 canvas */}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+                const stub = (e.target as HTMLElement)
+                  .nextElementSibling as HTMLElement;
+                if (stub) stub.style.display = "flex";
+              }}
+            />
+            <div
+              className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100
+                         flex items-center justify-center absolute inset-0"
+              style={{ display: "none" }}           // fallback invisible
+            >
+              <ShoppingBag className="w-16 h-16 text-blue-600" />
+            </div>
+
+            {product.images.length > 1 && (
+              <div className="absolute top-2 right-2 bg-black/60 text-white
+                              text-xs px-2 py-1 rounded-full">
+                +{product.images.length - 1}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ShoppingBag className="w-16 h-16 text-blue-600" />
+          </div>
+        )}
+      </div>
+
+      <CardTitle className="text-lg line-clamp-2">
+        {product.name}
+      </CardTitle>
+      <CardDescription className="text-sm text-gray-600 line-clamp-3">
+        {product.description || "Producto de alta calidad"}
+      </CardDescription>
+    </CardHeader>
+
+    <CardContent className="pt-0">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-2xl font-bold text-green-600">
+          ${formatCurrency(product.price)}
+        </div>
+        <Badge variant="secondary">{product.category}</Badge>
+      </div>
+    </CardContent>
+  </div>
+
+  <CardContent className="pt-0 pb-4">
+    <Button
+      onClick={(e) => {
+        e.stopPropagation();
+        addToCart(product.id);
+      }}
+      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+    >
+      <Plus className="w-4 h-4 mr-2" />
+      Agregar
+    </Button>
+  </CardContent>
+</Card>
+
             ))}
           </div>
         )}

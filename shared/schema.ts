@@ -419,6 +419,25 @@ export const employeeProfiles = pgTable("employee_profiles", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Schema de validación para productos
+export const ProductSchema = z.object({
+  name: z.string().min(1, "Nombre requerido"),
+  description: z.string().min(1, "Descripción requerida"),
+  price: z.string().refine(val => !isNaN(parseFloat(val)), "Precio inválido"),
+  category: z.string().min(1, "Categoría requerida"),
+  type: z.string().default("product"),
+  brand: z.string().optional(),
+  model: z.string().optional(),
+  sku: z.string().optional(),
+  isActive: z.boolean().default(true),
+  stock: z.number().default(0),
+  specifications: z.string().optional(),
+  installationCost: z.string().optional(),
+  warrantyMonths: z.number().default(0),
+  imageUrls: z.array(z.string().url()).optional() // URLs de imágenes desde frontend
+});
+
+
 // Automatic assignment rules
 export const assignmentRules = pgTable("assignment_rules", {
   id: serial("id").primaryKey(),

@@ -1,306 +1,684 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+// product-management.tsx - Errores corregidos
+import React, { useState, useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+// Imports correctos para tus componentes UI
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { useToast } from "@/hooks/use-toast";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
-import { apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, Eye, Package, Image, Upload, X, ShoppingCart, Folder, FolderPlus } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link } from "wouter";
-import { z } from "zod";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Formulario de producto
-const productFormSchema = z.object({
-  name: z.string().min(1, "Nombre es requerido"),
-  description: z.string().nullable().default(""),
-  category: z.string().min(1, "Categoría es requerida"),
-  price: z.string().min(1, "Precio es requerido"),
-  brand: z.string().nullable().default(""),
-  model: z.string().nullable().default(""),
-  sku: z.string().nullable().default(""),
-  status: z.string().default("active"),
-  availability: z.string().default("in_stock"),
-  stockQuantity: z.number().min(0).default(0),
-  minQuantity: z.number().min(1).default(1),
-  maxQuantity: z.number().nullable().optional(),
-  weight: z.string().nullable().default(""),
-  warranty: z.string().nullable().default(""),
-  features: z.array(z.string()).default([]),
-  tags: z.array(z.string()).default([]),
-  images: z.array(z.string()).default([]),
-  salePrice: z.string().nullable().default(""),
-  isPromoted: z.boolean().default(false),
-  promotionText: z.string().nullable().default(""),
-});
+// Implementación inline de apiRequest (reemplaza @/lib/api)
+const apiRequest = async (method: string, url: string, data?: any) => {
+  const token = localStorage.getItem('auth_token'); // ✅ CORRECTO
+  
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : '',
+      ...(data instanceof FormData ? {} : { 'Content-Type': 'application/json' })
+    },
+  };
 
-type ProductFormData = z.infer<typeof productFormSchema>;
+  if (data) {
+    if (data instanceof FormData) {
+      options.body = data;
+    } else {
+      options.body = JSON.stringify(data);
+    }
+  }
 
-// Formulario de categoría
-const categoryFormSchema = z.object({
-  name: z.string().min(1, "Nombre es requerido"),
-  description: z.string().nullable().default(""),
-});
+  const response = await fetch(url, options);
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(errorData.message || `Error ${response.status}`);
+  }
 
-type CategoryFormData = z.infer<typeof categoryFormSchema>;
+  return response.json();
+};
+
+// Hook de toast simplificado (implementación inline)
+const useToast = () => {
+  const toast = ({ title, description, variant }: { 
+    title: string; 
+    description?: string; 
+    variant?: 'default' | 'destructive' 
+  }) => {
+    if (variant === 'destructive') {
+      console.error(`❌ ${title}: ${description}`);
+      alert(`❌ Error: ${title}\n${description || ''}`);
+    } else {
+      console.log(`✅ ${title}: ${description}`);
+      alert(`✅ ${title}\n${description || ''}`);
+    }
+  };
+  return { toast };
+};
+
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Package,
+  Tag,
+  Image,
+  Upload,
+  Link,
+  X,
+  Eye,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  Move,
+  Filter,
+  MoreHorizontal,
+  DollarSign,
+  BarChart3,
+} from "lucide-react";
+
+// Tipos e interfaces
+interface ImageData {
+  id: string;
+  url: string;
+  file?: File;
+  isUploaded: boolean;
+  isUploading?: boolean; // ← Agregar esto
+  uploadError?: string;  // ← Agregar esto
+  source: 'file' | 'url';
+  name: string;
+}
 
 interface Product {
   id: number;
   name: string;
-  description: string | null;
-  category: string;
-  price: string;
-  brand: string | null;
-  model: string | null;
-  sku: string | null;
-  status: string;
-  availability: string;
-  stockQuantity: number;
-  minQuantity: number;
-  maxQuantity: number | null;
-  weight: string | null;
-  warranty: string | null;
-  features: string[] | null;
-  tags: string[] | null;
-  images: string[] | null;
-  imageUrl: string | null;
-  salePrice: string | null;
-  isPromoted: boolean;
-  promotionText: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
+  description?: string;
+  price?: string;
+  category?: string;
+  type?: string;
+  brand?: string;
+  model?: string;
+  sku?: string;
+  isActive?: boolean;
+  stock?: number;
+  specifications?: string;
+  installationCost?: string;
+  warrantyMonths?: number;
+  imageUrl?: string;
+  images?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface Category {
   id: number;
   name: string;
-  description: string | null;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export default function ProductManagement() {
+interface ProductFormData {
+  name: string;
+  description: string;
+  price: string;
+  category: string;
+  type: string;
+  brand: string;
+  model: string;
+  sku: string;
+  isActive: boolean;
+  stock: number;
+  specifications: string;
+  installationCost: string;
+  warrantyMonths: number;
+  imageUrl: string;
+  images: string[];
+}
+
+interface CategoryFormData {
+  name: string;
+  description: string;
+}
+
+// Componente de carga de imágenes mejorado
+const EnhancedImageUpload: React.FC<{
+  images: ImageData[];
+  onImagesChange: (images: ImageData[]) => void;
+  maxImages?: number;
+  maxFileSize?: number;
+  allowedTypes?: string[];
+}> = ({
+  images,
+  onImagesChange,
+  maxImages = 5,
+  maxFileSize = 5,
+  allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+}) => {
+  const [urlInput, setUrlInput] = useState('');
+  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  // Manejo de archivos
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    const newFiles = Array.from(files);
+    
+    if (images.length + newFiles.length > maxImages) {
+      toast({
+        title: "⚠️ Límite de imágenes",
+        description: `Solo puedes subir un máximo de ${maxImages} imágenes`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const processedFiles = newFiles.map(file => {
+      if (file.size > maxFileSize * 1024 * 1024) {
+        toast({
+          title: "⚠️ Archivo muy grande",
+          description: `${file.name} es mayor a ${maxFileSize}MB`,
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          title: "⚠️ Formato no válido",
+          description: `${file.name} no es un formato permitido`,
+          variant: "destructive",
+        });
+        return null;
+      }
+
+       return {
+    id: `file-${Date.now()}-${Math.random()}`,
+    url: URL.createObjectURL(file),
+    file,
+    isUploaded: false,    // ← Esto se queda igual
+    isUploading: false,   // ← AGREGAR esto
+    source: 'file' as const,
+    name: file.name
+  };
+}).filter(Boolean) as ImageData[];
+
+onImagesChange([...images, ...processedFiles]);
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Manejo de URL
+  const handleUrlAdd = async () => {
+    if (!urlInput.trim()) return;
+
+    if (images.length >= maxImages) {
+      toast({
+        title: "⚠️ Límite de imágenes",
+        description: `Solo puedes subir un máximo de ${maxImages} imágenes`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      new URL(urlInput);
+    } catch {
+      toast({
+        title: "⚠️ URL inválida",
+        description: "Por favor ingresa una URL válida",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoadingUrl(true);
+
+    try {
+      const response = await fetch(urlInput, { method: 'HEAD' });
+      
+      if (!response.ok) {
+        throw new Error('No se pudo acceder a la imagen');
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.startsWith('image/')) {
+        throw new Error('La URL no apunta a una imagen válida');
+      }
+
+      if (!allowedTypes.includes(contentType)) {
+        throw new Error('Formato de imagen no permitido');
+      }
+
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > maxFileSize * 1024 * 1024) {
+        throw new Error(`La imagen es muy grande (máximo ${maxFileSize}MB)`);
+      }
+
+      const newImage: ImageData = {
+        id: `url-${Date.now()}-${Math.random()}`,
+        url: urlInput,
+        isUploaded: false,
+        source: 'url',
+        name: urlInput.split('/').pop() || 'imagen-url'
+      };
+
+      onImagesChange([...images, newImage]);
+      setUrlInput('');
+
+      toast({
+        title: "✅ Imagen agregada",
+        description: "La imagen desde URL se agregó exitosamente",
+      });
+
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: error instanceof Error ? error.message : "Error al cargar imagen desde URL",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingUrl(false);
+    }
+  };
+
+  const removeImage = (id: string) => {
+    const updatedImages = images.filter(img => img.id !== id);
+    onImagesChange(updatedImages);
+    
+    const imageToRemove = images.find(img => img.id === id);
+    if (imageToRemove?.file && imageToRemove.url.startsWith('blob:')) {
+      URL.revokeObjectURL(imageToRemove.url);
+    }
+  };
+
+  const previewImage = (url: string) => {
+    window.open(url, '_blank');
+  };
+
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    
+    if (draggedIndex === null) return;
+    
+    const newImages = [...images];
+    const draggedImage = newImages[draggedIndex];
+    
+    newImages.splice(draggedIndex, 1);
+    newImages.splice(dropIndex, 0, draggedImage);
+    
+    onImagesChange(newImages);
+    setDraggedIndex(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <Label className="text-base font-medium">
+          Imágenes del producto (máximo {maxImages})
+        </Label>
+        <p className="text-sm text-muted-foreground mt-1">
+          Sube archivos o agrega imágenes desde URL. Formatos: JPG, PNG, GIF, WebP (máximo {maxFileSize}MB)
+        </p>
+      </div>
+
+      <Tabs defaultValue="files" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="files" className="flex items-center gap-2">
+            <Upload className="w-4 h-4" />
+            Subir archivos
+          </TabsTrigger>
+          <TabsTrigger value="url" className="flex items-center gap-2">
+            <Link className="w-4 h-4" />
+            Desde URL
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="files" className="space-y-4">
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={allowedTypes.join(',')}
+              onChange={handleFileUpload}
+              className="hidden"
+              id="file-upload"
+              disabled={images.length >= maxImages}
+            />
+            <label
+              htmlFor="file-upload"
+              className={`cursor-pointer inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white transition-colors ${
+                images.length >= maxImages 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+              }`}
+            >
+              <Image className="w-5 h-5 mr-2" />
+              {images.length >= maxImages ? 'Límite alcanzado' : 'Seleccionar archivos'}
+            </label>
+            <p className="text-sm text-gray-500 mt-2">
+              O arrastra y suelta archivos aquí
+            </p>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="url" className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder="https://ejemplo.com/imagen.jpg"
+              disabled={isLoadingUrl || images.length >= maxImages}
+              onKeyPress={(e) => e.key === 'Enter' && handleUrlAdd()}
+            />
+            <Button 
+              onClick={handleUrlAdd} 
+              disabled={isLoadingUrl || !urlInput.trim() || images.length >= maxImages}
+              className="px-4"
+            >
+              {isLoadingUrl ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <Link className="w-4 h-4 mr-2" />
+                  Agregar
+                </>
+              )}
+            </Button>
+          </div>
+          
+          {images.length >= maxImages && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Has alcanzado el límite máximo de {maxImages} imágenes.
+              </AlertDescription>
+            </Alert>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {images.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">
+              Imágenes cargadas ({images.length}/{maxImages})
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Arrastra para reordenar
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-3">
+            {images.map((image, index) => (
+              <div
+                key={image.id}
+                className="flex items-center gap-3 p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, index)}
+              >
+                <div className="flex-shrink-0">
+                  <img
+                    src={image.url}
+                    alt={image.name}
+                    className="w-12 h-12 object-cover rounded border"
+                  />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{image.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant={image.source === 'file' ? 'default' : 'secondary'} className="text-xs">
+                      {image.source === 'file' ? 'Archivo' : 'URL'}
+                    </Badge>
+                    {image.isUploaded ? (
+                      <Badge variant="outline" className="text-xs text-green-600">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Subido
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-yellow-600">
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Pendiente
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => previewImage(image.url)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 cursor-move"
+                  >
+                    <Move className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeImage(image.id)}
+                    className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {images.length === 0 && (
+        <div className="text-center py-8 text-gray-500">
+          <Image className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No hay imágenes cargadas</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Componente principal
+export const ProductManagement: React.FC = () => {
+  // Estados principales
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [newFeature, setNewFeature] = useState("");
-  const [newTag, setNewTag] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  
-  // Estados para categorías
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [activeTab, setActiveTab] = useState("products");
+
+  // Estados de filtrado y búsqueda
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  // Estados de formularios
+  const [productForm, setProductForm] = useState<ProductFormData>({
+    name: "",
+    description: "",
+    price: "",
+    category: "",
+    type: "product",
+    brand: "",
+    model: "",
+    sku: "",
+    isActive: true,
+    stock: 0,
+    specifications: "",
+    installationCost: "",
+    warrantyMonths: 0,
+    imageUrl: "",
+    images: [],
+  });
+
+  const [categoryForm, setCategoryForm] = useState<CategoryFormData>({
+    name: "",
+    description: "",
+  });
+
+  // Estados de imágenes
+  const [productImages, setProductImages] = useState<ImageData[]>([]);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Consultar productos
-  const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: ["/api/products"],
-  });
+  // Queries
+// ✅ CORRECTO - queryKey debe coincidir con la URL
+const { data: products = [], isLoading: loadingProducts } = useQuery({
+  queryKey: ["/api/products"], // ← Cambiar esto
+  queryFn: () => apiRequest("GET", "/api/products"),
+  staleTime: 30000,
+  retry: 3,
+  retryDelay: 1000,
+});
 
-  // Consultar categorías
-  const { data: categories = [] } = useQuery({
-    queryKey: ["/api/categories"],
-  });
+const { data: categories = [], isLoading: loadingCategories } = useQuery({
+  queryKey: ["/api/categories"], // ← Cambiar esto  
+  queryFn: () => apiRequest("GET", "/api/categories"),
+  staleTime: 30000,
+  retry: 3,
+  retryDelay: 1000,
+});
 
-  const form = useForm<ProductFormData>({
-    resolver: zodResolver(productFormSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      category: "",
-      price: "",
-      brand: "",
-      model: "",
-      sku: "",
-      status: "active",
-      availability: "in_stock",
-      stockQuantity: 0,
-      minQuantity: 1,
-      weight: "",
-      warranty: "",
-      features: [],
-      tags: [],
-      images: [],
-      salePrice: "",
-      isPromoted: false,
-      promotionText: "",
-    },
-  });
+  // Función auxiliar para procesar imágenes (CORREGIDA - compatible con todas las versiones de TypeScript)
+  const prepareImageFormData = (images: ImageData[]): { formData: FormData; imageUrls: string[] } => {
+    const formData = new FormData();
+    const imageUrls: string[] = [];
 
-  // Crear producto
+    images.forEach((image) => {
+      if (image.source === 'file' && image.file) {
+        formData.append('images', image.file);
+      } else if (image.source === 'url') {
+        imageUrls.push(image.url);
+      }
+    });
+
+    return { formData, imageUrls };
+  };
+
+  // Función auxiliar para combinar FormData (CORREGIDA)
+  const appendFormData = (targetFormData: FormData, sourceFormData: FormData) => {
+    // Convertir a array para compatibilidad con versiones anteriores de TypeScript
+    const entries = Array.from(sourceFormData.entries());
+    entries.forEach(([key, value]) => {
+      targetFormData.append(key, value);
+    });
+  };
+
+  // Mutations
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      const formData = new FormData();
-      
-      // Agregar campos del producto
-      Object.entries(data).forEach(([key, value]) => {
-        if (key === 'features' || key === 'tags' || key === 'images') {
-          formData.append(key, JSON.stringify(value));
-        } else if (value !== undefined && value !== null && value !== '') {
-          formData.append(key, value.toString());
+      setIsProcessingImages(true);
+
+      try {
+        const formData = new FormData();
+        
+        Object.entries(data).forEach(([key, value]) => {
+          if (key !== 'images' && value !== undefined && value !== null && value !== '') {
+            formData.append(key, value.toString());
+          }
+        });
+
+        const { formData: imageFormData, imageUrls } = prepareImageFormData(productImages);
+        
+        // Usar la función auxiliar para evitar problemas de iteración
+        appendFormData(formData, imageFormData);
+
+        if (imageUrls.length > 0) {
+          formData.append('imageUrls', JSON.stringify(imageUrls));
         }
-      });
 
-      // Agregar archivos de imagen
-      imageFiles.forEach((file, index) => {
-        formData.append(`image_${index}`, file);
-      });
-
-      return apiRequest("POST", "/api/products", formData);
+        return apiRequest("POST", "/api/products", formData);
+      } finally {
+        setIsProcessingImages(false);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setIsCreateDialogOpen(false);
-      resetForm();
+      resetProductForm();
+      resetImageStates();
+      setProductImages(prev => prev.map(img => ({ ...img, isUploaded: true })));
       toast({
-        title: "Producto creado",
-        description: "El producto se ha creado exitosamente.",
+        title: "✅ Producto creado",
+        description: "El producto se ha creado exitosamente con todas las imágenes.",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "No se pudo crear el producto.",
+        title: "❌ Error",
+        description: error.message || "Error al crear el producto",
         variant: "destructive",
       });
-    },
+    }
   });
 
-  // Actualizar producto
-  const updateProductMutation = useMutation({
-    mutationFn: async (data: ProductFormData & { id: number }) => {
-      const formData = new FormData();
-      
-      // Agregar campos del producto
-      Object.entries(data).forEach(([key, value]) => {
-        if (key === 'features' || key === 'tags' || key === 'images') {
-          formData.append(key, JSON.stringify(value));
-        } else if (value !== undefined && value !== null && value !== '') {
-          formData.append(key, value.toString());
-        }
-      });
+// 🔍 DIAGNÓSTICO FRONTEND - Reemplazar updateProductMutation en product-management.tsx
 
-      // Agregar archivos de imagen nuevos
-      imageFiles.forEach((file, index) => {
-        formData.append(`image_${index}`, file);
-      });
+const updateProductMutation = useMutation({
+  mutationFn: async (data: ProductFormData & { id: number }) => {
+    // El frontend ya envía solo las URLs finales
+    const result = await apiRequest("PUT", `/api/products/${data.id}`, data);
+    return result;
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    setIsEditDialogOpen(false);
+    setSelectedProduct(null);
+    resetProductForm();
+    resetImageStates();
+    setProductImages(prev => prev.map(img => ({ ...img, isUploaded: true })));
+    toast({
+      title: "✅ Producto actualizado",
+      description: "El producto se ha actualizado exitosamente.",
+    });
+  },
+  onError: (error: any) => {
+    console.error('❌ MUTATION ERROR:', error);
+    toast({
+      title: "❌ Error",
+      description: error.message || "Error al actualizar el producto",
+      variant: "destructive",
+    });
+  }
+});
 
-      return apiRequest("PUT", `/api/products/${data.id}`, formData);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      setIsEditDialogOpen(false);
-      resetForm();
-      toast({
-        title: "Producto actualizado",
-        description: "El producto se ha actualizado exitosamente.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo actualizar el producto.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Formulario para categorías
-  const categoryForm = useForm<CategoryFormData>({
-    resolver: zodResolver(categoryFormSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-    },
-  });
-
-  // Crear categoría
-  const createCategoryMutation = useMutation({
-    mutationFn: async (data: CategoryFormData) => {
-      return apiRequest("POST", "/api/categories", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      toast({
-        title: "Categoría creada",
-        description: "La categoría se ha creado exitosamente.",
-      });
-      setIsCategoryDialogOpen(false);
-      categoryForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo crear la categoría.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Actualizar categoría
-  const updateCategoryMutation = useMutation({
-    mutationFn: async (data: CategoryFormData) => {
-      if (!selectedCategory) throw new Error("No category selected");
-      return apiRequest("PUT", `/api/categories/${selectedCategory.id}`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      toast({
-        title: "Categoría actualizada",
-        description: "La categoría se ha actualizado exitosamente.",
-      });
-      setIsCategoryDialogOpen(false);
-      setSelectedCategory(null);
-      categoryForm.reset();
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo actualizar la categoría.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Eliminar categoría
-  const deleteCategoryMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/categories/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      toast({
-        title: "Categoría eliminada",
-        description: "La categoría se ha eliminado exitosamente.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo eliminar la categoría.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Eliminar producto
   const deleteProductMutation = useMutation({
     mutationFn: async (id: number) => {
       return apiRequest("DELETE", `/api/products/${id}`);
@@ -308,1153 +686,546 @@ export default function ProductManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({
-        title: "Producto eliminado",
+        title: "✅ Producto eliminado",
         description: "El producto se ha eliminado exitosamente.",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "No se pudo eliminar el producto.",
+        title: "❌ Error",
+        description: error.message || "Error al eliminar el producto",
         variant: "destructive",
       });
-    },
+    }
   });
 
-  const resetForm = () => {
-    form.reset();
-    setImageFiles([]);
-    setImagePreviews([]);
-    setSelectedProduct(null);
-  };
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    
-    if (files.length > 0) {
-      setImageFiles(prev => [...prev, ...files]);
-      
-      // Crear previews
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviews(prev => [...prev, e.target?.result as string]);
-        };
-        reader.readAsDataURL(file);
+  const createCategoryMutation = useMutation({
+    mutationFn: async (data: CategoryFormData) => {
+      return apiRequest("POST", "/api/categories", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      setIsCategoryDialogOpen(false);
+      resetCategoryForm();
+      toast({
+        title: "✅ Categoría creada",
+        description: "La categoría se ha creado exitosamente.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Error",
+        description: error.message || "Error al crear la categoría",
+        variant: "destructive",
       });
     }
-  };
+  });
 
-  const removeImage = (index: number) => {
-    setImageFiles(prev => prev.filter((_, i) => i !== index));
-    setImagePreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const addFeature = () => {
-    if (newFeature.trim()) {
-      const currentFeatures = form.getValues("features");
-      form.setValue("features", [...currentFeatures, newFeature.trim()]);
-      setNewFeature("");
-    }
-  };
-
-  const removeFeature = (index: number) => {
-    const currentFeatures = form.getValues("features");
-    form.setValue("features", currentFeatures.filter((_, i) => i !== index));
-  };
-
-  const addTag = () => {
-    if (newTag.trim()) {
-      const currentTags = form.getValues("tags");
-      form.setValue("tags", [...currentTags, newTag.trim()]);
-      setNewTag("");
-    }
-  };
-
-  const removeTag = (index: number) => {
-    const currentTags = form.getValues("tags");
-    form.setValue("tags", currentTags.filter((_, i) => i !== index));
-  };
-
-  const openEditDialog = (product: Product) => {
-    setSelectedProduct(product);
-    form.reset({
-      name: product.name,
-      description: product.description || "",
-      category: product.category,
-      price: product.price,
-      brand: product.brand || "",
-      model: product.model || "",
-      sku: product.sku || "",
-      status: product.status,
-      availability: product.availability,
-      stockQuantity: product.stockQuantity,
-      minQuantity: product.minQuantity,
-      maxQuantity: product.maxQuantity || 0,
-      weight: product.weight || "",
-      warranty: product.warranty || "",
-      features: product.features || [],
-      tags: product.tags || [],
-      images: product.images || [],
-      salePrice: product.salePrice || "",
-      isPromoted: product.isPromoted,
-      promotionText: product.promotionText || "",
+  // Resto de mutations y funciones auxiliares...
+  const resetProductForm = () => {
+    setProductForm({
+      name: "",
+      description: "",
+      price: "",
+      category: "",
+      type: "product",
+      brand: "",
+      model: "",
+      sku: "",
+      isActive: true,
+      stock: 0,
+      specifications: "",
+      installationCost: "",
+      warrantyMonths: 0,
+      imageUrl: "",
+      images: [],
     });
-    setIsEditDialogOpen(true);
-  };
-
-  const openViewDialog = (product: Product) => {
-    setSelectedProduct(product);
-    setIsViewDialogOpen(true);
-  };
-
-  // Funciones para categorías
-  const openCategoryCreateDialog = () => {
-    setSelectedCategory(null);
-    categoryForm.reset();
-    setIsCategoryDialogOpen(true);
-  };
-
-  const openCategoryEditDialog = (category: Category) => {
-    setSelectedCategory(category);
-    categoryForm.reset({
-      name: category.name,
-      description: category.description || "",
-    });
-    setIsCategoryDialogOpen(true);
   };
 
   const resetCategoryForm = () => {
-    categoryForm.reset();
-    setSelectedCategory(null);
-    setIsCategoryDialogOpen(false);
+    setCategoryForm({
+      name: "",
+      description: "",
+    });
   };
 
-  // Filtrar productos
-  const filteredProducts = products.filter((product: Product) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.sku?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
-    const matchesStatus = statusFilter === "all" || product.status === statusFilter;
-    
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
+  const resetImageStates = () => {
+    productImages.forEach(image => {
+      if (image.file && image.url.startsWith('blob:')) {
+        URL.revokeObjectURL(image.url);
+      }
+    });
+    setProductImages([]);
+  };
 
-  const onSubmit = (data: ProductFormData) => {
-    if (selectedProduct) {
-      updateProductMutation.mutate({ ...data, id: selectedProduct.id });
+  const loadExistingImages = (imageUrls: string[]) => {
+    const existingImages: ImageData[] = imageUrls.map((url, index) => ({
+      id: `existing-${index}-${Date.now()}`,
+      url,
+      isUploaded: true,
+      source: 'url' as const,
+      name: `imagen-${index + 1}`
+    }));
+    
+    setProductImages(existingImages);
+  };
+
+  const openProductEditDialog = (product: Product) => {
+    setSelectedProduct(product);
+    setProductForm({
+      name: product.name,
+      description: product.description || "",
+      price: product.price || "",
+      category: product.category || "",
+      type: product.type || "product",
+      brand: product.brand || "",
+      model: product.model || "",
+      sku: product.sku || "",
+      isActive: product.isActive ?? true,
+      stock: product.stock || 0,
+      specifications: product.specifications || "",
+      installationCost: product.installationCost || "",
+      warrantyMonths: product.warrantyMonths || 0,
+      imageUrl: product.imageUrl || "",
+      images: product.images || [],
+    });
+    
+    if (product.images && product.images.length > 0) {
+      loadExistingImages(product.images);
     } else {
-      createProductMutation.mutate(data);
+      setProductImages([]);
+    }
+    
+    setIsEditDialogOpen(true);
+  };
+
+ const handleImagesChange = async (newImages: ImageData[]) => {
+  setProductImages(newImages);
+  
+  // Subir inmediatamente las nuevas imágenes (archivos y URLs)
+  const processedImages = await Promise.all(
+    newImages.map(async (image) => {
+      if (image.isUploaded) {
+        // Ya está subida, no hacer nada
+        return image;
+      }
+
+      try {
+        // Marcar como procesando
+        setProductImages(prev => 
+          prev.map(img => 
+            img.id === image.id 
+              ? { ...img, isUploading: true } 
+              : img
+          )
+        );
+
+        let finalUrl = image.url;
+
+        if (image.source === 'file' && image.file) {
+          // Subir archivo a Supabase inmediatamente
+          console.log('🔄 Uploading file to Supabase:', image.name);
+          
+          const formData = new FormData();
+          formData.append('image', image.file);
+          
+          const response = await apiRequest("POST", "/api/upload-image", formData);
+          finalUrl = response.imageUrl;
+          
+          console.log('✅ File uploaded successfully:', finalUrl);
+        } else if (image.source === 'url') {
+          // Validar y potencialmente procesar URL
+          console.log('🔗 Processing URL:', image.url);
+          
+          try {
+            const response = await apiRequest("POST", "/api/process-image-url", {
+              imageUrl: image.url
+            });
+            finalUrl = response.imageUrl || image.url;
+            
+            console.log('✅ URL processed successfully:', finalUrl);
+          } catch (error) {
+            console.warn('⚠️ URL processing failed, using original:', error);
+            // Usar URL original si falla el procesamiento
+          }
+        }
+
+        return {
+          ...image,
+          url: finalUrl,
+          isUploaded: true,
+          isUploading: false
+        };
+
+      } catch (error) {
+        console.error('❌ Error uploading image:', error);
+        
+        toast({
+          title: "❌ Error al subir imagen",
+          description: `No se pudo subir ${image.name}`,
+          variant: "destructive",
+        });
+
+        return {
+          ...image,
+          isUploaded: false,
+          isUploading: false,
+          uploadError: error.message
+        };
+      }
+    })
+  );
+
+  // Actualizar estado con imágenes procesadas
+  setProductImages(processedImages);
+  
+  // Actualizar URLs en el formulario
+  const successfulUrls = processedImages
+    .filter(img => img.isUploaded)
+    .map(img => img.url);
+    
+  setProductForm(prev => ({
+    ...prev,
+    images: successfulUrls
+  }));
+};
+
+  const handleProductSubmit = () => {
+    if (!productForm.name || !productForm.description || !productForm.price || !productForm.category) {
+      toast({
+        title: "❌ Error",
+        description: "Por favor completa todos los campos requeridos",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedProduct) {
+      updateProductMutation.mutate({ ...productForm, id: selectedProduct.id });
+    } else {
+      createProductMutation.mutate(productForm);
     }
   };
 
+  // Filtrar productos
+  const filteredProducts = Array.isArray(products) 
+    ? products.filter((product: Product) => {
+        const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             (product.description || "").toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = filterCategory === "all" || product.category === filterCategory;
+        const matchesStatus = filterStatus === "all" || 
+                             (filterStatus === "active" && product.isActive) ||
+                             (filterStatus === "inactive" && !product.isActive);
+        
+        return matchesSearch && matchesCategory && matchesStatus;
+      })
+    : [];
+
+  const formatCurrency = (price: string) => {
+    return parseFloat(price).toLocaleString('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+    });
+  };
+
+  if (loadingProducts || loadingCategories) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Cargando gestión de productos...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Gestión de Productos</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Gestión de Productos</h1>
           <p className="text-muted-foreground">
-            Gestiona tu catálogo de productos, servicios y categorías
+            Administra tu inventario y categorías de productos
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/simple-catalog" target="_blank">
-            <Button variant="outline">
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              Ver Catálogo
-            </Button>
-          </Link>
-          {activeTab === "products" && (
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Crear Producto
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Crear Nuevo Producto</DialogTitle>
-                  <DialogDescription>
-                    Completa la información del producto. Los campos marcados con * son obligatorios.
-                  </DialogDescription>
-                </DialogHeader>
-                {/* Formulario de producto se moverá aquí */}
-              </DialogContent>
-            </Dialog>
-          )}
-          {activeTab === "categories" && (
-            <Button onClick={openCategoryCreateDialog}>
-              <FolderPlus className="w-4 h-4 mr-2" />
-              Crear Categoría
-            </Button>
-          )}
+          <Button
+            onClick={() => setIsCategoryDialogOpen(true)}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <Tag className="w-4 h-4" />
+            Nueva Categoría
+          </Button>
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Producto
+          </Button>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="products" className="flex items-center gap-2">
-            <Package className="w-4 h-4" />
-            Productos
-          </TabsTrigger>
-          <TabsTrigger value="categories" className="flex items-center gap-2">
-            <Folder className="w-4 h-4" />
-            Categorías
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="products" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div></div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Crear Producto
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Crear Nuevo Producto</DialogTitle>
-              <DialogDescription>
-                Completa la información del producto. Los campos marcados con * son obligatorios.
-              </DialogDescription>
-            </DialogHeader>
-
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                {/* Información Básica */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre del Producto *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ej: Mini Split 12,000 BTU" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Categoría *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar categoría" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {categories.map((category: Category) => (
-                              <SelectItem key={category.id} value={category.name}>
-                                {category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="price"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Precio *</FormLabel>
-                        <FormControl>
-                          <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="salePrice"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Precio de Oferta</FormLabel>
-                        <FormControl>
-                          <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                          Precio especial si está en promoción
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="brand"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Marca</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ej: Samsung, LG, Carrier" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="model"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Modelo</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ej: AR12KVSPBSN" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="sku"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>SKU / Código</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Código único del producto" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="warranty"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Garantía</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Ej: 2 años, 12 meses" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descripción</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Descripción detallada del producto..."
-                          className="min-h-[100px]"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Inventario y Estado */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="stockQuantity"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cantidad en Stock</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            {...field} 
-                            onChange={e => field.onChange(parseInt(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="minQuantity"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cantidad Mínima</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            {...field} 
-                            onChange={e => field.onChange(parseInt(e.target.value) || 1)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="maxQuantity"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cantidad Máxima</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            {...field} 
-                            onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Estado</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="active">Activo</SelectItem>
-                            <SelectItem value="inactive">Inactivo</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="availability"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Disponibilidad</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="in_stock">En Stock</SelectItem>
-                            <SelectItem value="out_of_stock">Agotado</SelectItem>
-                            <SelectItem value="limited">Stock Limitado</SelectItem>
-                            <SelectItem value="pre_order">Pre-orden</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="weight"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Peso (kg)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            step="0.1"
-                            {...field} 
-                            onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Promoción */}
-                <div className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="isPromoted"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-base">Producto en Promoción</FormLabel>
-                          <FormDescription>
-                            Marcar este producto como destacado en el catálogo
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  {form.watch("isPromoted") && (
-                    <FormField
-                      control={form.control}
-                      name="promotionText"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Texto de Promoción</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Ej: ¡Oferta especial!" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-                </div>
-
-                {/* Características */}
-                <div className="space-y-4">
-                  <Label>Características del Producto</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Agregar característica..."
-                      value={newFeature}
-                      onChange={(e) => setNewFeature(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addFeature())}
-                    />
-                    <Button type="button" onClick={addFeature}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {form.watch("features").map((feature, index) => (
-                      <Badge key={index} variant="secondary" className="text-sm">
-                        {feature}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto p-0 ml-2"
-                          onClick={() => removeFeature(index)}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Tags */}
-                <div className="space-y-4">
-                  <Label>Etiquetas de Búsqueda</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Agregar etiqueta..."
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                    />
-                    <Button type="button" onClick={addTag}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {form.watch("tags").map((tag, index) => (
-                      <Badge key={index} variant="outline" className="text-sm">
-                        {tag}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto p-0 ml-2"
-                          onClick={() => removeTag(index)}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Imágenes */}
-                <div className="space-y-4">
-                  <Label>Imágenes del Producto</Label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-                    <div className="text-center">
-                      <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="mt-4">
-                        <label htmlFor="images" className="cursor-pointer">
-                          <span className="mt-2 block text-sm font-medium text-gray-900">
-                            Arrastra imágenes aquí o haz clic para seleccionar
-                          </span>
-                          <input
-                            id="images"
-                            type="file"
-                            multiple
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleImageUpload}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Preview de imágenes */}
-                  {imagePreviews.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {imagePreviews.map((preview, index) => (
-                        <div key={index} className="relative">
-                          <img
-                            src={preview}
-                            alt={`Preview ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-2 right-2"
-                            onClick={() => removeImage(index)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={createProductMutation.isPending}
-                  >
-                    {createProductMutation.isPending ? "Creando..." : "Crear Producto"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Filtros */}
+      {/* Búsqueda simplificada */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="search">Buscar Productos</Label>
-              <Input
-                id="search"
-                placeholder="Nombre, descripción, marca o SKU..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Buscar productos..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="category">Categoría</Label>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las categorías</SelectItem>
-                  {categories.map((category: Category) => (
-                    <SelectItem key={category.id} value={category.name}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="status">Estado</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los estados</SelectItem>
-                  <SelectItem value="active">Activo</SelectItem>
-                  <SelectItem value="inactive">Inactivo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Filtrar por categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las categorías</SelectItem>
+                {categories.map((category: Category) => (
+                  <SelectItem key={category.id} value={category.name}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
 
       {/* Lista de productos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {productsLoading ? (
-          Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader>
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-40 bg-gray-200 rounded mb-4"></div>
-                <div className="space-y-2">
-                  <div className="h-3 bg-gray-200 rounded"></div>
-                  <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        ) : filteredProducts.length === 0 ? (
-          <div className="col-span-full text-center py-12">
-            <Package className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No hay productos</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {searchTerm || categoryFilter !== "all" || statusFilter !== "all"
-                ? "No se encontraron productos con los filtros aplicados."
-                : "Comienza creando tu primer producto."}
-            </p>
-          </div>
-        ) : (
-          filteredProducts.map((product: Product) => (
-            <Card key={product.id} className="overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{product.name}</CardTitle>
-                    <CardDescription className="line-clamp-2">
-                      {product.description || "Sin descripción"}
-                    </CardDescription>
-                  </div>
-                  <div className="flex space-x-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openViewDialog(product)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditDialog(product)}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Productos ({filteredProducts.length})</span>
+            <Badge variant="outline">{filteredProducts.length} resultados</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Imagen</TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead>Precio</TableHead>
+                  <TableHead>Stock</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProducts.map((product: Product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <div className="w-12 h-12 rounded border overflow-hidden bg-gray-100">
+                        {product.images && product.images.length > 0 ? (
+                          <img
+                            src={product.images[0]}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Image className="w-6 h-6 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{product.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {product.sku && `SKU: ${product.sku}`}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{product.category}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {product.price && formatCurrency(product.price)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={product.stock && product.stock > 0 ? "default" : "destructive"}>
+                        {product.stock || 0}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openProductEditDialog(product)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteProductMutation.mutate(product.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta acción no se puede deshacer. El producto "{product.name}" 
-                            será eliminado permanentemente.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteProductMutation.mutate(product.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Eliminar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                {/* Imagen principal */}
-                <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                  {product.images && product.images.length > 0 ? (
-                    <img
-                      src={product.images[0]}
-                      alt={product.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : product.imageUrl ? (
-                    <img
-                      src={product.imageUrl}
-                      alt={product.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Image className="h-12 w-12 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Badge variant="outline">{product.category}</Badge>
-                    <div className="flex space-x-2">
-                      <Badge 
-                        variant={product.status === "active" ? "default" : "secondary"}
-                      >
-                        {product.status === "active" ? "Activo" : "Inactivo"}
-                      </Badge>
-                      <Badge 
-                        variant={
-                          product.availability === "in_stock" ? "default" :
-                          product.availability === "limited" ? "secondary" : "destructive"
-                        }
-                      >
-                        {product.availability === "in_stock" ? "Disponible" :
-                         product.availability === "limited" ? "Limitado" :
-                         product.availability === "out_of_stock" ? "Agotado" : "Pre-orden"}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-2xl font-bold">
-                        ${parseFloat(product.price).toLocaleString()}
                       </div>
-                      {product.salePrice && (
-                        <div className="text-sm text-green-600 font-medium">
-                          Oferta: ${parseFloat(product.salePrice).toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-                    {product.isPromoted && (
-                      <Badge variant="destructive">En Promoción</Badge>
-                    )}
-                  </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-                  {product.brand && (
-                    <div className="text-sm text-muted-foreground">
-                      Marca: {product.brand}
-                    </div>
-                  )}
-
-                  {product.stockQuantity !== undefined && (
-                    <div className="text-sm text-muted-foreground">
-                      Stock: {product.stockQuantity} unidades
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
-
-      {/* Dialog para ver producto */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      {/* Dialog para crear/editar producto */}
+      <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsCreateDialogOpen(false);
+          setIsEditDialogOpen(false);
+          setSelectedProduct(null);
+          resetProductForm();
+          resetImageStates();
+        }
+      }}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selectedProduct?.name}</DialogTitle>
-            <DialogDescription>
-              Información detallada del producto
-            </DialogDescription>
+            <DialogTitle>
+              {selectedProduct ? "Editar Producto" : "Crear Nuevo Producto"}
+            </DialogTitle>
           </DialogHeader>
 
-          {selectedProduct && (
-            <div className="space-y-6">
-              {/* Galería de imágenes */}
-              {selectedProduct.images && selectedProduct.images.length > 0 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Imágenes</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {selectedProduct.images.map((image, index) => (
-                      <img
-                        key={index}
-                        src={image}
-                        alt={`${selectedProduct.name} ${index + 1}`}
-                        className="w-full h-40 object-cover rounded-lg"
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Columna izquierda: Datos del producto */}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="name">Nombre del producto *</Label>
+                <Input
+                  id="name"
+                  value={productForm.name}
+                  onChange={(e) => setProductForm({...productForm, name: e.target.value})}
+                  placeholder="Nombre del producto"
+                />
+              </div>
 
-              {/* Información básica */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Información Básica</h3>
-                  <div className="space-y-2">
-                    <div><strong>Categoría:</strong> {selectedProduct.category}</div>
-                    <div><strong>Precio:</strong> ${parseFloat(selectedProduct.price).toLocaleString()}</div>
-                    {selectedProduct.salePrice && (
-                      <div><strong>Precio de Oferta:</strong> ${parseFloat(selectedProduct.salePrice).toLocaleString()}</div>
-                    )}
-                    {selectedProduct.brand && <div><strong>Marca:</strong> {selectedProduct.brand}</div>}
-                    {selectedProduct.model && <div><strong>Modelo:</strong> {selectedProduct.model}</div>}
-                    {selectedProduct.sku && <div><strong>SKU:</strong> {selectedProduct.sku}</div>}
-                    {selectedProduct.warranty && <div><strong>Garantía:</strong> {selectedProduct.warranty}</div>}
-                  </div>
-                </div>
+              <div>
+                <Label htmlFor="description">Descripción *</Label>
+                <Textarea
+                  id="description"
+                  value={productForm.description}
+                  onChange={(e) => setProductForm({...productForm, description: e.target.value})}
+                  placeholder="Descripción del producto"
+                  rows={3}
+                />
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h3 className="text-lg font-medium mb-3">Inventario y Estado</h3>
-                  <div className="space-y-2">
-                    <div><strong>Estado:</strong> {selectedProduct.status === "active" ? "Activo" : "Inactivo"}</div>
-                    <div><strong>Disponibilidad:</strong> {
-                      selectedProduct.availability === "in_stock" ? "En Stock" :
-                      selectedProduct.availability === "limited" ? "Stock Limitado" :
-                      selectedProduct.availability === "out_of_stock" ? "Agotado" : "Pre-orden"
-                    }</div>
-                    <div><strong>Stock:</strong> {selectedProduct.stockQuantity} unidades</div>
-                    <div><strong>Cantidad Mínima:</strong> {selectedProduct.minQuantity}</div>
-                    {selectedProduct.maxQuantity && (
-                      <div><strong>Cantidad Máxima:</strong> {selectedProduct.maxQuantity}</div>
-                    )}
-                    {selectedProduct.weight && (
-                      <div><strong>Peso:</strong> {selectedProduct.weight} kg</div>
-                    )}
-                  </div>
+                  <Label htmlFor="price">Precio *</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    step="0.01"
+                    value={productForm.price}
+                    onChange={(e) => setProductForm({...productForm, price: e.target.value})}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="stock">Stock</Label>
+                  <Input
+                    id="stock"
+                    type="number"
+                    value={productForm.stock}
+                    onChange={(e) => setProductForm({...productForm, stock: parseInt(e.target.value) || 0})}
+                    placeholder="0"
+                  />
                 </div>
               </div>
 
-              {/* Descripción */}
-              {selectedProduct.description && (
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Descripción</h3>
-                  <p className="text-gray-600">{selectedProduct.description}</p>
-                </div>
-              )}
-
-              {/* Características */}
-              {selectedProduct.features && selectedProduct.features.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Características</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedProduct.features.map((feature, index) => (
-                      <Badge key={index} variant="secondary">{feature}</Badge>
+              <div>
+                <Label htmlFor="category">Categoría *</Label>
+                <Select
+                  value={productForm.category}
+                  onValueChange={(value) => setProductForm({...productForm, category: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category: Category) => (
+                      <SelectItem key={category.id} value={category.name}>
+                        {category.name}
+                      </SelectItem>
                     ))}
-                  </div>
-                </div>
-              )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-              {/* Etiquetas */}
-              {selectedProduct.tags && selectedProduct.tags.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Etiquetas</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedProduct.tags.map((tag, index) => (
-                      <Badge key={index} variant="outline">{tag}</Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
+            {/* Columna derecha: Gestión de imágenes */}
+            <div className="space-y-4">
+              <EnhancedImageUpload
+                images={productImages}
+                onImagesChange={handleImagesChange}
+                maxImages={5}
+                maxFileSize={5}
+                allowedTypes={['image/jpeg', 'image/png', 'image/gif', 'image/webp']}
+              />
 
-              {/* Promoción */}
-              {selectedProduct.isPromoted && (
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Promoción</h3>
-                  <Badge variant="destructive" className="mr-2">Producto en Promoción</Badge>
-                  {selectedProduct.promotionText && (
-                    <span className="text-sm text-gray-600">{selectedProduct.promotionText}</span>
-                  )}
+              {isProcessingImages && (
+                <div className="flex items-center gap-2 text-sm text-blue-600">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Procesando imágenes...
                 </div>
               )}
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog para editar producto - Similar al de crear pero con datos precargados */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar Producto</DialogTitle>
-            <DialogDescription>
-              Modifica la información del producto.
-            </DialogDescription>
-          </DialogHeader>
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              {/* El formulario es idéntico al de crear, pero usando updateProductMutation */}
-              {/* Reutilizamos los mismos campos del formulario de crear */}
-              
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={updateProductMutation.isPending}
-                >
-                  {updateProductMutation.isPending ? "Actualizando..." : "Actualizar Producto"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Diálogo para gestionar categorías */}
-      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {selectedCategory ? "Editar Categoría" : "Crear Nueva Categoría"}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedCategory 
-                ? "Modifica la información de la categoría" 
-                : "Completa la información de la nueva categoría"
-              }
-            </DialogDescription>
-          </DialogHeader>
-
-          <Form {...categoryForm}>
-            <form 
-              onSubmit={categoryForm.handleSubmit(
-                selectedCategory 
-                  ? (data) => updateCategoryMutation.mutate(data)
-                  : (data) => createCategoryMutation.mutate(data)
-              )} 
-              className="space-y-4"
-            >
-              <FormField
-                control={categoryForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre de la Categoría *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ej: Aires Acondicionados" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={categoryForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descripción</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Descripción opcional de la categoría"
-                        className="min-h-[80px]"
-                        {...field}
-                        value={field.value || ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={resetCategoryForm}>
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
-                >
-                  {selectedCategory 
-                    ? (updateCategoryMutation.isPending ? "Actualizando..." : "Actualizar")
-                    : (createCategoryMutation.isPending ? "Creando..." : "Crear")
-                  }
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-        </TabsContent>
-
-        <TabsContent value="categories" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {categories.map((category: Category) => (
-              <Card key={category.id} className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Folder className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg">{category.name}</h3>
-                      {category.description && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {category.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openCategoryEditDialog(category)}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteCategoryMutation.mutate(category.id)}
-                      disabled={deleteCategoryMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
           </div>
 
-          {categories.length === 0 && (
-            <Card className="p-8 text-center">
-              <Folder className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No hay categorías</h3>
-              <p className="text-muted-foreground mb-4">
-                Crea tu primera categoría para organizar tus productos
-              </p>
-              <Button onClick={openCategoryCreateDialog}>
-                <FolderPlus className="w-4 h-4 mr-2" />
-                Crear Primera Categoría
-              </Button>
-            </Card>
-          )}
-        </TabsContent>
-
-      </Tabs>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCreateDialogOpen(false);
+                setIsEditDialogOpen(false);
+                setSelectedProduct(null);
+                resetProductForm();
+                resetImageStates();
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleProductSubmit}
+              disabled={
+                createProductMutation.isPending || 
+                updateProductMutation.isPending || 
+                isProcessingImages ||
+                !productForm.name || 
+                !productForm.description || 
+                !productForm.price || 
+                !productForm.category
+              }
+            >
+              {(createProductMutation.isPending || updateProductMutation.isPending) ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {selectedProduct ? "Actualizando..." : "Creando..."}
+                </>
+              ) : (
+                selectedProduct ? "Actualizar Producto" : "Crear Producto"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-}
+};

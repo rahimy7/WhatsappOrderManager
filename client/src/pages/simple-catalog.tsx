@@ -1,5 +1,3 @@
-// simple-catalog.tsx - CORRECCIONES PARA USAR ENDPOINTS CORRECTOS
-
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ShoppingCart, Search, Filter, Heart, Star, Plus, Minus, ShoppingBag, MessageCircle, Phone, X, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 
 const formatCurrency = (amount: string | number) => {
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -20,309 +17,271 @@ const formatCurrency = (amount: string | number) => {
   });
 };
 
-export default function SimpleCatalog() {
+// ✅ FUNCIÓN OPTIMIZADA para hacer requests a endpoints públicos
+const fetchPublicData = async (endpoint: string) => {
+  const response = await fetch(endpoint);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
+export default function OptimizedCatalog() {
   const { toast } = useToast();
   
-  // Obtener storeId de la URL
+  // Estados del componente
   const [storeId, setStoreId] = useState<number | null>(null);
-  
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const storeParam = urlParams.get('store');
-    if (storeParam) {
-      setStoreId(parseInt(storeParam));
-    } else {
-      // Fallback: usar tienda por defecto (MASQUESALUD)
-      setStoreId(6); // ← Cambiado a tienda 6
-    }
-  }, []);
-  
-  // ✅ CORREGIDO: Usar endpoint existente para productos
-  const { data: allProducts = [], isLoading: loadingProducts } = useQuery({
-    queryKey: ["/api/products"],
-    queryFn: () => apiRequest("GET", "/api/products")
-  });
-
-  // ✅ CORREGIDO: Usar endpoint existente para categorías
-  const { data: allCategories = [], isLoading: loadingCategories } = useQuery({
-    queryKey: ["/api/categories"],
-    queryFn: () => apiRequest("GET", "/api/categories")
-  });
-
-  // ✅ FILTRAR productos por storeId en el frontend (hasta que tengamos endpoints específicos)
-  const products = Array.isArray(allProducts) 
-    ? allProducts.filter((product: any) => {
-        // Si el producto tiene storeId, filtrar por la tienda actual
-        // Si no tiene storeId, mostrar todos (para compatibilidad)
-        return !product.storeId || product.storeId === storeId;
-      })
-    : [];
-
-  // ✅ FILTRAR categorías por storeId en el frontend
-  const categories = Array.isArray(allCategories) 
-    ? allCategories.filter((category: any) => {
-        // Si la categoría tiene storeId, filtrar por la tienda actual
-        // Si no tiene storeId, mostrar todas (para compatibilidad)
-        return !category.storeId || category.storeId === storeId;
-      })
-    : [];
-
-  // ✅ OBTENER configuración de la tienda (si está disponible)
-  const { data: storeConfig } = useQuery({
-    queryKey: [`/api/stores/${storeId}/config`],
-    queryFn: () => apiRequest("GET", `/api/stores/${storeId}/config`),
-    enabled: !!storeId,
-    retry: false // No reintentar si falla
-  });
-
-  // Session ID único para el carrito
-  const [sessionId] = useState(() => {
-    let id = localStorage.getItem('cart_session_id');
-    if (!id) {
-      id = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('cart_session_id', id);
-    }
-    return id;
-  });
-
-  // Estados
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [cart, setCart] = useState<any[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  
-  // Estado del carrito local
-  const [cart, setCart] = useState<{items: any[], subtotal: number}>(() => {
-    try {
-      // Verificar si el pedido fue enviado
-      const enviado = localStorage.getItem('pedido_enviado');
-      if (enviado === 'true') {
-        localStorage.removeItem(`cart_${sessionId}`);
-        localStorage.setItem('pedido_enviado', 'false');
-        const newSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('cart_session_id', newSessionId);
-        return { items: [], subtotal: 0 };
-      }
 
-      const saved = localStorage.getItem(`cart_${sessionId}`);
-      if (saved) {
-        const parsedCart = JSON.parse(saved);
-        return parsedCart;
+  // ✅ OBTENER storeId de la URL de forma más robusta
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const storeParam = urlParams.get('store') || urlParams.get('storeId');
+    
+    if (storeParam) {
+      const parsedStoreId = parseInt(storeParam);
+      if (!isNaN(parsedStoreId)) {
+        setStoreId(parsedStoreId);
+      } else {
+        console.error('Invalid store ID in URL:', storeParam);
       }
-      return { items: [], subtotal: 0 };
-    } catch {
-      return { items: [], subtotal: 0 };
+    } else {
+      // Si no hay parámetro de tienda, mostrar error o redirigir
+      console.error('No store ID provided in URL');
     }
+  }, []);
+
+  // ✅ OPTIMIZADO: Obtener información de la tienda
+  const { data: storeInfo, isLoading: loadingStore, error: storeError } = useQuery({
+    queryKey: [`/api/public/stores/${storeId}/info`],
+    queryFn: () => fetchPublicData(`/api/public/stores/${storeId}/info`),
+    enabled: !!storeId,
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
   });
 
-  // Guardar carrito en localStorage cuando cambie
+  // ✅ OPTIMIZADO: Obtener configuración del catálogo
+  const { data: catalogConfig } = useQuery({
+    queryKey: [`/api/public/stores/${storeId}/catalog-config`],
+    queryFn: () => fetchPublicData(`/api/public/stores/${storeId}/catalog-config`),
+    enabled: !!storeId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // ✅ OPTIMIZADO: Obtener productos SOLO de la tienda específica
+  const { data: products = [], isLoading: loadingProducts, error: productsError } = useQuery({
+    queryKey: [`/api/public/stores/${storeId}/products`],
+    queryFn: () => fetchPublicData(`/api/public/stores/${storeId}/products`),
+    enabled: !!storeId,
+    staleTime: 2 * 60 * 1000, // Cache por 2 minutos
+  });
+
+  // ✅ OPTIMIZADO: Obtener categorías SOLO de la tienda específica
+  const { data: categories = [], isLoading: loadingCategories, error: categoriesError } = useQuery({
+    queryKey: [`/api/public/stores/${storeId}/categories`],
+    queryFn: () => fetchPublicData(`/api/public/stores/${storeId}/categories`),
+    enabled: !!storeId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // ✅ CARGAR carrito desde localStorage al iniciar
   useEffect(() => {
-    localStorage.setItem(`cart_${sessionId}`, JSON.stringify(cart));
-  }, [cart, sessionId]);
+    if (storeId) {
+      const savedCart = localStorage.getItem(`cart_store_${storeId}`);
+      if (savedCart) {
+        try {
+          setCart(JSON.parse(savedCart));
+        } catch (error) {
+          console.error('Error loading cart from localStorage:', error);
+          localStorage.removeItem(`cart_store_${storeId}`);
+        }
+      }
 
-  // ✅ FUNCIÓN PARA AGREGAR AL CARRITO (corregida)
-  const addToCart = (productId: number, quantity: number = 1) => {
-    const product = products.find((p: any) => p.id === productId);
-    if (!product) {
-      toast({
-        title: "Error",
-        description: "Producto no encontrado",
-        variant: "destructive",
-      });
-      return;
+      // Limpiar carrito si se marcó como enviado
+      const pedidoEnviado = localStorage.getItem('pedido_enviado');
+      if (pedidoEnviado) {
+        setCart([]);
+        localStorage.removeItem(`cart_store_${storeId}`);
+        localStorage.removeItem('pedido_enviado');
+      }
     }
+  }, [storeId]);
 
-    setCart(prevCart => {
-      const existingItem = prevCart.items.find(item => item.productId === productId);
-      let newItems;
-      
+  // ✅ GUARDAR carrito en localStorage cuando cambie
+  useEffect(() => {
+    if (storeId && cart.length > 0) {
+      localStorage.setItem(`cart_store_${storeId}`, JSON.stringify(cart));
+    } else if (storeId) {
+      localStorage.removeItem(`cart_store_${storeId}`);
+    }
+  }, [cart, storeId]);
+
+  // ✅ GESTIÓN DEL CARRITO
+  const addToCart = (product: any) => {
+    setCart(currentCart => {
+      const existingItem = currentCart.find(item => item.id === product.id);
       if (existingItem) {
-        newItems = prevCart.items.map(item =>
-          item.productId === productId
-            ? { ...item, quantity: item.quantity + quantity }
+        return currentCart.map(item =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       } else {
-        newItems = [...prevCart.items, {
-          id: Date.now(),
-          productId,
-          quantity,
-          product: {
-            id: product.id,
-            name: product.name,
-            price: parseFloat(product.price) || 0
-          }
-        }];
+        return [...currentCart, { ...product, quantity: 1 }];
       }
-
-      const subtotal = newItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-      return { items: newItems, subtotal };
     });
 
     toast({
-      title: "¡Producto agregado!",
-      description: "El producto se agregó al carrito exitosamente",
+      title: "✅ Producto agregado",
+      description: `${product.name} se agregó al carrito`,
     });
   };
 
-  // Función para actualizar cantidad
+  const removeFromCart = (productId: number) => {
+    setCart(currentCart => currentCart.filter(item => item.id !== productId));
+  };
+
   const updateQuantity = (productId: number, newQuantity: number) => {
     if (newQuantity <= 0) {
       removeFromCart(productId);
       return;
     }
 
-    setCart(prevCart => {
-      const newItems = prevCart.items.map(item =>
-        item.productId === productId
+    setCart(currentCart =>
+      currentCart.map(item =>
+        item.id === productId
           ? { ...item, quantity: newQuantity }
           : item
-      );
-      const subtotal = newItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-      return { items: newItems, subtotal };
-    });
+      )
+    );
   };
 
-  // Función para remover del carrito
-  const removeFromCart = (productId: number) => {
-    setCart(prevCart => {
-      const newItems = prevCart.items.filter(item => item.productId !== productId);
-      const subtotal = newItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-      return { items: newItems, subtotal };
-    });
+  const getTotalItems = () => cart.reduce((sum, item) => sum + item.quantity, 0);
+  const getTotalPrice = () => cart.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
 
-    toast({
-      title: "Producto removido",
-      description: "El producto se removió del carrito",
-    });
-  };
-
-  // Función para calcular total de items
-  const getTotalCartItems = () => {
-    return cart.items.reduce((total, item) => total + item.quantity, 0);
-  };
-
-  // Funciones para el modal de detalles
-  const openProductModal = (product: any) => {
-    setSelectedProduct(product);
-    setCurrentImageIndex(0);
-  };
-
-  const closeProductModal = () => {
-    setSelectedProduct(null);
-    setCurrentImageIndex(0);
-  };
-
-  const nextImage = () => {
-    if (selectedProduct?.images?.length > 1) {
-      setCurrentImageIndex((prev) => 
-        prev === selectedProduct.images.length - 1 ? 0 : prev + 1
-      );
-    }
-  };
-
-  const prevImage = () => {
-    if (selectedProduct?.images?.length > 1) {
-      setCurrentImageIndex((prev) => 
-        prev === 0 ? selectedProduct.images.length - 1 : prev - 1
-      );
-    }
-  };
-
-  // ✅ FUNCIÓN PARA ENVIAR POR WHATSAPP (mejorada)
-  const sendToWhatsApp = () => {
-    if (cart.items.length === 0) {
+  // ✅ ENVIAR PEDIDO por WhatsApp
+  const sendOrderToWhatsApp = () => {
+    if (cart.length === 0) {
       toast({
-        title: "Carrito vacío",
-        description: "Agrega productos antes de hacer el pedido",
+        title: "⚠️ Carrito vacío",
+        description: "Agrega productos antes de enviar el pedido",
         variant: "destructive",
       });
       return;
     }
 
-    // ✅ Números de WhatsApp por tienda
-    const whatsappNumbers: Record<number, string> = {
-      5: "5215579096161", // MASQUESALUD
-      6: "5215534166960", // TIENDA 6
-      // Agregar más tiendas según sea necesario
-    };
+    const whatsappNumber = catalogConfig?.whatsappNumber || storeInfo?.phone;
+    if (!whatsappNumber) {
+      toast({
+        title: "❌ Error",
+        description: "No se encontró número de WhatsApp de la tienda",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const whatsappNumber = whatsappNumbers[storeId || 6] || "5215534166960";
-    const storeName = storeConfig?.storeName || `Tienda ${storeId}`;
-
-    let message = `🛍️ *NUEVO PEDIDO - ${storeName}*\n\n`;
+    let message = `🛍️ *NUEVO PEDIDO - ${storeInfo?.name || 'Catálogo'}*\n\n`;
     
-    cart.items.forEach((item, index) => {
-      message += `${index + 1}. ${item.product.name}\n`;
+    cart.forEach((item, index) => {
+      message += `${index + 1}. *${item.name}*\n`;
       message += `   Cantidad: ${item.quantity}\n`;
-      message += `   Precio unitario: $${formatCurrency(item.product.price)}\n`;
-      message += `   Subtotal: $${formatCurrency(item.product.price * item.quantity)}\n\n`;
+      message += `   Precio unitario: $${formatCurrency(item.price)}\n`;
+      message += `   Subtotal: $${formatCurrency(parseFloat(item.price) * item.quantity)}\n\n`;
     });
-    
-    message += `💰 *TOTAL: $${formatCurrency(cart.subtotal)}*\n\n`;
-    message += "Por favor confirma tu pedido y proporciona tu dirección de entrega.";
+
+    message += `💰 *TOTAL: $${formatCurrency(getTotalPrice())}*\n\n`;
+    message += `📝 Por favor confirma la disponibilidad y tiempo de entrega.\n`;
+    message += `¡Gracias por tu preferencia! 😊`;
 
     const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+    const cleanPhone = whatsappNumber.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     
     window.open(whatsappUrl, '_blank');
     
-    // Marcar que el pedido fue enviado
     localStorage.setItem('pedido_enviado', 'true');
-    
     setIsCartOpen(false);
     
     toast({
-      title: "¡Pedido enviado!",
-      description: "El carrito se vaciará automáticamente la próxima vez que abras el catálogo",
+      title: "✅ ¡Pedido enviado!",
+      description: "El carrito se vaciará la próxima vez que abras el catálogo",
     });
   };
 
-  // ✅ FILTRAR PRODUCTOS (corregido)
-  const filteredProducts = products.filter((product: any) => {
+  // ✅ FILTRADO DE PRODUCTOS (ya optimizado, no se filtra por storeId)
+  const filteredProducts = Array.isArray(products) ? products.filter((product: any) => {
     if (!product) return false;
     
     const matchesSearch = product.name && product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "all" || product.category === selectedCategory;
     
     return matchesSearch && matchesCategory;
-  });
+  }) : [];
 
-  // ✅ LOADING STATE
-  if (loadingProducts || loadingCategories) {
+  // ✅ MANEJO DE ERRORES
+  if (storeError || productsError || categoriesError) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-gray-600">Cargando productos de la tienda {storeId}...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Error al cargar el catálogo</h2>
+          <p className="text-gray-600 mb-4">
+            {storeError ? 'Tienda no encontrada o inactiva' : 'Error al cargar productos'}
+          </p>
+          <Button onClick={() => window.location.reload()} className="bg-red-500 hover:bg-red-600">
+            Reintentar
+          </Button>
         </div>
       </div>
     );
   }
 
-  // ✅ NO PRODUCTS STATE
+  // ✅ ESTADO DE CARGA
+  if (loadingStore || loadingProducts || loadingCategories || !storeId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-gray-600 text-lg">Cargando catálogo de la tienda...</p>
+          {storeId && <p className="text-gray-500 text-sm mt-2">Tienda ID: {storeId}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ SIN PRODUCTOS
   if (!loadingProducts && filteredProducts.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
         <div className="text-center max-w-md mx-auto p-8">
           <ShoppingBag className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">No hay productos disponibles</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {searchTerm || selectedCategory !== "all" ? "No se encontraron productos" : "Catálogo en construcción"}
+          </h2>
           <p className="text-gray-600 mb-4">
             {searchTerm || selectedCategory !== "all" 
-              ? "No se encontraron productos que coincidan con tu búsqueda."
-              : `La tienda ${storeId} no tiene productos configurados aún.`}
+              ? "Intenta con otros términos de búsqueda o categorías."
+              : `${storeInfo?.name || 'Esta tienda'} no tiene productos disponibles aún.`}
           </p>
-          <p className="text-sm text-gray-500">
-            Contacta al administrador de la tienda para más información.
-          </p>
+          {(searchTerm || selectedCategory !== "all") && (
+            <Button 
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedCategory("all");
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600"
+            >
+              Ver todos los productos
+            </Button>
+          )}
         </div>
       </div>
     );
   }
-
-  // ✅ RESTO DEL CÓDIGO PERMANECE IGUAL...
-  // (El JSX del render se mantiene exactamente como estaba)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
@@ -331,9 +290,31 @@ export default function SimpleCatalog() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col space-y-4">
             <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-white">🛍️ Catálogo - Tienda {storeId}</h1>
-              <div className="text-sm text-emerald-100 bg-white/20 px-3 py-1 rounded-full">
-                {filteredProducts.length} productos disponibles
+              <div>
+                <h1 className="text-3xl font-bold text-white">
+                  🛍️ {storeInfo?.name || 'Catálogo'}
+                </h1>
+                {storeInfo?.description && (
+                  <p className="text-emerald-100 mt-1">{storeInfo.description}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-emerald-100 bg-white/20 px-3 py-1 rounded-full">
+                  {filteredProducts.length} productos
+                </div>
+                <Button
+                  onClick={() => setIsCartOpen(true)}
+                  className="bg-white/20 hover:bg-white/30 text-white border-white/30 relative"
+                  variant="outline"
+                >
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  Carrito
+                  {getTotalItems() > 0 && (
+                    <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-6 h-6 rounded-full flex items-center justify-center">
+                      {getTotalItems()}
+                    </Badge>
+                  )}
+                </Button>
               </div>
             </div>
 
@@ -356,8 +337,8 @@ export default function SimpleCatalog() {
                 <SelectContent>
                   <SelectItem value="all">📂 Todas las categorías</SelectItem>
                   {categories.map((category: any) => (
-                    <SelectItem key={category.id} value={category.name}>
-                      🏷️ {category.name}
+                    <SelectItem key={category.id || category.name} value={category.name}>
+                      {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -367,79 +348,220 @@ export default function SimpleCatalog() {
         </div>
       </div>
 
-      {/* Productos */}
+      {/* Grid de productos */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProducts.map((product: any) => (
-            <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <div onClick={() => openProductModal(product)} className="cursor-pointer">
-                <CardHeader className="pb-4">
-                  <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg overflow-hidden relative">
-                    {product.images && product.images.length > 0 ? (
-                      <>
-                        <img
-                          src={product.images[0]}
-                          alt={product.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const fallback = target.nextElementSibling as HTMLDivElement;
-                            if (fallback) fallback.style.display = 'flex';
-                          }}
-                        />
-                        <div className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center absolute inset-0" style={{ display: 'none' }}>
-                          <ShoppingBag className="w-16 h-16 text-blue-600" />
-                        </div>
-                        {product.images.length > 1 && (
-                          <div className="absolute top-2 right-2 bg-black bg-opacity-60 text-white text-xs px-2 py-1 rounded-full">
-                            +{product.images.length - 1}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <ShoppingBag className="w-16 h-16 text-blue-600" />
-                      </div>
-                    )}
-                  </div>
-                  <CardTitle className="text-lg line-clamp-2">{product.name}</CardTitle>
-                  <CardDescription className="text-sm text-gray-600 line-clamp-3">
-                    {product.description || "Producto de alta calidad"}
-                  </CardDescription>
-                </CardHeader>
-                
-                <CardContent className="pt-0">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-2xl font-bold text-green-600">
-                      ${formatCurrency(product.price)}
+            <Card key={product.id} className="group hover:shadow-xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm hover:bg-white/95">
+              <CardContent className="p-0">
+                <div className="aspect-square bg-gradient-to-br from-emerald-100 to-teal-100 rounded-t-lg relative overflow-hidden">
+                  {product.imageUrl ? (
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ShoppingBag className="w-16 h-16 text-emerald-300" />
                     </div>
-                    <Badge variant="secondary">
-                      {product.category}
+                  )}
+                  <div className="absolute top-3 right-3">
+                    <Badge variant={product.type === 'service' ? 'secondary' : 'default'} className="bg-white/90 text-emerald-700">
+                      {product.type === 'service' ? '🔧 Servicio' : '📦 Producto'}
                     </Badge>
                   </div>
-                </CardContent>
-              </div>
-              
-              <CardContent className="pt-0 pb-4">
-                <Button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addToCart(product.id);
-                  }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Agregar
-                </Button>
+                </div>
+                
+                <div className="p-4">
+                  <h3 className="font-semibold text-lg text-gray-900 mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+                    {product.name}
+                  </h3>
+                  
+                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                    {product.description}
+                  </p>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-2xl font-bold text-emerald-600">
+                      ${formatCurrency(product.price)}
+                    </div>
+                    {product.category && (
+                      <Badge variant="outline" className="text-xs">
+                        {product.category}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => addToCart(product)}
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Agregar
+                    </Button>
+                    <Button
+                      onClick={() => setSelectedProduct(product)}
+                      variant="outline"
+                      className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                    >
+                      Ver
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       </div>
 
-      {/* El resto del JSX (carrito, modales, etc.) se mantiene igual... */}
-      
+      {/* Modal de carrito */}
+      <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <ShoppingCart className="w-6 h-6" />
+              Tu Carrito ({getTotalItems()} productos)
+            </DialogTitle>
+          </DialogHeader>
+
+          {cart.length === 0 ? (
+            <div className="text-center py-8">
+              <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">Tu carrito está vacío</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cart.map((item) => (
+                <div key={item.id} className="flex items-center gap-4 p-4 border rounded-lg">
+                  <div className="w-16 h-16 bg-emerald-100 rounded-lg flex items-center justify-center">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover rounded-lg" />
+                    ) : (
+                      <ShoppingBag className="w-8 h-8 text-emerald-500" />
+                    )}
+                  </div>
+                  
+                  <div className="flex-1">
+                    <h4 className="font-medium">{item.name}</h4>
+                    <p className="text-emerald-600 font-semibold">${formatCurrency(item.price)}</p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      variant="outline"
+                      size="sm"
+                      className="w-8 h-8 p-0"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                    <span className="w-8 text-center font-medium">{item.quantity}</span>
+                    <Button
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      variant="outline"
+                      size="sm"
+                      className="w-8 h-8 p-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      onClick={() => removeFromCart(item.id)}
+                      variant="outline"
+                      size="sm"
+                      className="w-8 h-8 p-0 text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="border-t pt-4">
+                <div className="flex justify-between items-center text-lg font-semibold">
+                  <span>Total:</span>
+                  <span className="text-emerald-600">${formatCurrency(getTotalPrice())}</span>
+                </div>
+                
+                <Button
+                  onClick={sendOrderToWhatsApp}
+                  className="w-full mt-4 bg-green-500 hover:bg-green-600 text-white text-lg py-3"
+                >
+                  <MessageCircle className="w-5 h-5 mr-2" />
+                  Enviar Pedido por WhatsApp
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de producto */}
+      <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
+        <DialogContent className="max-w-2xl">
+          {selectedProduct && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl">{selectedProduct.name}</DialogTitle>
+              </DialogHeader>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="aspect-square bg-emerald-100 rounded-lg overflow-hidden">
+                  {selectedProduct.imageUrl ? (
+                    <img 
+                      src={selectedProduct.imageUrl} 
+                      alt={selectedProduct.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ShoppingBag className="w-24 h-24 text-emerald-300" />
+                    </div>
+                  )}
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-gray-600 mb-4">{selectedProduct.description}</p>
+                    
+                    <div className="text-3xl font-bold text-emerald-600 mb-4">
+                      ${formatCurrency(selectedProduct.price)}
+                    </div>
+
+                    {selectedProduct.specifications && (
+                      <div className="mb-4">
+                        <h4 className="font-semibold mb-2">Especificaciones:</h4>
+                        <p className="text-gray-600 text-sm">{selectedProduct.specifications}</p>
+                      </div>
+                    )}
+
+                    {selectedProduct.stock !== null && (
+                      <div className="mb-4">
+                        <Badge variant={selectedProduct.stock > 0 ? "default" : "destructive"}>
+                          {selectedProduct.stock > 0 ? `${selectedProduct.stock} disponibles` : 'Sin stock'}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <Button
+                    onClick={() => {
+                      addToCart(selectedProduct);
+                      setSelectedProduct(null);
+                    }}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
+                    disabled={selectedProduct.stock === 0}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Agregar al Carrito
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

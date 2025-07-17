@@ -39,6 +39,7 @@ export async function apiRequest<T = unknown>(
 ): Promise<T> {
   /* ------------------------------ Headers --------------------------------- */
   const token = localStorage.getItem("auth_token");
+  console.log('🔑 Token being sent:', token ? 'YES' : 'NO')
 
   const headers: HeadersInit = {
     Accept: "application/json",
@@ -48,6 +49,7 @@ export async function apiRequest<T = unknown>(
   };
 
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  console.log('✅ Authorization header added');
 
   /* ------------------------------ Fetch ----------------------------------- */
   const fetchOptions: RequestInit = {
