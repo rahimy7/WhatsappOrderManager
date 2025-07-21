@@ -300,13 +300,13 @@ app.get('/api/public/stores/:storeId/products', async (req, res) => {
     }
 
     // Usar tenant storage para obtener productos de la tienda específica
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // Obtener solo productos activos para el catálogo público
-    const tenantStorage = await getTenantStorageForUser(user);
     const products = await tenantStorage.getAllProducts();
     const activeProducts = products.filter((product: any) => product.isActive !== false);
     
@@ -334,12 +334,12 @@ app.get('/api/public/stores/:storeId/categories', async (req, res) => {
     }
 
     // Usar tenant storage para obtener categorías de la tienda específica
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
-    const tenantStorage = await getTenantStorageForUser(user);
     const categories = await tenantStorage.getAllCategories();
     
     res.json(categories);
@@ -428,10 +428,11 @@ apiRouter.get('/employees', authenticateToken, async (req, res) => {
     const storeId = user.storeId;
     
     // ✅ USAR TENANT STORAGE
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const employees = await tenantStorage.getAllEmployeeProfiles();
     res.json(employees);
@@ -448,10 +449,11 @@ apiRouter.post('/employees', authenticateToken, async (req, res) => {
     const storeId = user.storeId;
     
     // ✅ USAR TENANT STORAGE - SE GUARDA EN ESQUEMA DE TIENDA
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const employee = await tenantStorage.createEmployeeProfile(req.body);
     res.status(201).json(employee);
@@ -469,10 +471,11 @@ apiRouter.put('/employees/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // ✅ USAR TENANT STORAGE
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const employee = await tenantStorage.updateEmployeeProfile(id, req.body);
     if (!employee) {
@@ -494,10 +497,11 @@ apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // ✅ USAR TENANT STORAGE
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const success = await tenantStorage.deleteEmployeeProfile(id);
     if (!success) {
@@ -523,12 +527,12 @@ apiRouter.post('/employees/generate-id', authenticateToken, async (req, res) => 
     }
     
     // ✅ USAR TENANT STORAGE PARA GENERAR ID
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
-    const tenantStorage = await getTenantStorageForUser(user);
     const employeeId = await tenantStorage.generateEmployeeId(department);
     res.json({ employeeId });
   } catch (error) {
@@ -542,6 +546,7 @@ apiRouter.get(
   authenticateToken,
   async (req, res) => {
     try {
+      const { DatabaseStorage } = await import('./storage.js');
       const storage = new DatabaseStorage(process.env.DATABASE_URL!);
 
       // 1) Recover el usuario ya validado
@@ -562,6 +567,7 @@ apiRouter.get(
 
 apiRouter.post('/store-responses', async (req, res) => {
   try {
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     // Extract user from token
@@ -590,6 +596,7 @@ apiRouter.post('/store-responses', async (req, res) => {
 
 apiRouter.put('/store-responses/:id', async (req, res) => {
   try {
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     // Extract user from token
@@ -615,6 +622,7 @@ apiRouter.put('/store-responses/:id', async (req, res) => {
 
 apiRouter.delete('/store-responses/:id', authenticateToken, async (req, res) => {
   try {
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
 
     const user = req.user as AuthUser;
@@ -667,6 +675,7 @@ apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
       return res.status(403).json({ error: "Super admin access required" });
     } */
 
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const configs = await storage.getAllWhatsAppConfigs();
@@ -703,6 +712,7 @@ apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
       isActive: z.boolean().default(true)
     }).parse(req.body);
 
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const config = await storage.updateWhatsAppConfig(configData, configData.storeId);
     res.json({ success: true, config });
@@ -734,6 +744,7 @@ apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
       isActive: z.boolean().default(true)
     }).parse(req.body);
 
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const config = await storage.updateWhatsAppConfigById(id, configData);
     res.json({ success: true, config });
@@ -754,6 +765,7 @@ apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
     } */
 
     const id = parseInt(req.params.id);
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const success = await storage.deleteWhatsAppConfig(id);
     
@@ -777,6 +789,7 @@ apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
 
     const { storeId } = req.body;
     
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const config = await storage.getWhatsAppConfig(storeId);
     
@@ -827,6 +840,7 @@ apiRouter.get('/super-admin/stores', async (req, res) => {
       return res.status(403).json({ error: "Super admin access required" });
     }  */
 
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     const stores = await storage.getAllVirtualStores();
     
@@ -1015,6 +1029,7 @@ apiRouter.get('/super-admin/validate-all-whatsapp', async (req, res) => {
       return res.status(403).json({ error: "Super admin access required" });
     } */
 
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const stores = await storage.getAllVirtualStores();
@@ -1279,11 +1294,11 @@ apiRouter.get('/products', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const products = await tenantStorage.getAllProducts();
     res.json(products);
@@ -1300,11 +1315,11 @@ apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const product = await tenantStorage.getProductById(id);
     if (!product) {
@@ -1324,11 +1339,11 @@ apiRouter.post('/products', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const product = await tenantStorage.createProduct(req.body);
     res.status(201).json(product);
@@ -1356,11 +1371,11 @@ apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
     });
 
     // Usar tenant storage
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
 
     // Procesar datos del producto
     const updateData = { ...req.body };
@@ -1385,7 +1400,6 @@ apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
     }
 
     // Actualizar producto en base de datos
-    const tenantStorage = await getTenantStorageForUser(user);
     const product = await tenantStorage.updateProduct(id, updateData);
     
     if (!product) {
@@ -1411,10 +1425,11 @@ apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // ✅ CORREGIDO: Usar tenant storage en lugar de storage global
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     await tenantStorage.deleteProduct(id);
     res.json({ success: true });
@@ -1716,7 +1731,7 @@ apiRouter.get('/users', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
     const tenantStorage = await getTenantStorageForUser(user);
-    const users = await tenantStorage.getAllUsers();
+    const users = await storage.getAllUsers(user.storeId);
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -1814,6 +1829,7 @@ apiRouter.get('/dashboard/stats', authenticateToken, async (req, res) => {
 // MENSAJES
 apiRouter.get('/messages', authenticateToken, async (req, res) => {
   try {
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const user = (req as any).user;
@@ -1834,6 +1850,7 @@ apiRouter.get('/messages', authenticateToken, async (req, res) => {
 
 apiRouter.post('/messages', authenticateToken, async (req, res) => {
   try {
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const user = (req as any).user;
@@ -1886,6 +1903,7 @@ apiRouter.get('/stores', authenticateToken, async (req, res) => {
     
     if (user.level === 'global') {
       // Super admin puede ver todas las tiendas
+      const { DatabaseStorage } = await import('./storage.js');
       const storage = new DatabaseStorage(process.env.DATABASE_URL!);
       const stores = await storage.getAllVirtualStores();
       res.json(stores);
@@ -1902,6 +1920,7 @@ apiRouter.get('/stores', authenticateToken, async (req, res) => {
 
 apiRouter.get('/store-responses', authenticateToken, async (req, res) => {
   try {
+    const { storage } = await import('./storage.js'); // ✅ CORREGIDO
     const user = (req as any).user as { storeId: number };
     const responses = await storage.getAllAutoResponses(user.storeId);
     res.setHeader('Content-Type', 'application/json');
@@ -1919,6 +1938,7 @@ apiRouter.get('/store-responses', authenticateToken, async (req, res) => {
 // AUTO RESPONSES (ya están implementados arriba pero con prefijo /store-responses)
 apiRouter.get('/auto-responses', authenticateToken, async (req, res) => {
   try {
+    const { DatabaseStorage } = await import('./storage.js');
     const storage = new DatabaseStorage(process.env.DATABASE_URL!);
     
     const user = (req as any).user;
@@ -2076,11 +2096,11 @@ apiRouter.get('/categories', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // SIEMPRE usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const categories = await tenantStorage.getAllCategories();
     res.json(categories);
@@ -2096,11 +2116,11 @@ apiRouter.get('/categories/:id', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     const id = parseInt(req.params.id);
     
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const category = await tenantStorage.getCategoryById(id);
     if (!category) {
@@ -2120,11 +2140,11 @@ apiRouter.post('/categories', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const category = await tenantStorage.createCategory(req.body);
     res.status(201).json(category);
@@ -2141,11 +2161,11 @@ apiRouter.put('/categories/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const category = await tenantStorage.updateCategory(id, req.body);
     if (!category) {
@@ -2166,11 +2186,11 @@ apiRouter.delete('/categories/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     await tenantStorage.deleteCategory(id);
     res.json({ success: true });
@@ -2205,14 +2225,13 @@ apiRouter.get('/store/schema-status', authenticateToken, async (req, res) => {
     // Verificar conectividad con tenant storage
     let tenantConnectionValid = false;
     try {
+      const { getTenantDb } = await import('./multi-tenant-db.js');
+      const { createTenantStorage } = await import('./tenant-storage.js');
       
-      
-      
-      
-      
+      const tenantDb = await getTenantDb(user.storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
       
       // Test básico
-      const tenantStorage = await getTenantStorageForUser(user);
       await tenantStorage.getAllProducts();
       tenantConnectionValid = true;
     } catch (error) {
@@ -2354,6 +2373,7 @@ app.use('/api', apiRouter);
           return res.status(403).json({ error: "Super admin access required" });
         }
 
+        const { DatabaseStorage } = await import('./storage.js');
         const storage = new DatabaseStorage(process.env.DATABASE_URL!);
         
         const storeData = {

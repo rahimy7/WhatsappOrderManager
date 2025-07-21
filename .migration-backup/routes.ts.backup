@@ -13,14 +13,14 @@ import { SupabaseStorageManager } from './supabase-storage';
 import type { AuthUser } from '@shared/auth';
 // Agregar después de: import type { AuthUser } from '@shared/auth';
 import { 
-  storage,                    // Capa de compatibilidad temporal
-  getMasterStorage,           // Para operaciones del sistema global
-  getTenantStorage,          // Para operaciones específicas de tienda
+  storage,                    // Compatibilidad temporal
+  getMasterStorage,           // Para operaciones master directas
+  getTenantStorage,          // Para operaciones tenant directas
   getTenantStorageForUser,   // Helper para usuarios autenticados
-  validateTenantAccess} from './storage/index.js';
+  validateTenantAccess       // Validación de acceso
+} from './storage/index.js';
 import { getTenantDb } from './multi-tenant-db.js';
 import { createTenantStorage } from './tenant-storage.js';
-import { authenticateUser } from './multi-tenant-auth.js';
 
 
 
@@ -169,7 +169,8 @@ const createProductHandler = async (req: any, res: any) => {
     }
 
     // ✅ USAR SOLO TENANT STORAGE - ESQUEMA INDEPENDIENTE
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // ✅ NO AGREGAR storeId - cada esquema ES la tienda
     const productToCreate = {
@@ -235,7 +236,8 @@ const deleteProductHandler = async (req: any, res: any) => {
     console.log('🗑️ Deleting product', productId, 'from store schema:', user.storeId);
 
     // ✅ USAR SOLO TENANT STORAGE - ESQUEMA INDEPENDIENTE
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // Verificar que el producto existe EN EL SCHEMA DE LA TIENDA
     const product = await tenantStorage.getProductById(productId);
@@ -273,17 +275,11 @@ const getProductsHandler = async (req: any, res: any) => {
   try {
     const user = req.user as AuthUser;
     
-    // Validación de storeId
-    if (!user.storeId) {
-      return res.status(403).json({
-        error: "Store ID es requerido"
-      });
-    }
-
-    const tenantStorage = await getTenantStorageForUser({
-      ...user,
-      storeId: user.storeId  // Forzar que sea número
-    });
+    console.log('📋 Getting products for store schema:', user.storeId);
+    
+    // ✅ USAR SOLO TENANT STORAGE - VE SOLO SUS PRODUCTOS
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const products = await tenantStorage.getAllProducts();
     
@@ -305,7 +301,8 @@ const getProductByIdHandler = async (req: any, res: any) => {
     console.log('🔍 Getting product', productId, 'for store schema:', user.storeId);
 
     // ✅ USAR SOLO TENANT STORAGE - BÚSQUEDA EN ESQUEMA INDEPENDIENTE
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const product = await tenantStorage.getProductById(productId);
 
@@ -332,7 +329,8 @@ const getCategoriesHandler = async (req: any, res: any) => {
     console.log('📂 Getting categories for store schema:', user.storeId);
     
     // ✅ USAR TENANT STORAGE
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const categories = await tenantStorage.getAllCategories();
     
@@ -353,7 +351,8 @@ const createCategoryHandler = async (req: any, res: any) => {
     console.log('📁 Creating category for store schema:', user.storeId);
     
     // ✅ USAR TENANT STORAGE
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // ✅ NO AGREGAR storeId - cada esquema ES la tienda
     const categoryData = { ...req.body };
@@ -378,7 +377,8 @@ const updateCategoryHandler = async (req: any, res: any) => {
     console.log('✏️ Updating category', categoryId, 'in store schema:', user.storeId);
     
     // ✅ USAR TENANT STORAGE
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // ✅ NO AGREGAR storeId
     const updateData = { ...req.body };
@@ -407,7 +407,8 @@ const deleteCategoryHandler = async (req: any, res: any) => {
     console.log('🗑️ Deleting category', categoryId, 'from store schema:', user.storeId);
     
     // ✅ USAR TENANT STORAGE
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // Verificar existencia
     const category = await tenantStorage.getCategoryById(categoryId);
@@ -534,7 +535,8 @@ const updateProductHandler = async (req: any, res: any) => {
 
     // ✅ USAR TENANT STORAGE
     console.log('🏪 Getting tenant storage...');
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
 
     // ✅ VERIFICAR PRODUCTO EXISTE
     console.log('🔍 Checking if product exists...');
@@ -581,7 +583,8 @@ const deleteOrderHandler = async (req: any, res: any) => {
     const user = req.user as AuthUser;
     const orderId = parseInt(req.params.id);
     
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // Verificar existencia
     const order = await tenantStorage.getOrderById(orderId);
@@ -606,7 +609,8 @@ const deleteCustomerHandler = async (req: any, res: any) => {
     const user = req.user as AuthUser;
     const customerId = parseInt(req.params.id);
     
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // Verificar existencia
     const customer = await tenantStorage.getCustomerById(customerId);
@@ -1173,7 +1177,8 @@ app.get("/api/registration-flows", authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // Usar tenant storage en lugar de storage global
-  
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
    const tenantStorage = await getTenantStorageForUser(user);
     
@@ -1192,8 +1197,11 @@ app.post("/api/registration-flows", authenticateToken, async (req, res) => {
     const flowData = req.body;
     
     // Usar tenant storage
-        
-    const tenantStorage = await getTenantStorageForUser(user);
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const flow = await tenantStorage.createRegistrationFlow(flowData); // ← Schema de tienda
     res.status(201).json(flow);
@@ -1479,7 +1487,8 @@ router.get('/categories', authenticateToken, async (req: any, res: any) => {
   try {
     const user = req.user as AuthUser;
     
-   const tenantStorage = await getTenantStorageForUser(user);
+   const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
     
     // ✅ CORRECCIÓN: Sin pasar storeId como segundo parámetro
     const categories = await tenantStorage.getAllCategories();
@@ -1498,7 +1507,8 @@ router.post('/categories', authenticateToken, async (req: any, res: any) => {
     const user = req.user as AuthUser;
     const categoryData = { ...req.body };
     
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
     
     // ✅ CORRECCIÓN: Solo un parámetro
     const category = await tenantStorage.createCategory(categoryData);
@@ -1517,7 +1527,8 @@ router.put('/categories/:id', authenticateToken, async (req: any, res: any) => {
     const user = req.user as AuthUser;
     const categoryId = parseInt(req.params.id);
     
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
     
     // ✅ CORRECCIÓN: Estructura correcta para updateCategory
     const updateData = { ...req.body };
@@ -1541,7 +1552,8 @@ router.delete('/categories/:id', authenticateToken, async (req: any, res: any) =
     const user = req.user as AuthUser;
     const categoryId = parseInt(req.params.id);
     
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+const tenantStorage = createTenantStorage(tenantDb);
     
     // Eliminar categoría (método void)
     await tenantStorage.deleteCategory(categoryId);
@@ -1736,51 +1748,88 @@ app.post('/api/test/simulate-webhook/:storeId', async (req, res) => {
 });
 
 // Crear respuesta de bienvenida por defecto
-// routes.ts (dentro de registerRoutes o donde declares las rutas)
-app.get('/api/test/store-status/:storeId', async (req, res) => {
+app.post('/api/test/create-welcome/:storeId', async (req, res) => {
   try {
-    const storeId = Number(req.params.storeId);
-    console.log(`🧪 TESTING AUTO-RESPONSES - Store ID: ${storeId}`);
-
-    // 👇 NUEVO: usar helper unificado
-    const tenantStorage = await getTenantStorage(storeId);
-
-    // Auto-respuestas de la tienda
+    const storeId = parseInt(req.params.storeId);
+    
+    console.log(`🏗️ CREATING DEFAULT WELCOME RESPONSE - Store ID: ${storeId}`);
+    
+    // ✅ CORRECCIÓN: Obtener tenantDb primero, luego crear storage
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
+    const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
+    
+    // Verificar si ya existe
     const autoResponses = await tenantStorage.getAllAutoResponses();
+    const welcomeExists = autoResponses.find((resp: any) => resp.trigger === 'welcome');
+    
+    if (welcomeExists) {
+      return res.json({
+        success: true,
+        message: "Welcome response already exists",
+        response: {
+          id: welcomeExists.id,
+          name: welcomeExists.name,
+          trigger: welcomeExists.trigger
+        }
+      });
+    }
+    
+    // Crear respuesta de bienvenida usando el tenantDb directamente
+    const welcomeResponse = {
+      name: "Bienvenida",
+      trigger: "welcome",
+      isActive: true,
+      priority: 1,
+      messageText: `¡Hola! 👋 Bienvenido a MAS QUE SALUD
 
-    // Configuración de WhatsApp (puedes migrar luego a tenantStorage.getWhatsAppSettings)
-    const whatsappConfig = await storage.getWhatsAppConfig(storeId); /* sigue siendo válido */
+¿En qué puedo ayudarte hoy?
 
-    // ¿Existe respuesta de bienvenida?
-    const welcomeResponse = autoResponses.find(r =>
-      r.isActive && r.trigger === 'welcome'
-    );
+💊 Ver productos
+📞 Contactar con soporte
+📍 Ubicación de tienda
+🕒 Horarios de atención
 
+Simplemente escribe lo que necesitas y te ayudaré.`,
+      requiresRegistration: false,
+      menuOptions: "Ver productos,Contactar soporte,Ubicación,Horarios",
+      nextAction: null,
+      menuType: "buttons",
+      showBackButton: false,
+      allowFreeText: true,
+      responseTimeout: 300,
+      maxRetries: 3,
+      fallbackMessage: "Lo siento, no entendí tu mensaje. ¿Podrías repetirlo?",
+      conditionalDisplay: null
+    };
+    
+    // Insertar usando tenantDb
+    const { schema } = await import('../shared/schema.js');
+    const [newResponse] = await tenantDb.insert(schema.autoResponses)
+      .values(welcomeResponse)
+      .returning();
+    
+    console.log(`✅ DEFAULT WELCOME RESPONSE CREATED: "${newResponse.name}" (ID: ${newResponse.id})`);
+    
     res.json({
       success: true,
-      storeId,
-      autoResponsesCount: autoResponses.length,
-      autoResponses: autoResponses.map(r => ({
-        id: r.id,
-        name: r.name,
-        trigger: r.trigger,
-        isActive: r.isActive,
-        messagePreview: r.messageText.slice(0, 50) + '…'
-      })),
-      whatsappConfigured: Boolean(whatsappConfig),
-      phoneNumberId: whatsappConfig?.phoneNumberId ?? null,
-      hasWelcomeResponse: Boolean(welcomeResponse),
-      readyForMessages: Boolean(whatsappConfig && welcomeResponse)
+      message: "Default welcome response created successfully",
+      response: {
+        id: newResponse.id,
+        name: newResponse.name,
+        trigger: newResponse.trigger
+      }
     });
+    
   } catch (error) {
-    console.error('❌ ERROR TESTING AUTO-RESPONSES:', error);
+    console.error('❌ ERROR CREATING WELCOME RESPONSE:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
-
 
 
 

@@ -300,10 +300,11 @@ app.get('/api/public/stores/:storeId/products', async (req, res) => {
     }
 
     // Usar tenant storage para obtener productos de la tienda específica
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     // Obtener solo productos activos para el catálogo público
     const tenantStorage = await getTenantStorageForUser(user);
@@ -334,10 +335,11 @@ app.get('/api/public/stores/:storeId/categories', async (req, res) => {
     }
 
     // Usar tenant storage para obtener categorías de la tienda específica
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const tenantStorage = await getTenantStorageForUser(user);
     const categories = await tenantStorage.getAllCategories();
@@ -428,10 +430,11 @@ apiRouter.get('/employees', authenticateToken, async (req, res) => {
     const storeId = user.storeId;
     
     // ✅ USAR TENANT STORAGE
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const employees = await tenantStorage.getAllEmployeeProfiles();
     res.json(employees);
@@ -448,10 +451,11 @@ apiRouter.post('/employees', authenticateToken, async (req, res) => {
     const storeId = user.storeId;
     
     // ✅ USAR TENANT STORAGE - SE GUARDA EN ESQUEMA DE TIENDA
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const employee = await tenantStorage.createEmployeeProfile(req.body);
     res.status(201).json(employee);
@@ -469,10 +473,11 @@ apiRouter.put('/employees/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // ✅ USAR TENANT STORAGE
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const employee = await tenantStorage.updateEmployeeProfile(id, req.body);
     if (!employee) {
@@ -494,10 +499,11 @@ apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // ✅ USAR TENANT STORAGE
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const success = await tenantStorage.deleteEmployeeProfile(id);
     if (!success) {
@@ -523,10 +529,11 @@ apiRouter.post('/employees/generate-id', authenticateToken, async (req, res) => 
     }
     
     // ✅ USAR TENANT STORAGE PARA GENERAR ID
-    
-    
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
     const tenantDb = await getTenantDb(storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const tenantStorage = await getTenantStorageForUser(user);
     const employeeId = await tenantStorage.generateEmployeeId(department);
@@ -1279,11 +1286,11 @@ apiRouter.get('/products', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const products = await tenantStorage.getAllProducts();
     res.json(products);
@@ -1300,11 +1307,11 @@ apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const product = await tenantStorage.getProductById(id);
     if (!product) {
@@ -1324,11 +1331,11 @@ apiRouter.post('/products', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // SIEMPRE usar tenant storage para productos
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const product = await tenantStorage.createProduct(req.body);
     res.status(201).json(product);
@@ -1356,11 +1363,11 @@ apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
     });
 
     // Usar tenant storage
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
 
     // Procesar datos del producto
     const updateData = { ...req.body };
@@ -1411,10 +1418,11 @@ apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // ✅ CORREGIDO: Usar tenant storage en lugar de storage global
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    const tenantStorage = await getTenantStorageForUser(user);
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     await tenantStorage.deleteProduct(id);
     res.json({ success: true });
@@ -1715,6 +1723,7 @@ apiRouter.post('/orders', authenticateToken, async (req, res) => {
 apiRouter.get('/users', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
     const tenantStorage = await getTenantStorageForUser(user);
     const users = await tenantStorage.getAllUsers();
     res.json(users);
@@ -2076,11 +2085,11 @@ apiRouter.get('/categories', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // SIEMPRE usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const categories = await tenantStorage.getAllCategories();
     res.json(categories);
@@ -2096,11 +2105,11 @@ apiRouter.get('/categories/:id', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     const id = parseInt(req.params.id);
     
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const category = await tenantStorage.getCategoryById(id);
     if (!category) {
@@ -2120,11 +2129,11 @@ apiRouter.post('/categories', authenticateToken, async (req, res) => {
     const user = (req as any).user;
     
     // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const category = await tenantStorage.createCategory(req.body);
     res.status(201).json(category);
@@ -2141,11 +2150,11 @@ apiRouter.put('/categories/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     const category = await tenantStorage.updateCategory(id, req.body);
     if (!category) {
@@ -2166,11 +2175,11 @@ apiRouter.delete('/categories/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     // Usar tenant storage para categorías
+    const { getTenantDb } = await import('./multi-tenant-db.js');
+    const { createTenantStorage } = await import('./tenant-storage.js');
     
-    
-    
-    
-    
+    const tenantDb = await getTenantDb(user.storeId);
+    const tenantStorage = createTenantStorage(tenantDb);
     
     await tenantStorage.deleteCategory(id);
     res.json({ success: true });
@@ -2205,11 +2214,11 @@ apiRouter.get('/store/schema-status', authenticateToken, async (req, res) => {
     // Verificar conectividad con tenant storage
     let tenantConnectionValid = false;
     try {
+      const { getTenantDb } = await import('./multi-tenant-db.js');
+      const { createTenantStorage } = await import('./tenant-storage.js');
       
-      
-      
-      
-      
+      const tenantDb = await getTenantDb(user.storeId);
+      const tenantStorage = createTenantStorage(tenantDb);
       
       // Test básico
       const tenantStorage = await getTenantStorageForUser(user);
