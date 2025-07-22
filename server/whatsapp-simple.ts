@@ -1,5 +1,5 @@
 // Multi-tenant WhatsApp processor with simplified routing
-import { storage } from './storage.js';
+import { storage } from './storage_bk.js';
 import { createTenantStorage } from './tenant-storage.js';
 
 // Smart store lookup with response authorization verification
@@ -145,7 +145,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
     console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
 
     // 4. Obtener configuración de WhatsApp desde la base de datos global
-    const { storage } = await import('./storage.js');
+    const { storage } = await import('./storage_bk.js');
     const globalWhatsAppConfig = await storage.getWhatsAppConfig(storeId);
     
     if (!globalWhatsAppConfig) {
@@ -236,7 +236,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
     console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
     
     // Log del error
-    const { storage } = await import('./storage.js');
+    const { storage } = await import('./storage_bk.js');
     await storage.addWhatsAppLog({
       type: 'error',
       phoneNumber: phoneNumber,
@@ -370,7 +370,7 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
   console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
 
   // Step 6: Get WhatsApp configuration from global database (centralized configurations)
-  const { storage } = await import('./storage.js');
+  const { storage } = await import('./storage_bk.js');
   const globalWhatsAppConfig = await storage.getWhatsAppConfig(storeMapping.storeId);
   
   if (!globalWhatsAppConfig) {
@@ -489,7 +489,7 @@ async function sendAutoResponseMessage(
     }
 
     // Get WhatsApp configuration for the specific store
-    const { storage } = await import('./storage.js');
+    const { storage } = await import('./storage_bk.js');
     const config = await storage.getWhatsAppConfig(storeId);
     if (!config) {
       throw new Error(`WhatsApp config not found for store ${storeId}`);
@@ -551,7 +551,7 @@ async function sendAutoResponseMessage(
 
   } catch (error: any) {
     console.error(`Error sending auto-response "${trigger}":`, error);
-    const { storage } = await import('./storage.js');
+    const { storage } = await import('./storage_bk.js');
     await storage.addWhatsAppLog({
       type: 'error',
       phoneNumber: phoneNumber,
@@ -1157,7 +1157,7 @@ function parseOrderFromMessage(orderText: string): Array<{name: string, quantity
 // Simplified order processing for tenant storage
 async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, orderText: string, storeId: number, phoneNumberId: string, tenantStorage: any) {
   try {
-    const { storage } = await import('./storage.js');
+    const { storage } = await import('./storage_bk.js');
     
     await storage.addWhatsAppLog({
       type: 'info',
@@ -1311,7 +1311,7 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
 
   } catch (error: any) {
     console.error('Error processing web catalog order:', error);
-    const { storage } = await import('./storage.js');
+    const { storage } = await import('./storage_bk.js');
     await storage.addWhatsAppLog({
       type: 'error',
       phoneNumber: phoneNumber,
@@ -1328,7 +1328,7 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
 // Direct WhatsApp message sending
 async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, storeId: number) {
   try {
-    const { storage } = await import('./storage.js');
+    const { storage } = await import('./storage_bk.js');
     const config = await storage.getWhatsAppConfig(storeId);
     
     if (!config) {

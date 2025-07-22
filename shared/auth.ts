@@ -18,7 +18,7 @@ export interface AuthUser {
   phone?: string;
   email?: string;
   department?: string;
-  storeId?: number;
+  storeId: number;
   storeName?: string;
   level?: 'global' | 'store' | 'tenant'; // ✅ AGREGADO: propiedad level
 }

@@ -1,0 +1,471 @@
+import { Pool } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import * as schema from "../shared/schema.js";
+import { eq, desc, and, or, count, sql, ilike } from "drizzle-orm";
+
+/**
+ * Crea un storage específico para la base de datos tenant del request
+ * VERSIÓN CORREGIDA - Sin filtros de storeId si no existen en el schema
+ */
+export function createTenantStorage(tenantDb: any, storeId: number) {
+  return {
+    // ========================================
+    // ORDERS
+    // ========================================
+    async getAllOrders() {
+      try {
+        return await tenantDb.select()
+          .from(schema.orders)
+          .orderBy(desc(schema.orders.createdAt));
+      } catch (error) {
+        console.error('Error getting all orders:', error);
+        return [];
+      }
+    },
+
+    async getOrderById(id: number) {
+      try {
+        const [order] = await tenantDb.select()
+          .from(schema.orders)
+          .where(eq(schema.orders.id, id))
+          .limit(1);
+        return order || null;
+      } catch (error) {
+        console.error('Error getting order by ID:', error);
+        return null;
+      }
+    },
+
+    async createOrder(orderData: any, items: any[] = []) {
+      try {
+        // Insertar la orden
+        const [order] = await tenantDb.insert(schema.orders)
+          .values({
+            ...orderData,
+            createdAt: new Date()
+          })
+          .returning();
+
+        // Insertar los items si existen
+        if (items && items.length > 0) {
+          const itemsWithOrderId = items.map(item => ({
+            ...item,
+            orderId: order.id
+          }));
+          await tenantDb.insert(schema.orderItems).values(itemsWithOrderId);
+        }
+
+        return order;
+      } catch (error) {
+        console.error('Error creating order:', error);
+        throw error;
+      }
+    },
+
+    async updateOrder(id: number, orderData: any) {
+      try {
+        const [order] = await tenantDb.update(schema.orders)
+          .set({ ...orderData, updatedAt: new Date() })
+          .where(eq(schema.orders.id, id))
+          .returning();
+        return order;
+      } catch (error) {
+        console.error('Error updating order:', error);
+        throw error;
+      }
+    },
+
+    async deleteOrder(id: number) {
+      try {
+        await tenantDb.delete(schema.orders)
+          .where(eq(schema.orders.id, id));
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        throw error;
+      }
+    },
+
+    // ========================================
+    // PRODUCTS
+    // ========================================
+    async getAllProducts() {
+      try {
+        return await tenantDb.select()
+          .from(schema.products)
+          .orderBy(desc(schema.products.createdAt));
+      } catch (error) {
+        console.error('Error getting all products:', error);
+        return [];
+      }
+    },
+
+    async getProductById(id: number) {
+      try {
+        const [product] = await tenantDb.select()
+          .from(schema.products)
+          .where(eq(schema.products.id, id))
+          .limit(1);
+        return product || null;
+      } catch (error) {
+        console.error('Error getting product by ID:', error);
+        return null;
+      }
+    },
+
+    async createProduct(productData: any) {
+      try {
+        const [product] = await tenantDb.insert(schema.products)
+          .values({
+            ...productData,
+            createdAt: new Date()
+          })
+          .returning();
+        return product;
+      } catch (error) {
+        console.error('Error creating product:', error);
+        throw error;
+      }
+    },
+
+    async updateProduct(id: number, productData: any) {
+      try {
+        const [product] = await tenantDb.update(schema.products)
+          .set({ ...productData, updatedAt: new Date() })
+          .where(eq(schema.products.id, id))
+          .returning();
+        return product;
+      } catch (error) {
+        console.error('Error updating product:', error);
+        throw error;
+      }
+    },
+
+    // ========================================
+    // CUSTOMERS
+    // ========================================
+    async getAllCustomers() {
+      try {
+        return await tenantDb.select()
+          .from(schema.customers)
+          .orderBy(desc(schema.customers.createdAt));
+      } catch (error) {
+        console.error('Error getting all customers:', error);
+        return [];
+      }
+    },
+
+    async getCustomerById(id: number) {
+      try {
+        const [customer] = await tenantDb.select()
+          .from(schema.customers)
+          .where(eq(schema.customers.id, id))
+          .limit(1);
+        return customer || null;
+      } catch (error) {
+        console.error('Error getting customer by ID:', error);
+        return null;
+      }
+    },
+
+    async getCustomerByPhone(phoneNumber: string) {
+      try {
+        const [customer] = await tenantDb.select()
+          .from(schema.customers)
+          .where(eq(schema.customers.phoneNumber, phoneNumber))
+          .limit(1);
+        return customer || null;
+      } catch (error) {
+        console.error('Error getting customer by phone:', error);
+        return null;
+      }
+    },
+
+    async createCustomer(customerData: any) {
+      try {
+        const [customer] = await tenantDb.insert(schema.customers)
+          .values({
+            ...customerData,
+            createdAt: new Date()
+          })
+          .returning();
+        return customer;
+      } catch (error) {
+        console.error('Error creating customer:', error);
+        throw error;
+      }
+    },
+
+    async updateCustomer(id: number, customerData: any) {
+      try {
+        const [customer] = await tenantDb.update(schema.customers)
+          .set({ ...customerData, updatedAt: new Date() })
+          .where(eq(schema.customers.id, id))
+          .returning();
+        return customer;
+      } catch (error) {
+        console.error('Error updating customer:', error);
+        throw error;
+      }
+    },
+
+    // ========================================
+    // USERS
+    // ========================================
+    async getAllUsers() {
+      try {
+        return await tenantDb.select()
+          .from(schema.users)
+          .orderBy(desc(schema.users.createdAt));
+      } catch (error) {
+        console.error('Error getting all users:', error);
+        return [];
+      }
+    },
+
+    async getUserById(id: number) {
+      try {
+        const [user] = await tenantDb.select()
+          .from(schema.users)
+          .where(eq(schema.users.id, id))
+          .limit(1);
+        return user || null;
+      } catch (error) {
+        console.error('Error getting user by ID:', error);
+        return null;
+      }
+    },
+
+    async updateUser(id: number, userData: any) {
+      try {
+        const [user] = await tenantDb.update(schema.users)
+          .set({ ...userData, updatedAt: new Date() })
+          .where(eq(schema.users.id, id))
+          .returning();
+        return user;
+      } catch (error) {
+        console.error('Error updating user:', error);
+        throw error;
+      }
+    },
+
+    // ========================================
+    // NOTIFICATIONS - SIN FILTRO DE STORE_ID
+    // ========================================
+    async getUserNotifications(userId: number) {
+      try {
+        return await tenantDb.select()
+          .from(schema.notifications)
+          .where(eq(schema.notifications.userId, userId))
+          .orderBy(desc(schema.notifications.createdAt));
+      } catch (error) {
+        console.error('Error getting user notifications:', error);
+        return [];
+      }
+    },
+
+    async getUnreadNotifications(userId: number) {
+      try {
+        return await tenantDb.select()
+          .from(schema.notifications)
+          .where(
+            and(
+              eq(schema.notifications.userId, userId),
+              eq(schema.notifications.isRead, false)
+            )
+          )
+          .orderBy(desc(schema.notifications.createdAt));
+      } catch (error) {
+        console.error('Error getting unread notifications:', error);
+        return [];
+      }
+    },
+
+    async getNotificationCounts(userId: number) {
+      try {
+        // Obtener todas las notificaciones del usuario SIN filtro de storeId
+        const allNotifications = await tenantDb.select()
+          .from(schema.notifications)
+          .where(eq(schema.notifications.userId, userId));
+
+        // Contar no leídas
+        const unreadNotifications = allNotifications.filter(n => !n.isRead);
+
+        return {
+          total: allNotifications.length,
+          unread: unreadNotifications.length
+        };
+      } catch (error) {
+        console.error('Error getting notification counts:', error);
+        return { total: 0, unread: 0 };
+      }
+    },
+
+    async createNotification(notificationData: any) {
+      try {
+        const [notification] = await tenantDb.insert(schema.notifications)
+          .values({
+            ...notificationData,
+            isRead: false,
+            createdAt: new Date()
+          })
+          .returning();
+        return notification;
+      } catch (error) {
+        console.error('Error creating notification:', error);
+        throw error;
+      }
+    },
+
+    async markNotificationAsRead(id: number) {
+      try {
+        const [notification] = await tenantDb.update(schema.notifications)
+          .set({ isRead: true, updatedAt: new Date() })
+          .where(eq(schema.notifications.id, id))
+          .returning();
+        return notification;
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+        throw error;
+      }
+    },
+
+    async markAllNotificationsAsRead(userId: number) {
+      try {
+        await tenantDb.update(schema.notifications)
+          .set({ isRead: true, updatedAt: new Date() })
+          .where(eq(schema.notifications.userId, userId));
+      } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+        throw error;
+      }
+    },
+
+    async deleteNotification(id: number) {
+      try {
+        await tenantDb.delete(schema.notifications)
+          .where(eq(schema.notifications.id, id));
+      } catch (error) {
+        console.error('Error deleting notification:', error);
+        throw error;
+      }
+    },
+
+    // ========================================
+    // CATEGORIES - FUNCIÓN FALTANTE
+    // ========================================
+    async getAllCategories() {
+      try {
+        // Si existe tabla de categorías, usarla
+        if (schema.productCategories) {
+          return await tenantDb.select()
+            .from(schema.productCategories)
+            .orderBy(desc(schema.productCategories.createdAt));
+        }
+        
+        // Si no existe, devolver categorías básicas predeterminadas
+        console.log('⚠️ Tabla productCategories no encontrada, devolviendo categorías predeterminadas');
+        return [
+          { id: 1, name: 'Electrónicos', description: 'Dispositivos electrónicos' },
+          { id: 2, name: 'Ropa', description: 'Vestimenta y accesorios' },
+          { id: 3, name: 'Hogar', description: 'Artículos para el hogar' },
+          { id: 4, name: 'Deportes', description: 'Equipos deportivos' },
+          { id: 5, name: 'Libros', description: 'Libros y material educativo' }
+        ];
+      } catch (error) {
+        console.error('Error getting all categories:', error);
+        // Devolver categorías predeterminadas en caso de error
+        return [
+          { id: 1, name: 'General', description: 'Categoría general' }
+        ];
+      }
+    },
+
+    async getCategoryById(id: number) {
+      try {
+        if (schema.productCategories) {
+          const [category] = await tenantDb.select()
+            .from(schema.productCategories)
+            .where(eq(schema.productCategories.id, id))
+            .limit(1);
+          return category || null;
+        }
+        
+        // Buscar en categorías predeterminadas
+        const categories = await this.getAllCategories();
+        return categories.find(cat => cat.id === id) || null;
+      } catch (error) {
+        console.error('Error getting category by ID:', error);
+        return null;
+      }
+    },
+
+    // ========================================
+    // CONVERSATIONS
+    // ========================================
+    async getAllConversations() {
+      try {
+        return await tenantDb.select()
+          .from(schema.conversations)
+          .orderBy(desc(schema.conversations.lastMessageAt));
+      } catch (error) {
+        console.error('Error getting all conversations:', error);
+        return [];
+      }
+    },
+
+    async getConversationById(id: number) {
+      try {
+        const [conversation] = await tenantDb.select()
+          .from(schema.conversations)
+          .where(eq(schema.conversations.id, id))
+          .limit(1);
+        return conversation || null;
+      } catch (error) {
+        console.error('Error getting conversation by ID:', error);
+        return null;
+      }
+    },
+
+    async getConversationByCustomerPhone(phone: string) {
+      try {
+        const [conversation] = await tenantDb.select()
+          .from(schema.conversations)
+          .where(eq(schema.conversations.customerPhone, phone))
+          .limit(1);
+        return conversation || null;
+      } catch (error) {
+        console.error('Error getting conversation by customer phone:', error);
+        return null;
+      }
+    },
+
+    async createConversation(conversationData: any) {
+      try {
+        const [conversation] = await tenantDb.insert(schema.conversations)
+          .values({
+            ...conversationData,
+            createdAt: new Date(),
+            lastMessageAt: new Date()
+          })
+          .returning();
+        return conversation;
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+        throw error;
+      }
+    },
+
+    async updateConversation(id: number, updates: any) {
+      try {
+        const [conversation] = await tenantDb.update(schema.conversations)
+          .set({ ...updates, updatedAt: new Date() })
+          .where(eq(schema.conversations.id, id))
+          .returning();
+        return conversation;
+      } catch (error) {
+        console.error('Error updating conversation:', error);
+        throw error;
+      }
+    }
+  };
+}

@@ -1,522 +1,482 @@
-/**
- * Sistema de storage multi-tenant que utiliza la base de datos específica de cada tienda
- */
 import { Pool } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
-import * as schema from "../shared/schema";
+import * as schema from "../shared/schema.js";
 import { eq, desc, and, or, count, sql, ilike } from "drizzle-orm";
 
-/**
- * Crea un storage específico para la base de datos tenant del request
- */
-export function createTenantStorage(tenantDb: any) {
+export function createTenantStorage(tenantDb: any, storeId: number) {
   return {
-    // Orders
+    // ORDERS
     async getAllOrders() {
-      return await tenantDb.select().from(schema.orders).orderBy(desc(schema.orders.createdAt));
+      try {
+        return await tenantDb.select()
+          .from(schema.orders)
+          .orderBy(desc(schema.orders.createdAt));
+      } catch (error) {
+        console.error('Error getting all orders:', error);
+        return [];
+      }
     },
 
     async getOrderById(id: number) {
-      const [order] = await tenantDb.select().from(schema.orders).where(eq(schema.orders.id, id));
-      return order || null;
-    },
-
-    async createOrder(orderData: any) {
-      const [order] = await tenantDb.insert(schema.orders).values(orderData).returning();
-      return order;
-    },
-
-    async updateOrder(id: number, orderData: any) {
-      const [order] = await tenantDb.update(schema.orders)
-        .set(orderData)
-        .where(eq(schema.orders.id, id))
-        .returning();
-      return order;
-    },
-
-    async deleteOrder(id: number) {
-      await tenantDb.delete(schema.orders).where(eq(schema.orders.id, id));
-    },
-
-    // Order Items
-    async createOrderItem(orderItemData: any) {
-      const [orderItem] = await tenantDb.insert(schema.orderItems).values(orderItemData).returning();
-      return orderItem;
-    },
-
-    async getOrderItems(orderId: number) {
-      return await tenantDb.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId));
-    },
-
-    // Products
-    async getAllProducts() {
-      return await tenantDb.select().from(schema.products).orderBy(desc(schema.products.createdAt));
-    },
-
-    async getProductById(id: number) {
-      const [product] = await tenantDb.select().from(schema.products).where(eq(schema.products.id, id));
-      return product || null;
-    },
-
-    async createProduct(productData: any) {
-      const [product] = await tenantDb.insert(schema.products).values(productData).returning();
-      return product;
-    },
-
-    async updateProduct(id: number, productData: any) {
-      const [product] = await tenantDb.update(schema.products)
-        .set(productData)
-        .where(eq(schema.products.id, id))
-        .returning();
-      return product;
-    },
-
-    async deleteProduct(id: number) {
-      await tenantDb.delete(schema.products).where(eq(schema.products.id, id));
-    },
-
-    // Categories
-    async getAllCategories() {
-      return await tenantDb.select().from(schema.productCategories).orderBy(schema.productCategories.name);
-    },
-
-    async getCategoryById(id: number) {
-      const [category] = await tenantDb.select().from(schema.productCategories).where(eq(schema.productCategories.id, id));
-      return category || null;
-    },
-
-    async createCategory(categoryData: any) {
-      const [category] = await tenantDb.insert(schema.productCategories).values(categoryData).returning();
-      return category;
-    },
-
-    async updateCategory(id: number, categoryData: any) {
-      const [category] = await tenantDb.update(schema.productCategories)
-        .set(categoryData)
-        .where(eq(schema.productCategories.id, id))
-        .returning();
-      return category;
-    },
-
-    async deleteCategory(id: number) {
-      await tenantDb.delete(schema.productCategories).where(eq(schema.productCategories.id, id));
-    },
-
-    // Customers
-    async getAllCustomers() {
-      return await tenantDb.select().from(schema.customers).orderBy(desc(schema.customers.lastContact));
-    },
-
-    async getCustomerById(id: number) {
-      const [customer] = await tenantDb.select().from(schema.customers).where(eq(schema.customers.id, id));
-      return customer || null;
-    },
-
-    async getCustomerByPhone(phone: string) {
-      const normalizedPhone = phone.replace(/\D/g, ''); // Remove non-digits
-      const [customer] = await tenantDb.select().from(schema.customers)
-        .where(
-          or(
-            eq(schema.customers.phone, phone),
-            eq(schema.customers.phone, normalizedPhone),
-            eq(schema.customers.phone, `+52${normalizedPhone}`),
-            eq(schema.customers.phone, `+52 ${normalizedPhone.slice(0, 2)} ${normalizedPhone.slice(2, 6)} ${normalizedPhone.slice(6)}`)
-          )
-        );
-      return customer || null;
-    },
-
-    async createCustomer(customerData: any) {
-      const [customer] = await tenantDb.insert(schema.customers).values(customerData).returning();
-      return customer;
-    },
-
-    async updateCustomer(id: number, customerData: any) {
-      const [customer] = await tenantDb.update(schema.customers)
-        .set(customerData)
-        .where(eq(schema.customers.id, id))
-        .returning();
-      return customer;
-    },
-
-    async deleteCustomer(id: number) {
-      await tenantDb.delete(schema.customers).where(eq(schema.customers.id, id));
-    },
-
-    
-     async getAllRegistrationFlows() {
-    return await tenantDb.select().from(schema.customerRegistrationFlows)
-    .orderBy(desc(schema.customerRegistrationFlows.createdAt));
-        },
-
-    // Conversations
-    async getAllConversations() {
-      return await tenantDb.select().from(schema.conversations).orderBy(desc(schema.conversations.lastMessageAt));
-    },
-
-    async getConversationById(id: number) {
-      const [conversation] = await tenantDb.select().from(schema.conversations).where(eq(schema.conversations.id, id));
-      return conversation || null;
-    },
-
-    async createConversation(conversationData: any) {
-      const [conversation] = await tenantDb.insert(schema.conversations).values(conversationData).returning();
-      return conversation;
-    },
-
-    async getConversationByCustomerPhone(phone: string) {
-      // First normalize the phone number
-      const normalizedPhone = phone.replace(/\D/g, '');
-      
-      // Find customer first
-      const [customer] = await tenantDb.select().from(schema.customers)
-        .where(
-          or(
-            eq(schema.customers.phone, phone),
-            eq(schema.customers.phone, normalizedPhone),
-            eq(schema.customers.phone, `+52${normalizedPhone}`),
-            eq(schema.customers.phone, `52${normalizedPhone}`)
-          )
-        )
-        .limit(1);
-
-      if (!customer) return null;
-
-      // Then find conversation for this customer
-      const [conversation] = await tenantDb.select().from(schema.conversations)
-        .where(eq(schema.conversations.customerId, customer.id))
-        .limit(1);
-
-      return conversation || null;
-    },
-
-    async updateConversation(id: number, conversationData: any) {
-      const [conversation] = await tenantDb.update(schema.conversations)
-        .set(conversationData)
-        .where(eq(schema.conversations.id, id))
-        .returning();
-      return conversation;
-    },
-
-    // Auto-responses
-    async getAllAutoResponses() {
-      return await tenantDb.select().from(schema.autoResponses)
-        .where(eq(schema.autoResponses.isActive, true))
-        .orderBy(schema.autoResponses.id);
-    },
-
-    // Messages
-    async getMessagesByConversation(conversationId: number) {
-      return await tenantDb.select().from(schema.messages)
-        .where(eq(schema.messages.conversationId, conversationId))
-        .orderBy(schema.messages.createdAt);
-    },
-
-    async createMessage(messageData: any) {
-      const [message] = await tenantDb.insert(schema.messages).values(messageData).returning();
-      return message;
-    },
-
-    // Dashboard metrics
-    async getDashboardMetrics() {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
-      const totalOrders = await tenantDb.select({ count: count() }).from(schema.orders);
-      const pendingOrders = await tenantDb.select({ count: count() })
-        .from(schema.orders)
-        .where(eq(schema.orders.status, 'pending'));
-      const todayOrders = await tenantDb.select({ count: count() })
-        .from(schema.orders)
-        .where(sql`DATE(created_at) = DATE(NOW())`);
-
-      const totalConversations = await tenantDb.select({ count: count() }).from(schema.conversations);
-      const totalCustomers = await tenantDb.select({ count: count() }).from(schema.customers);
-
-      return {
-        totalOrders: totalOrders[0]?.count || 0,
-        pendingOrders: pendingOrders[0]?.count || 0,
-        todayOrders: todayOrders[0]?.count || 0,
-        totalConversations: totalConversations[0]?.count || 0,
-        totalCustomers: totalCustomers[0]?.count || 0,
-        dailyRevenue: 0, // Calcular según necesidad
-        averageOrderValue: 0,
-        activeTechnicians: 0
-      };
-    },
-
-    // Auto Responses
-    async getAutoResponsesByTrigger(trigger: string) {
-      return await tenantDb.select().from(schema.autoResponses)
-        .where(and(
-          eq(schema.autoResponses.trigger, trigger),
-          eq(schema.autoResponses.isActive, true)
-        ))
-        .orderBy(schema.autoResponses.priority);
-    },
-
-    // Customer Registration Flows - Enhanced for order completion
-    async getRegistrationFlow(phoneNumber: string) {
-      const [flow] = await tenantDb.select().from(schema.customerRegistrationFlows)
-        .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber));
-      return flow || null;
-    },
-
-    async getRegistrationFlowByCustomerId(customerId: number) {
       try {
-        const result = await tenantDb.execute(
-          sql`SELECT * FROM customer_registration_flows WHERE customer_id = ${customerId} LIMIT 1`
-        );
-        return result.rows[0] || null;
+        const [order] = await tenantDb.select()
+          .from(schema.orders)
+          .where(eq(schema.orders.id, id))
+          .limit(1);
+        return order || null;
       } catch (error) {
-        console.log('Error getting registration flow:', error);
+        console.error('Error getting order by ID:', error);
         return null;
       }
     },
 
-    async createRegistrationFlow(flow: any) {
-      const [newFlow] = await tenantDb.insert(schema.customerRegistrationFlows).values(flow).returning();
-      return newFlow;
-    },
-
-    async createOrUpdateRegistrationFlow(flowData: any) {
+    async createOrder(orderData: any, items: any[] = []) {
       try {
-        // Get customer phone number first
-        const customerResult = await tenantDb.execute(
-          sql`SELECT phone_number FROM customers WHERE id = ${flowData.customerId} LIMIT 1`
-        );
-        
-        if (!customerResult.rows[0]) {
-          throw new Error(`Customer not found: ${flowData.customerId}`);
+        const [order] = await tenantDb.insert(schema.orders)
+          .values({
+            ...orderData,
+            createdAt: new Date()
+          })
+          .returning();
+
+        if (items && items.length > 0) {
+          const itemsWithOrderId = items.map(item => ({
+            ...item,
+            orderId: order.id
+          }));
+          await tenantDb.insert(schema.orderItems).values(itemsWithOrderId);
         }
-        
-        const phoneNumber = customerResult.rows[0].phone_number;
 
-        // Check if flow exists
-        const existingResult = await tenantDb.execute(
-          sql`SELECT * FROM customer_registration_flows WHERE customer_id = ${flowData.customerId} LIMIT 1`
-        );
-
-        const collectedDataStr = typeof flowData.collectedData === 'string' 
-          ? flowData.collectedData 
-          : JSON.stringify(flowData.collectedData);
-
-        if (existingResult.rows[0]) {
-          // Update existing flow
-          const updateResult = await tenantDb.execute(
-            sql`UPDATE customer_registration_flows 
-                SET current_step = ${flowData.currentStep},
-                    collected_data = ${collectedDataStr},
-                    requested_service = ${flowData.flowType || 'order_completion'},
-                    expires_at = ${flowData.expiresAt},
-                    is_completed = false,
-                    updated_at = NOW()
-                WHERE customer_id = ${flowData.customerId}
-                RETURNING *`
-          );
-          return updateResult.rows[0];
-        } else {
-          // Create new flow
-          const insertResult = await tenantDb.execute(
-            sql`INSERT INTO customer_registration_flows 
-                (customer_id, phone_number, current_step, collected_data, requested_service, expires_at, is_completed, created_at, updated_at)
-                VALUES (${flowData.customerId}, ${phoneNumber}, ${flowData.currentStep}, ${collectedDataStr}, ${flowData.flowType || 'order_completion'}, ${flowData.expiresAt}, false, NOW(), NOW())
-                RETURNING *`
-          );
-          return insertResult.rows[0];
-        }
+        return order;
       } catch (error) {
-        console.error('Error in createOrUpdateRegistrationFlow:', error);
+        console.error('Error creating order:', error);
         throw error;
       }
     },
 
-    async updateRegistrationFlow(phoneNumber: string, updates: any) {
-      const [updatedFlow] = await tenantDb.update(schema.customerRegistrationFlows)
-        .set(updates)
-        .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber))
-        .returning();
-      return updatedFlow || null;
-    },
-
-    async updateRegistrationFlowStep(customerId: number, newStep: string, newData?: any) {
-      const updates: any = {
-        currentStep: newStep,
-        updatedAt: new Date()
-      };
-
-      if (newData) {
-        updates.collectedData = newData;
-      }
-
-      const [updatedFlow] = await tenantDb
-        .update(schema.customerRegistrationFlows)
-        .set(updates)
-        .where(eq(schema.customerRegistrationFlows.customerId, customerId))
-        .returning();
-      return updatedFlow;
-    },
-
-    async deleteRegistrationFlow(customerId: number) {
+    async updateOrder(id: number, orderData: any) {
       try {
-        await tenantDb
-          .delete(schema.customerRegistrationFlows)
-          .where(eq(schema.customerRegistrationFlows.customerId, customerId));
+        const [order] = await tenantDb.update(schema.orders)
+          .set({ ...orderData, updatedAt: new Date() })
+          .where(eq(schema.orders.id, id))
+          .returning();
+        return order;
       } catch (error) {
-        console.error('Error deleting registration flow:', error);
+        console.error('Error updating order:', error);
+        throw error;
       }
     },
 
-    // Conversations by customer
-    async getConversationByCustomerId(customerId: number) {
-      const [conversation] = await tenantDb.select().from(schema.conversations)
-        .where(eq(schema.conversations.customerId, customerId));
-      return conversation || null;
+    async deleteOrder(id: number) {
+      try {
+        await tenantDb.delete(schema.orders)
+          .where(eq(schema.orders.id, id));
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        throw error;
+      }
     },
 
-    // WhatsApp Logs
-    async addWhatsAppLog(log: any) {
-      const [newLog] = await tenantDb.insert(schema.whatsappLogs).values(log).returning();
-      return newLog;
+    // PRODUCTS
+    async getAllProducts() {
+      try {
+        return await tenantDb.select()
+          .from(schema.products)
+          .orderBy(desc(schema.products.createdAt));
+      } catch (error) {
+        console.error('Error getting all products:', error);
+        return [];
+      }
     },
 
-
-    async getAutoResponseByTrigger(trigger: string) {
-      const [response] = await tenantDb.select().from(schema.autoResponses)
-        .where(and(
-          eq(schema.autoResponses.trigger, trigger),
-          eq(schema.autoResponses.isActive, true)
-        ));
-      return response || null;
+    async getProductById(id: number) {
+      try {
+        const [product] = await tenantDb.select()
+          .from(schema.products)
+          .where(eq(schema.products.id, id))
+          .limit(1);
+        return product || null;
+      } catch (error) {
+        console.error('Error getting product by ID:', error);
+        return null;
+      }
     },
 
-    async getActiveAutoResponses() {
-      return await tenantDb.select().from(schema.autoResponses)
-        .where(eq(schema.autoResponses.isActive, true))
-        .orderBy(desc(schema.autoResponses.createdAt));
-    },
+    async createProduct(productData: any) {
+      try {
+        if (!productData.name) {
+          throw new Error('Product name is required');
+        }
 
-    // WhatsApp Settings
-    async getAllWhatsAppConfigs(storeId: number) {
-      // In tenant schema, whatsapp_settings don't have store_id column as all data is store-specific
-      return await tenantDb.select().from(schema.whatsappSettings)
-        .orderBy(desc(schema.whatsappSettings.createdAt));
-    },
+        const productToInsert = {
+          name: productData.name,
+          description: productData.description || '',
+          price: productData.price || '0.00',
+          category: productData.category || 'general',
+          status: productData.status || 'active',
+          imageUrl: productData.imageUrl || null,
+          images: productData.images || null,
+          sku: productData.sku || null,
+          brand: productData.brand || null,
+          model: productData.model || null,
+          specifications: productData.specifications || null,
+          features: productData.features || null,
+          warranty: productData.warranty || null,
+          availability: productData.availability || 'in_stock',
+          stockQuantity: productData.stockQuantity || 0,
+          minQuantity: productData.minQuantity || 1,
+          maxQuantity: productData.maxQuantity || null,
+          weight: productData.weight || null,
+          dimensions: productData.dimensions || null,
+          tags: productData.tags || null,
+          salePrice: productData.salePrice || null,
+          isPromoted: productData.isPromoted || false,
+          promotionText: productData.promotionText || null,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
 
-    async getWhatsAppConfig(storeId: number) {
-      // In tenant schema, whatsapp_settings don't have store_id column as all data is store-specific
-      const configs = await tenantDb.select().from(schema.whatsappSettings)
-        .where(eq(schema.whatsappSettings.isActive, true))
-        .orderBy(desc(schema.whatsappSettings.createdAt))
-        .limit(1);
-      return configs[0] || null;
-    },
-
-    async updateWhatsAppConfig(configData: any, storeId: number) {
-      // In tenant schema, all data is store-specific, no need for storeId filter
-      const existingConfigs = await tenantDb.select().from(schema.whatsappSettings)
-        .where(eq(schema.whatsappSettings.isActive, true))
-        .limit(1);
-      
-      if (existingConfigs.length > 0) {
-        // Update existing configuration
-        const [updated] = await tenantDb.update(schema.whatsappSettings)
-          .set({
-            accessToken: configData.accessToken,
-            phoneNumberId: configData.phoneNumberId,
-            webhookVerifyToken: configData.webhookVerifyToken,
-            businessAccountId: configData.businessAccountId,
-            appId: configData.appId,
-            isActive: configData.isActive ?? true,
-            updatedAt: new Date()
-          })
-          .where(eq(schema.whatsappSettings.id, existingConfigs[0].id))
+        const [product] = await tenantDb.insert(schema.products)
+          .values(productToInsert)
           .returning();
-        return updated;
-      } else {
-        // Create new configuration in tenant schema (no storeId needed)
-        const [created] = await tenantDb.insert(schema.whatsappSettings)
+
+        return product;
+      } catch (error) {
+        console.error('Error creating product:', error);
+        throw error;
+      }
+    },
+
+    async updateProduct(id: number, productData: any) {
+      try {
+        const filteredData = Object.keys(productData).reduce((acc, key) => {
+          if (productData[key] !== undefined) {
+            acc[key] = productData[key];
+          }
+          return acc;
+        }, {});
+
+        filteredData.updatedAt = new Date();
+
+        const [product] = await tenantDb.update(schema.products)
+          .set(filteredData)
+          .where(eq(schema.products.id, id))
+          .returning();
+
+        return product;
+      } catch (error) {
+        console.error('Error updating product:', error);
+        throw error;
+      }
+    },
+
+    // CUSTOMERS
+    async getAllCustomers() {
+      try {
+        return await tenantDb.select()
+          .from(schema.customers)
+          .orderBy(desc(schema.customers.createdAt));
+      } catch (error) {
+        console.error('Error getting all customers:', error);
+        return [];
+      }
+    },
+
+    async getCustomerById(id: number) {
+      try {
+        const [customer] = await tenantDb.select()
+          .from(schema.customers)
+          .where(eq(schema.customers.id, id))
+          .limit(1);
+        return customer || null;
+      } catch (error) {
+        console.error('Error getting customer by ID:', error);
+        return null;
+      }
+    },
+
+    async getCustomerByPhone(phoneNumber: string) {
+      try {
+        const [customer] = await tenantDb.select()
+          .from(schema.customers)
+          .where(eq(schema.customers.phoneNumber, phoneNumber))
+          .limit(1);
+        return customer || null;
+      } catch (error) {
+        console.error('Error getting customer by phone:', error);
+        return null;
+      }
+    },
+
+    async createCustomer(customerData: any) {
+      try {
+        const [customer] = await tenantDb.insert(schema.customers)
           .values({
-            accessToken: configData.accessToken,
-            phoneNumberId: configData.phoneNumberId,
-            webhookVerifyToken: configData.webhookVerifyToken,
-            businessAccountId: configData.businessAccountId,
-            appId: configData.appId,
-            isActive: configData.isActive ?? true,
-            createdAt: new Date(),
-            updatedAt: new Date()
+            ...customerData,
+            createdAt: new Date()
           })
           .returning();
-        return created;
+        return customer;
+      } catch (error) {
+        console.error('Error creating customer:', error);
+        throw error;
       }
     },
 
-    // Método para obtener configuración WhatsApp específica de la tienda desde tenant schema
-    async getTenantWhatsAppConfig() {
-      const configs = await tenantDb.select().from(schema.whatsappSettings)
-        .where(eq(schema.whatsappSettings.isActive, true))
-        .orderBy(desc(schema.whatsappSettings.createdAt))
-        .limit(1);
-      return configs[0] || null;
+    async updateCustomer(id: number, customerData: any) {
+      try {
+        const [customer] = await tenantDb.update(schema.customers)
+          .set({ ...customerData, updatedAt: new Date() })
+          .where(eq(schema.customers.id, id))
+          .returning();
+        return customer;
+      } catch (error) {
+        console.error('Error updating customer:', error);
+        throw error;
+      }
     },
 
-     async getAllEmployeeProfiles() {
-      const results = await tenantDb.select()
-        .from(schema.employeeProfiles)
-        .innerJoin(schema.users, eq(schema.employeeProfiles.userId, schema.users.id))
-        .orderBy(schema.employeeProfiles.createdAt);
-
-      return results.map((result: any) => ({
-        ...result.employee_profiles,
-        user: result.users
-      }));
+    // USERS
+    async getAllUsers() {
+      try {
+        return await tenantDb.select()
+          .from(schema.users)
+          .orderBy(desc(schema.users.createdAt));
+      } catch (error) {
+        console.error('Error getting all users:', error);
+        return [];
+      }
     },
 
-    async createEmployeeProfile(profile: any) {
-      const [newProfile] = await tenantDb.insert(schema.employeeProfiles)
-        .values(profile)
-        .returning();
-      return newProfile;
+    async getUserById(id: number) {
+      try {
+        const [user] = await tenantDb.select()
+          .from(schema.users)
+          .where(eq(schema.users.id, id))
+          .limit(1);
+        return user || null;
+      } catch (error) {
+        console.error('Error getting user by ID:', error);
+        return null;
+      }
     },
 
-    async updateEmployeeProfile(id: number, updates: any) {
-      const [updatedProfile] = await tenantDb.update(schema.employeeProfiles)
-        .set(updates)
-        .where(eq(schema.employeeProfiles.id, id))
-        .returning();
-      return updatedProfile;
+    async updateUser(id: number, userData: any) {
+      try {
+        const [user] = await tenantDb.update(schema.users)
+          .set({ ...userData, updatedAt: new Date() })
+          .where(eq(schema.users.id, id))
+          .returning();
+        return user;
+      } catch (error) {
+        console.error('Error updating user:', error);
+        throw error;
+      }
     },
 
-    async deleteEmployeeProfile(id: number) {
-      await tenantDb.delete(schema.employeeProfiles)
-        .where(eq(schema.employeeProfiles.id, id));
-      return true;
+    // NOTIFICATIONS
+    async getUserNotifications(userId: number) {
+      try {
+        return await tenantDb.select()
+          .from(schema.notifications)
+          .where(eq(schema.notifications.userId, userId))
+          .orderBy(desc(schema.notifications.createdAt));
+      } catch (error) {
+        console.error('Error getting user notifications:', error);
+        return [];
+      }
     },
 
-    async getEmployeeProfile(userId: number) {
-      const [profile] = await tenantDb.select()
-        .from(schema.employeeProfiles)
-        .where(eq(schema.employeeProfiles.userId, userId));
-      return profile || null;
+    async getUnreadNotifications(userId: number) {
+      try {
+        return await tenantDb.select()
+          .from(schema.notifications)
+          .where(
+            and(
+              eq(schema.notifications.userId, userId),
+              eq(schema.notifications.isRead, false)
+            )
+          )
+          .orderBy(desc(schema.notifications.createdAt));
+      } catch (error) {
+        console.error('Error getting unread notifications:', error);
+        return [];
+      }
     },
 
-    async generateEmployeeId(department: string) {
-      // Generar ID basado en departamento y timestamp
-      const prefix = {
-        'technical': 'TEC',
-        'sales': 'VEN',
-        'delivery': 'DEL',
-        'support': 'SUP',
-        'admin': 'ADM'
-      }[department] || 'EMP';
+    async getNotificationCounts(userId: number) {
+      try {
+        const allNotifications = await tenantDb.select()
+          .from(schema.notifications)
+          .where(eq(schema.notifications.userId, userId));
 
-      // Obtener count actual de empleados del departamento
-      const count = await tenantDb.select({ count: sql`count(*)` })
-        .from(schema.employeeProfiles)
-        .where(eq(schema.employeeProfiles.department, department));
-      
-      const nextNumber = (parseInt(count[0]?.count || '0') + 1).toString().padStart(3, '0');
-      return `${prefix}-${nextNumber}`;
+        const unreadNotifications = allNotifications.filter(n => !n.isRead);
+
+        return {
+          total: allNotifications.length,
+          unread: unreadNotifications.length
+        };
+      } catch (error) {
+        console.error('Error getting notification counts:', error);
+        return { total: 0, unread: 0 };
+      }
+    },
+
+    async createNotification(notificationData: any) {
+      try {
+        const [notification] = await tenantDb.insert(schema.notifications)
+          .values({
+            ...notificationData,
+            isRead: false,
+            createdAt: new Date()
+          })
+          .returning();
+        return notification;
+      } catch (error) {
+        console.error('Error creating notification:', error);
+        throw error;
+      }
+    },
+
+    async markNotificationAsRead(id: number) {
+      try {
+        const [notification] = await tenantDb.update(schema.notifications)
+          .set({ isRead: true, updatedAt: new Date() })
+          .where(eq(schema.notifications.id, id))
+          .returning();
+        return notification;
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+        throw error;
+      }
+    },
+
+    async markAllNotificationsAsRead(userId: number) {
+      try {
+        await tenantDb.update(schema.notifications)
+          .set({ isRead: true, updatedAt: new Date() })
+          .where(eq(schema.notifications.userId, userId));
+      } catch (error) {
+        console.error('Error marking all notifications as read:', error);
+        throw error;
+      }
+    },
+
+    async deleteNotification(id: number) {
+      try {
+        await tenantDb.delete(schema.notifications)
+          .where(eq(schema.notifications.id, id));
+      } catch (error) {
+        console.error('Error deleting notification:', error);
+        throw error;
+      }
+    },
+
+    // CATEGORIES
+    async getAllCategories() {
+      try {
+        if (schema.productCategories) {
+          return await tenantDb.select()
+            .from(schema.productCategories)
+            .orderBy(desc(schema.productCategories.createdAt));
+        }
+        
+        return [
+          { id: 1, name: 'Electrónicos', description: 'Dispositivos electrónicos' },
+          { id: 2, name: 'Ropa', description: 'Vestimenta y accesorios' },
+          { id: 3, name: 'Hogar', description: 'Artículos para el hogar' },
+          { id: 4, name: 'Deportes', description: 'Equipos deportivos' },
+          { id: 5, name: 'Libros', description: 'Libros y material educativo' }
+        ];
+      } catch (error) {
+        console.error('Error getting all categories:', error);
+        return [{ id: 1, name: 'General', description: 'Categoría general' }];
+      }
+    },
+
+    async getCategoryById(id: number) {
+      try {
+        if (schema.productCategories) {
+          const [category] = await tenantDb.select()
+            .from(schema.productCategories)
+            .where(eq(schema.productCategories.id, id))
+            .limit(1);
+          return category || null;
+        }
+        
+        const categories = await this.getAllCategories();
+        return categories.find(cat => cat.id === id) || null;
+      } catch (error) {
+        console.error('Error getting category by ID:', error);
+        return null;
+      }
+    },
+
+    // CONVERSATIONS
+    async getAllConversations() {
+      try {
+        return await tenantDb.select()
+          .from(schema.conversations)
+          .orderBy(desc(schema.conversations.lastMessageAt));
+      } catch (error) {
+        console.error('Error getting all conversations:', error);
+        return [];
+      }
+    },
+
+    async getConversationById(id: number) {
+      try {
+        const [conversation] = await tenantDb.select()
+          .from(schema.conversations)
+          .where(eq(schema.conversations.id, id))
+          .limit(1);
+        return conversation || null;
+      } catch (error) {
+        console.error('Error getting conversation by ID:', error);
+        return null;
+      }
+    },
+
+    async getConversationByCustomerPhone(phone: string) {
+      try {
+        const [conversation] = await tenantDb.select()
+          .from(schema.conversations)
+          .where(eq(schema.conversations.customerPhone, phone))
+          .limit(1);
+        return conversation || null;
+      } catch (error) {
+        console.error('Error getting conversation by customer phone:', error);
+        return null;
+      }
+    },
+
+    async createConversation(conversationData: any) {
+      try {
+        const [conversation] = await tenantDb.insert(schema.conversations)
+          .values({
+            ...conversationData,
+            createdAt: new Date(),
+            lastMessageAt: new Date()
+          })
+          .returning();
+        return conversation;
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+        throw error;
+      }
+    },
+
+    async updateConversation(id: number, updates: any) {
+      try {
+        const [conversation] = await tenantDb.update(schema.conversations)
+          .set({ ...updates, updatedAt: new Date() })
+          .where(eq(schema.conversations.id, id))
+          .returning();
+        return conversation;
+      } catch (error) {
+        console.error('Error updating conversation:', error);
+        throw error;
+      }
     }
   };
 }

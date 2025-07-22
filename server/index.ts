@@ -1,3 +1,5 @@
+import { StorageFactory, getTenantStorageForUser } from './storage/storage-factory.js';
+import { MasterStorageService } from './storage/master-storage.js';
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
@@ -9,23 +11,57 @@ import { seedAssignmentRules } from "./seed-assignment-rules";
 import { getStoreInfo, getTenantDb, masterDb, tenantMiddleware } from "./multi-tenant-db";
 import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
-import type { AuthenticatedRequest, AuthUser } from '@shared/auth.js' ;
+import type { AuthenticatedRequest, AuthUser } from '@shared/auth.js';
 import { WebSocketServer } from 'ws';
 import { authenticateToken } from './authMiddleware.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import setupCorsForRailway from './cors-config-railway.js';
-import { storage } from './storage.js';
 import multer from 'multer';
 import fs from 'fs';
 import { SupabaseStorageManager } from './supabase-storage.js';
-import { getTenantStorageForUser } from './storage/index.js';
 
+// ================================
+// 🔥 IMPORTACIONES DE STORAGE CORREGIDAS
+// ================================
+
+// Helper para obtener instancias de storage
+const storageFactory = StorageFactory.getInstance();
+const masterStorage = storageFactory.getMasterStorage();
+
+// Helper function para obtener tenant storage
+async function getTenantStorageForUser(user: { storeId: number }) {
+  if (!user.storeId) {
+    throw new Error('User does not have a valid store ID');
+  }
+  return await storageFactory.getTenantStorage(user.storeId);
+}
+
+async function getTenantStorageForUserFixed(userId: number) {
+  try {
+    const factory = StorageFactory.getInstance();
+    const masterStorage = factory.getMasterStorage();
+    
+    // Obtener usuario y su tienda
+    const user = await masterStorage.getUserById(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    // Obtener storage del tenant para esa tienda
+    return await factory.getTenantStorage(user.storeId);
+  } catch (error) {
+    console.error(`Error getting tenant storage for user ${userId}:`, error);
+    throw error;
+  }
+}
+// ================================
+// RESTO DE LA CONFIGURACIÓN
+// ================================
 
 const app = express();
 const server = createServer(app);
-// setupCorsForRailway(app);
 
 // Get the __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -37,21 +73,19 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024, // 5MB máximo
   },
   fileFilter: (req, file, cb) => {
-    // Validar tipos de archivo
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      // ✅ CORREGIDO: Solo pasar el Error, no el false
       cb(new Error('Tipo de archivo no permitido'));
     }
   }
 });
 
+// CORS Configuration
 app.use((req, res, next) => {
   const origin = req.headers.origin || req.headers.referer || req.get('host') || 'localhost:5000';
   
-  // Lista de origins permitidos
   const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5000',
@@ -63,26 +97,22 @@ app.use((req, res, next) => {
     process.env.RAILWAY_STATIC_URL
   ].filter(Boolean);
 
-  // Permitir TODOS los origins en desarrollo, solo los específicos en producción
   const isAllowed = process.env.NODE_ENV === 'development' || 
                    !req.headers.origin || 
                    allowedOrigins.includes(req.headers.origin);
 
   if (isAllowed) {
-    // Configurar headers CORS
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
     res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.setHeader('Access-Control-Max-Age', '86400'); // 24 horas
+    res.setHeader('Access-Control-Max-Age', '86400');
     
-    // Log mejorado
     console.log(`✅ CORS: ${req.method} ${req.path} from ${req.headers.origin || 'no-origin'}`);
   } else {
     console.log(`❌ CORS BLOCKED: ${req.method} ${req.path} from ${req.headers.origin}`);
   }
 
-  // Manejar preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -90,17 +120,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// En server/index.ts, agregar:
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// CRITICAL: Parse JSON bodies globally BEFORE any routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// CRITICAL: Create a high-priority router for API endpoints
+
 const apiRouter = express.Router();
 
+// ================================
+// HEALTH & DEBUG ENDPOINTS
+// ================================
 
-// Health endpoint - MUST be first and simple
 apiRouter.get('/health', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.status(200).json({ 
@@ -112,7 +141,6 @@ apiRouter.get('/health', (req, res) => {
     port: process.env.PORT || process.env.RAILWAY_PORT || 5000
   });
 });
-
 
 app.get('/api/debug/env', (req, res) => {
   res.json({
@@ -136,15 +164,16 @@ apiRouter.get('/auth/debug-secrets', (req, res) => {
   });
 });
 
-// Login endpoint
+// ================================
+// AUTHENTICATION ENDPOINTS
+// ================================
+
 apiRouter.post('/auth/login', async (req, res) => {
   try {
     const { authenticateUser } = await import('./multi-tenant-auth.js');
     const { username, password, companyId, storeId } = req.body;
     
-    // Convert companyId to storeId for compatibility
     const targetStoreId = storeId || companyId;
-    
     const user = await authenticateUser(username, password, targetStoreId);
     
     if (!user) {
@@ -154,7 +183,6 @@ apiRouter.post('/auth/login', async (req, res) => {
       });
     }
 
-    // Validate store access if storeId is provided
     if (targetStoreId && user.level !== 'global') {
       if (!user.storeId || user.storeId !== parseInt(targetStoreId)) {
         return res.status(403).json({
@@ -165,9 +193,6 @@ apiRouter.post('/auth/login', async (req, res) => {
       }
     }
 
-    const jwt = await import('jsonwebtoken');
-    
-    // 🔧 CORRECCIÓN: Crear payload condicional para el token
     const tokenPayload: any = {
       id: user.id,
       username: user.username,
@@ -175,12 +200,11 @@ apiRouter.post('/auth/login', async (req, res) => {
       level: user.level
     };
     
-    // Solo incluir storeId si es válido
     if (user.storeId && user.storeId !== null && user.storeId !== undefined) {
       tokenPayload.storeId = user.storeId;
     }
     
-    const token = jwt.default.sign(
+    const token = jwt.sign(
       tokenPayload,
       process.env.JWT_SECRET || 'dev-secret',
       { expiresIn: '24h' }
@@ -207,1925 +231,10 @@ apiRouter.post('/auth/login', async (req, res) => {
   }
 });
 
-// Agregar al apiRouter en server/index.ts
-apiRouter.get('/auth/debug-token', (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    console.log('=== DEBUGGING TOKEN ===');
-    console.log('AuthHeader:', authHeader);
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.json({
-        error: 'No token provided',
-        authHeader: authHeader
-      });
-    }
-
-    const token = authHeader.substring(7);
-    console.log('Token extracted:', token.substring(0, 20) + '...');
-    
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-    console.log('Token decoded:', decoded);
-    
-    // Verificar validación del middleware
-    const hasStoreId = 'storeId' in decoded;
-    const isObject = typeof decoded === 'object' && decoded !== null;
-    
-    res.json({
-      success: true,
-      decoded: {
-        id: decoded.id,
-        username: decoded.username,
-        role: decoded.role,
-        storeId: decoded.storeId,
-        
-      },
-      validation: {
-        isObject,
-        hasStoreId,
-        storeIdValue: decoded.storeId,
-        middlewareWouldPass: isObject && hasStoreId
-      }
-    });
-    
-  } catch (error) {
-    res.json({
-      error: error.message,
-      step: 'JWT verification failed'
-    });
-  }
-});
-
-// Auth verification endpoint
-apiRouter.get('/auth/me', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'No token provided' });
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.json({
-      id: decoded.id,
-      username: decoded.username,
-      role: decoded.role,
-      storeId: decoded.storeId,
-      
-    });
-  } catch (error) {
-    res.status(401).json({ success: false, message: 'Invalid token' });
-  }
-});
-
-
-// Productos de una tienda específica - PÚBLICO
-app.get('/api/public/stores/:storeId/products', async (req, res) => {
-  try {
-    const storeId = parseInt(req.params.storeId);
-    
-    if (!storeId || isNaN(storeId)) {
-      return res.status(400).json({ error: 'Valid store ID required' });
-    }
-
-    // Verificar que la tienda existe y está activa
-    const store = await storage.getVirtualStore(storeId);
-    
-    if (!store || !store.isActive) {
-      return res.status(404).json({ error: 'Store not found or inactive' });
-    }
-
-    // Usar tenant storage para obtener productos de la tienda específica
-    
-    
-    
-    const tenantDb = await getTenantDb(storeId);
-    
-    // Obtener solo productos activos para el catálogo público
-    const tenantStorage = await getTenantStorageForUser(user);
-    const products = await tenantStorage.getAllProducts();
-    const activeProducts = products.filter((product: any) => product.isActive !== false);
-    
-    res.json(activeProducts);
-  } catch (error) {
-    console.error('Error fetching public products:', error);
-    res.status(500).json({ error: 'Failed to fetch products' });
-  }
-});
-
-// Categorías de una tienda específica - PÚBLICO
-app.get('/api/public/stores/:storeId/categories', async (req, res) => {
-  try {
-    const storeId = parseInt(req.params.storeId);
-    
-    if (!storeId || isNaN(storeId)) {
-      return res.status(400).json({ error: 'Valid store ID required' });
-    }
-
-    // Verificar que la tienda existe y está activa
-    const store = await storage.getVirtualStore(storeId);
-    
-    if (!store || !store.isActive) {
-      return res.status(404).json({ error: 'Store not found or inactive' });
-    }
-
-    // Usar tenant storage para obtener categorías de la tienda específica
-    
-    
-    
-    const tenantDb = await getTenantDb(storeId);
-    
-    const tenantStorage = await getTenantStorageForUser(user);
-    const categories = await tenantStorage.getAllCategories();
-    
-    res.json(categories);
-  } catch (error) {
-    console.error('Error fetching public categories:', error);
-    res.status(500).json({ error: 'Failed to fetch categories' });
-  }
-});
-
-// Información básica de la tienda - PÚBLICO
-app.get('/api/public/stores/:storeId/info', async (req, res) => {
-  try {
-    const storeId = parseInt(req.params.storeId);
-    
-    if (!storeId || isNaN(storeId)) {
-      return res.status(400).json({ error: 'Valid store ID required' });
-    }
-
-    // ✅ CORREGIDO: Obtener tienda usando getAllVirtualStores
-    const allStores = await storage.getAllVirtualStores();
-    const store = allStores.find((s: any) => s.id === storeId);
-    
-    if (!store || !store.isActive) {
-      return res.status(404).json({ error: 'Store not found or inactive' });
-    }
-
-    // Devolver solo información pública de la tienda
-    const publicInfo = {
-      id: store.id,
-      name: store.name,
-      description: store.description,
-      domain: store.domain,
-      phone: store.whatsappNumber,  // ✅ Campo correcto del schema
-      address: store.address,
-      logoUrl: store.logo,          // ✅ Campo correcto del schema
-      timezone: store.timezone,
-      currency: store.currency,
-      isActive: store.isActive
-    };
-    
-    res.json(publicInfo);
-  } catch (error) {
-    console.error('Error fetching public store info:', error);
-    res.status(500).json({ error: 'Failed to fetch store info' });
-  }
-});
-
-// Configuración del catálogo - PÚBLICO
-app.get('/api/public/stores/:storeId/catalog-config', async (req, res) => {
-  try {
-    const storeId = parseInt(req.params.storeId);
-    
-    if (!storeId || isNaN(storeId)) {
-      return res.status(400).json({ error: 'Valid store ID required' });
-    }
-
-    // ✅ CORREGIDO: Obtener tienda usando getAllVirtualStores
-    const allStores = await storage.getAllVirtualStores();
-    const store = allStores.find((s: any) => s.id === storeId);
-    
-    if (!store || !store.isActive) {
-      return res.status(404).json({ error: 'Store not found or inactive' });
-    }
-
-    // Configuración específica para el catálogo
-    const catalogConfig = {
-      storeName: store.name,
-      whatsappNumber: store.whatsappNumber,  // ✅ Campo correcto del schema
-      showPrices: true, // Esto podría venir de configuración de la tienda
-      allowOrders: true,
-      currency: store.currency || 'MXN',
-      timezone: store.timezone || 'America/Mexico_City'
-    };
-    
-    res.json(catalogConfig);
-  } catch (error) {
-    console.error('Error fetching catalog config:', error);
-    res.status(500).json({ error: 'Failed to fetch catalog config' });
-  }
-});
-
-// EMPLOYEES/TECHNICIANS - agregar después de los endpoints existentes
-apiRouter.get('/employees', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const storeId = user.storeId;
-    
-    // ✅ USAR TENANT STORAGE
-    
-    
-    
-    const tenantDb = await getTenantDb(storeId);
-    
-    const employees = await tenantStorage.getAllEmployeeProfiles();
-    res.json(employees);
-  } catch (error) {
-    console.error('Error fetching tenant employees:', error);
-    res.status(500).json({ error: 'Failed to fetch employees' });
-  }
-});
-
-// POST /api/employees - Crear perfil de empleado en esquema de tienda
-apiRouter.post('/employees', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const storeId = user.storeId;
-    
-    // ✅ USAR TENANT STORAGE - SE GUARDA EN ESQUEMA DE TIENDA
-    
-    
-    
-    const tenantDb = await getTenantDb(storeId);
-    
-    const employee = await tenantStorage.createEmployeeProfile(req.body);
-    res.status(201).json(employee);
-  } catch (error) {
-    console.error('Error creating tenant employee profile:', error);
-    res.status(500).json({ error: 'Failed to create employee profile' });
-  }
-});
-
-// PUT /api/employees/:id - Actualizar empleado en esquema de tienda
-apiRouter.put('/employees/:id', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const storeId = user.storeId;
-    const id = parseInt(req.params.id);
-    
-    // ✅ USAR TENANT STORAGE
-    
-    
-    
-    const tenantDb = await getTenantDb(storeId);
-    
-    const employee = await tenantStorage.updateEmployeeProfile(id, req.body);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-    
-    res.json(employee);
-  } catch (error) {
-    console.error('Error updating tenant employee:', error);
-    res.status(500).json({ error: 'Failed to update employee' });
-  }
-});
-
-// DELETE /api/employees/:id - Eliminar empleado de esquema de tienda
-apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const storeId = user.storeId;
-    const id = parseInt(req.params.id);
-    
-    // ✅ USAR TENANT STORAGE
-    
-    
-    
-    const tenantDb = await getTenantDb(storeId);
-    
-    const success = await tenantStorage.deleteEmployeeProfile(id);
-    if (!success) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting tenant employee:', error);
-    res.status(500).json({ error: 'Failed to delete employee' });
-  }
-});
-
-// POST /api/employees/generate-id - Generar ID en contexto de tienda
-apiRouter.post('/employees/generate-id', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const storeId = user.storeId;
-    const { department } = req.body;
-    
-    if (!department) {
-      return res.status(400).json({ error: 'Department is required' });
-    }
-    
-    // ✅ USAR TENANT STORAGE PARA GENERAR ID
-    
-    
-    
-    const tenantDb = await getTenantDb(storeId);
-    
-    const tenantStorage = await getTenantStorageForUser(user);
-    const employeeId = await tenantStorage.generateEmployeeId(department);
-    res.json({ employeeId });
-  } catch (error) {
-    console.error('Error generating tenant employee ID:', error);
-    res.status(500).json({ error: 'Failed to generate employee ID' });
-  }
-});
-// Auto-responses endpoints
-apiRouter.get(
-  '/store-responses',
-  authenticateToken,
-  async (req, res) => {
-    try {
-      const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-
-      // 1) Recover el usuario ya validado
-      const user = (req as any).user as { storeId: number };
-
-      // 2) Pasa user.storeId al método
-      const responses = await storage.getAllAutoResponses(user.storeId);
-
-      res.setHeader('Content-Type', 'application/json');
-      res.json(responses);
-    } catch (error) {
-      console.error('Error fetching auto-responses:', error);
-      res.status(500).json({ error: 'Failed to fetch auto-responses' });
-    }
-  }
-);
-
-
-apiRouter.post('/store-responses', async (req, res) => {
-  try {
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    
-    // Extract user from token
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'No token provided' });
-    }
-
-    const token = authHeader.substring(7);
-    const jwt = await import('jsonwebtoken');
-    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret') as AuthUser;
-    
-    const data = {
-      ...req.body,
-      storeId: payload.storeId
-    };
-    
-    const response = await storage.createAutoResponse(data);
-    res.setHeader('Content-Type', 'application/json');
-    res.status(201).json(response);
-  } catch (error) {
-    console.error('Error creating auto-response:', error);
-    res.status(500).json({ error: 'Failed to create auto-response' });
-  }
-});
-
-apiRouter.put('/store-responses/:id', async (req, res) => {
-  try {
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    
-    // Extract user from token
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'No token provided' });
-    }
-
-    const token = authHeader.substring(7);
-    const jwt = await import('jsonwebtoken');
-    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret') as AuthUser;
-    
-    const id = parseInt(req.params.id);
-    const response = await storage.updateAutoResponse(id, req.body, payload.storeId);
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.json(response);
-  } catch (error) {
-    console.error('Error updating auto-response:', error);
-    res.status(500).json({ error: 'Failed to update auto-response' });
-  }
-});
-
-apiRouter.delete('/store-responses/:id', authenticateToken, async (req, res) => {
-  try {
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-
-    const user = req.user as AuthUser;
-
-    const id = parseInt(req.params.id);
-    await storage.deleteAutoResponse(id, user.storeId);
-
-    res.setHeader('Content-Type', 'application/json');
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting auto-response:', error);
-    res.status(500).json({ error: 'Failed to delete auto-response' });
-  }
-});
-
-apiRouter.post(
-  '/store-responses/reset-defaults',
-  async (req, res) => {
-    // 1) Volver a sacar la cabecera:
-    const authHeader = Array.isArray(req.headers.authorization)
-      ? req.headers.authorization[0]
-      : req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res
-        .status(401)
-        .json({ success: false, message: 'No token provided' });
-    }
-
-    // 2) Ahora sí puedes llamar a substring sobre authHeader
-    const token = authHeader.substring(7);
-
-    // 3) Verificas y casteas al tipo donde sí existe storeId
-    const payload = jwt.verify(
-      token,
-      process.env.JWT_SECRET || 'dev-secret'
-    ) as AuthUser;
-
-    // 4) Ya TS sabe que payload.storeId existe
-    await storage.resetAutoResponsesToDefault(payload.storeId!);
-    res.json({ success: true, message: 'Auto-responses reset to defaults' });
-  }
-);
-
-// Super Admin WhatsApp Management endpoints
-apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
-  try {
-    const user = (req as any).user;
-  /*   if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    
-    const configs = await storage.getAllWhatsAppConfigs();
-    const stores = await storage.getAllVirtualStores();
-    
-    // Enrich configs with store names
-    const enrichedConfigs = configs.map(config => ({
-      ...config,
-      storeName: stores.find(store => store.id === config.storeId)?.name || `Tienda ${config.storeId}`
-    }));
-    
-    res.json(enrichedConfigs);
-  } catch (error) {
-    console.error("Error getting WhatsApp configs:", error);
-    res.status(500).json({ error: "Error al obtener configuraciones de WhatsApp" });
-  }
-});
-
-apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
-  try {
-    const user = (req as any).user;
-   /*  if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const { z } = await import('zod');
-    const configData = z.object({
-      storeId: z.number(),
-      accessToken: z.string().min(1, "Token de acceso requerido"),
-      phoneNumberId: z.string().min(1, "Phone Number ID requerido"),
-      webhookVerifyToken: z.string().min(1, "Webhook verify token requerido"),
-      businessAccountId: z.string().optional(),
-      appId: z.string().optional(),
-      isActive: z.boolean().default(true)
-    }).parse(req.body);
-
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    const config = await storage.updateWhatsAppConfig(configData, configData.storeId);
-    res.json({ success: true, config });
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: "Datos de configuración inválidos", details: error.errors });
-    }
-    console.error("Error creating WhatsApp config:", error);
-    res.status(500).json({ error: "Error al crear configuración de WhatsApp" });
-  }
-});
-
-apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
-  try {
-    const user = (req as any).user;
-   /*  if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const id = parseInt(req.params.id);
-    const { z } = await import('zod');
-    const configData = z.object({
-      storeId: z.number(),
-      accessToken: z.string().min(1, "Token de acceso requerido"),
-      phoneNumberId: z.string().min(1, "Phone Number ID requerido"),
-      webhookVerifyToken: z.string().min(1, "Webhook verify token requerido"),
-      businessAccountId: z.string().optional(),
-      appId: z.string().optional(),
-      isActive: z.boolean().default(true)
-    }).parse(req.body);
-
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    const config = await storage.updateWhatsAppConfigById(id, configData);
-    res.json({ success: true, config });
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: "Datos de configuración inválidos", details: error.errors });
-    }
-    console.error("Error updating WhatsApp config:", error);
-    res.status(500).json({ error: "Error al actualizar configuración de WhatsApp" });
-  }
-});
-
-apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
-  try {
-    const user = (req as any).user;
-   /*  if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const id = parseInt(req.params.id);
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    const success = await storage.deleteWhatsAppConfig(id);
-    
-    if (success) {
-      res.json({ success: true });
-    } else {
-      res.status(404).json({ error: "Configuración no encontrada" });
-    }
-  } catch (error) {
-    console.error("Error deleting WhatsApp config:", error);
-    res.status(500).json({ error: "Error al eliminar configuración de WhatsApp" });
-  }
-});
-
-apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
-  try {
-    const user = (req as any).user;
- /*    if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const { storeId } = req.body;
-    
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    const config = await storage.getWhatsAppConfig(storeId);
-    
-    if (!config) {
-      return res.json({
-        success: false,
-        error: "NO_CONFIG",
-        message: "No se encontró configuración de WhatsApp para esta tienda"
-      });
-    }
-
-    // Validar campos obligatorios
-    const missingFields = [];
-    if (!config.accessToken) missingFields.push("accessToken");
-    if (!config.phoneNumberId) missingFields.push("phoneNumberId");
-    
-    if (missingFields.length > 0) {
-      return res.json({
-        success: false,
-        error: "MISSING_CREDENTIALS",
-        message: "Faltan credenciales obligatorias",
-        missingFields
-      });
-    }
-
-    // Test básico de configuración
-    res.json({
-      success: true,
-      message: "Configuración válida",
-      details: {
-        storeId,
-        phoneNumberId: config.phoneNumberId,
-        hasToken: !!config.accessToken,
-        hasBusinessAccountId: !!config.businessAccountId,
-        isActive: config.isActive
-      }
-    });
-  } catch (error) {
-    console.error("Error testing WhatsApp config:", error);
-    res.status(500).json({ error: "Error al probar configuración" });
-  }
-});
-
-apiRouter.get('/super-admin/stores', async (req, res) => {
-  try {
-    const user = (req as any).user;
- /*     if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    }  */
-
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    const stores = await storage.getAllVirtualStores();
-    
-    res.json(stores);
-  } catch (error) {
-    console.error("Error getting stores:", error);
-    res.status(500).json({ error: "Error al obtener tiendas" });
-  }
-});
-
-// Additional Super Admin WhatsApp endpoints
-apiRouter.get('/super-admin/global-whatsapp-settings', async (req, res) => {
-  try {
-    const user = (req as any).user;
-   /*  if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const globalSettings = {
-      webhook: {
-        url: process.env.RAILWAY_STATIC_URL 
-          ? `${process.env.RAILWAY_STATIC_URL}/webhook`
-          : 'https://tu-dominio.railway.app/webhook',
-        verifyToken: process.env.WEBHOOK_VERIFY_TOKEN || 'default_verify_token_12345',
-        isConfigured: !!process.env.RAILWAY_STATIC_URL
-      },
-      meta: {
-        appId: process.env.META_APP_ID || '',
-        appSecret: process.env.META_APP_SECRET || '',
-        isConfigured: !!process.env.META_APP_ID && !!process.env.META_APP_SECRET
-      },
-      environment: {
-        nodeEnv: process.env.NODE_ENV || 'development',
-        railwayUrl: process.env.RAILWAY_STATIC_URL || 'Not configured',
-        isProduction: process.env.NODE_ENV === 'production'
-      }
-    };
-
-    res.json(globalSettings);
-  } catch (error) {
-    console.error("Error getting global WhatsApp settings:", error);
-    res.status(500).json({ error: "Error al obtener configuración global" });
-  }
-});
-
-apiRouter.put('/super-admin/global-whatsapp-settings', async (req, res) => {
-  try {
-    const user = (req as any).user;
-    /* if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const { webhook, meta } = req.body;
-
-    // In a real implementation, you would save these settings
-    // For now, we'll just validate and return success
-    if (webhook?.verifyToken) {
-      process.env.WEBHOOK_VERIFY_TOKEN = webhook.verifyToken;
-    }
-    if (meta?.appId) {
-      process.env.META_APP_ID = meta.appId;
-    }
-    if (meta?.appSecret) {
-      process.env.META_APP_SECRET = meta.appSecret;
-    }
-
-    res.json({
-      success: true,
-      message: "Configuración global actualizada",
-      settings: {
-        webhook: {
-          url: webhook?.url || process.env.RAILWAY_STATIC_URL,
-          verifyToken: process.env.WEBHOOK_VERIFY_TOKEN,
-          isConfigured: true
-        },
-        meta: {
-          appId: process.env.META_APP_ID,
-          appSecret: process.env.META_APP_SECRET ? '***' : '',
-          isConfigured: !!process.env.META_APP_ID && !!process.env.META_APP_SECRET
-        }
-      }
-    });
-  } catch (error) {
-    console.error("Error updating global WhatsApp settings:", error);
-    res.status(500).json({ error: "Error al actualizar configuración global" });
-  }
-});
-
-apiRouter.post('/super-admin/test-webhook', async (req, res) => {
-  try {
-    const user = (req as any).user;
-   /*  if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const { storeId, phoneNumberId } = req.body;
-
-    // Simulate webhook test
-    const testMessage = {
-      object: "whatsapp_business_account",
-      entry: [{
-        id: "TEST_BUSINESS_ACCOUNT_ID",
-        changes: [{
-          value: {
-            messaging_product: "whatsapp",
-            metadata: {
-              display_phone_number: phoneNumberId,
-              phone_number_id: phoneNumberId
-            },
-            messages: [{
-              from: "521234567890",
-              id: `test_${Date.now()}`,
-              timestamp: Math.floor(Date.now() / 1000).toString(),
-              text: {
-                body: "Test message from super admin panel"
-              },
-              type: "text"
-            }]
-          },
-          field: "messages"
-        }]
-      }]
-    };
-
-    // Process test message
-   // index.ts (test-webhook)
-const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
-await processWhatsAppMessageSimple(testMessage);
-
-
-    res.json({
-      success: true,
-      message: "Webhook test ejecutado",
-      details: {
-        storeId,
-        phoneNumberId,
-        testMessageId: testMessage.entry[0].changes[0].value.messages[0].id
-      }
-    });
-  } catch (error) {
-    console.error("Error testing webhook:", error);
-    res.status(500).json({ error: "Error al probar webhook" });
-  }
-});
-
-apiRouter.get('/super-admin/webhook-info', async (req, res) => {
-  try {
-    const user = (req as any).user;
-   /*  if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const webhookUrl = process.env.RAILWAY_STATIC_URL 
-      ? `${process.env.RAILWAY_STATIC_URL}/webhook`
-      : 'https://tu-dominio.railway.app/webhook';
-
-    res.json({
-      webhook: {
-        url: webhookUrl,
-        verifyToken: process.env.WEBHOOK_VERIFY_TOKEN || 'default_verify_token_12345',
-        method: 'POST for messages, GET for verification',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Hub-Signature-256': 'SHA256 signature for validation'
-        }
-      },
-      configuration: {
-        step1: "Copy the webhook URL above",
-        step2: "Go to Meta for Developers > Your App > WhatsApp > Configuration",
-        step3: "Paste the URL in 'Callback URL' field",
-        step4: "Enter the verify token",
-        step5: "Subscribe to 'messages' webhook field",
-        step6: "Save changes"
-      }
-    });
-  } catch (error) {
-    console.error("Error getting webhook info:", error);
-    res.status(500).json({ error: "Error al obtener información del webhook" });
-  }
-});
-
-apiRouter.get('/super-admin/validate-all-whatsapp', async (req, res) => {
-  try {
-    const user = (req as any).user;
-   /*  if (!user || user.role !== 'super_admin') {
-      return res.status(403).json({ error: "Super admin access required" });
-    } */
-
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    
-    const stores = await storage.getAllVirtualStores();
-    const configs = await storage.getAllWhatsAppConfigs();
-    
-    const validationResults = await Promise.all(
-      stores.map(async (store) => {
-        const config = configs.find(c => c.storeId === store.id);
-        
-        const result = {
-          storeId: store.id,
-          storeName: store.name,
-          hasConfig: !!config,
-          isActive: config?.isActive || false,
-          validation: {
-            hasToken: !!config?.accessToken,
-            hasPhoneNumberId: !!config?.phoneNumberId,
-            hasBusinessAccountId: !!config?.businessAccountId,
-            isValid: false
-          }
-        };
-        
-        result.validation.isValid = result.hasConfig && 
-          result.validation.hasToken && 
-          result.validation.hasPhoneNumberId;
-        
-        return result;
-      })
-    );
-    
-    const summary = {
-      totalStores: stores.length,
-      configuredStores: validationResults.filter(r => r.hasConfig).length,
-      activeStores: validationResults.filter(r => r.isActive).length,
-      validStores: validationResults.filter(r => r.validation.isValid).length
-    };
-    
-    res.json({
-      summary,
-      stores: validationResults
-    });
-  } catch (error) {
-    console.error("Error validating all WhatsApp configs:", error);
-    res.status(500).json({ error: "Error al validar configuraciones" });
-  }
-});
-
-apiRouter.get('/debug/token-info', (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    console.log('=== DEBUG TOKEN INFO ===');
-    console.log('AuthHeader:', authHeader);
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.json({
-        error: 'No token provided',
-        authHeader: authHeader
-      });
-    }
-
-    const token = authHeader.substring(7);
-    console.log('Token:', token);
-    
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-    console.log('Decoded token:', decoded);
-    
-    // Verificar exactamente qué propiedades tiene
-    const user = decoded;
-    console.log('User object:', user);
-    console.log('user.id:', user.id);
-    console.log('user.role:', user.role);
-    console.log('user.level:', user.level);
-    console.log('user.username:', user.username);
-    
-    // Probar las condiciones del middleware problemático
-    const condition1 = !user;
-    const condition2 = user.level !== 'global';
-    const condition3 = user.role !== 'super_admin';
-    const overallCondition = condition1 || condition2 || condition3;
-    
-    console.log('Middleware checks:');
-    console.log('!user:', condition1);
-    console.log('user.level !== global:', condition2);
-    console.log('user.role !== super_admin:', condition3);
-    console.log('Overall (should fail):', overallCondition);
-    
-    res.json({
-      success: true,
-      user: user,
-      middlewareChecks: {
-        noUser: condition1,
-        levelNotGlobal: condition2,
-        roleNotSuperAdmin: condition3,
-        wouldFail: overallCondition
-      },
-      tokenValid: true,
-      jwtSecret: process.env.JWT_SECRET || 'dev-secret'
-    });
-    
-  } catch (error) {
-    console.error('Debug error:', error);
-    res.json({
-      error: error.message,
-      jwtSecret: process.env.JWT_SECRET || 'dev-secret'
-    });
-  }
-});
-
-
-// Endpoint para obtener logs de WhatsApp
-apiRouter.get('/whatsapp/logs', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    
-    // Parámetros de consulta opcionales
-    const { limit = 50, offset = 0, type, phoneNumber, status } = req.query;
-    
-    // Filtros opcionales
-    const filters = {
-      type: type ? String(type) : undefined,
-      phoneNumber: phoneNumber ? String(phoneNumber) : undefined,
-      status: status ? String(status) : undefined,
-    };
-    
-    // Obtener logs según el nivel del usuario
-    let logs;
-    if (user.level === 'global') {
-      // Super admin puede ver todos los logs
-      logs = await storage.getAllWhatsAppLogs(
-        parseInt(String(limit)), 
-        parseInt(String(offset)), 
-        filters
-      );
-    } else {
-      // Usuarios regulares solo ven logs de su tienda
-      logs = await storage.getWhatsAppLogs(
-        user.storeId,
-        parseInt(String(limit)), 
-        parseInt(String(offset)), 
-        filters
-      );
-    }
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.json({
-      success: true,
-      logs,
-      pagination: {
-        limit: parseInt(String(limit)),
-        offset: parseInt(String(offset)),
-        total: logs.length
-      }
-    });
-  } catch (error) {
-    console.error('Error getting WhatsApp logs:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Error al obtener logs de WhatsApp' 
-    });
-  }
-});
-
-// Endpoint adicional para obtener estadísticas de logs
-apiRouter.get('/whatsapp/logs/stats', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    
-    // Obtener estadísticas según el nivel del usuario
-    let stats;
-    if (user.level === 'global') {
-      stats = await storage.getWhatsAppLogStats(); // Para super admin
-    } else {
-      stats = await storage.getWhatsAppLogStats(user.storeId); // Para usuarios de tienda
-    }
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.json({
-      success: true,
-      stats: {
-        total: stats.total || 0,
-        success: stats.success || 0,
-        errors: stats.errors || 0,
-        today: stats.today || 0,
-        thisWeek: stats.thisWeek || 0,
-        thisMonth: stats.thisMonth || 0
-      }
-    });
-  } catch (error) {
-    console.error('Error getting WhatsApp log stats:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Error al obtener estadísticas de logs' 
-    });
-  }
-});
-
-// Endpoint para limpiar logs antiguos (solo super admin)
-apiRouter.delete('/whatsapp/logs/cleanup', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    
-    if (user.level !== 'global' || user.role !== 'super_admin') {
-      return res.status(403).json({ 
-        success: false, 
-        error: 'Super admin access required' 
-      });
-    }
-    
-    const { days = 30 } = req.body;
-    
-    const deletedCount = await storage.cleanupOldWhatsAppLogs(parseInt(String(days)));
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.json({
-      success: true,
-      message: `${deletedCount} logs eliminados`,
-      deletedCount
-    });
-  } catch (error) {
-    console.error('Error cleaning up WhatsApp logs:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Error al limpiar logs antiguos' 
-    });
-  }
-});
-
-// CONVERSACIONES
-apiRouter.get('/conversations', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const conversations = await storage.getAllConversations(user.storeId);
-    res.json(conversations);
-  } catch (error) {
-    console.error('Error fetching conversations:', error);
-    res.status(500).json({ error: 'Failed to fetch conversations' });
-  }
-});
-
-apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const conversation = await storage.getConversation(id);
-    
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-    
-    res.json(conversation);
-  } catch (error) {
-    console.error('Error fetching conversation:', error);
-    res.status(500).json({ error: 'Failed to fetch conversation' });
-  }
-});
-
-// PRODUCTOS - using tenant storage
-
-// ✅ PRODUCTOS - GET (ya está correcto, pero aquí está la versión optimizada)
-apiRouter.get('/products', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    
-    // SIEMPRE usar tenant storage para productos
-    
-    
-    
-    
-    
-    
-    const products = await tenantStorage.getAllProducts();
-    res.json(products);
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    res.status(500).json({ error: 'Failed to fetch products' });
-  }
-});
-
-// ✅ PRODUCTOS - GET BY ID
-apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const id = parseInt(req.params.id);
-    
-    // SIEMPRE usar tenant storage para productos
-    
-    
-    
-    
-    
-    
-    const product = await tenantStorage.getProductById(id);
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
-    }
-    
-    res.json(product);
-  } catch (error) {
-    console.error('Error fetching product:', error);
-    res.status(500).json({ error: 'Failed to fetch product' });
-  }
-});
-
-// ✅ PRODUCTOS - POST (ya está correcto, pero aquí está la versión optimizada)
-apiRouter.post('/products', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    
-    // SIEMPRE usar tenant storage para productos
-    
-    
-    
-    
-    
-    
-    const product = await tenantStorage.createProduct(req.body);
-    res.status(201).json(product);
-  } catch (error) {
-    console.error('Error creating product:', error);
-    res.status(500).json({ error: 'Failed to create product' });
-  }
-});
-
-// ✅ PRODUCTOS - PUT (CORREGIDO para usar tenant storage)
-
-// ✅ PRODUCTOS - PUT (CORREGIDO COMPLETAMENTE)
-apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
-  try {
-    console.log('🔄 PUT /products/:id called');
-    
-    const user = (req as any).user;
-    const id = parseInt(req.params.id);
-    
-    console.log('📋 Update product request:', { 
-      productId: id, 
-      userId: user.id, 
-      storeId: user.storeId,
-      bodyKeys: Object.keys(req.body)
-    });
-
-    // Usar tenant storage
-    
-    
-    
-    
-    
-
-    // Procesar datos del producto
-    const updateData = { ...req.body };
-
-    // ✅ PROCESAR IMÁGENES CORRECTAMENTE
-    if (updateData.images && Array.isArray(updateData.images)) {
-      console.log('🖼️ Processing images:', updateData.images);
-      
-      // Validar que todas las URLs sean válidas
-      const validUrls = updateData.images.filter(url => {
-        try {
-          new URL(url);
-          return true;
-        } catch {
-          console.warn('⚠️ Invalid image URL:', url);
-          return false;
-        }
-      });
-
-      updateData.images = validUrls;
-      console.log('✅ Valid image URLs:', validUrls.length);
-    }
-
-    // Actualizar producto en base de datos
-    const tenantStorage = await getTenantStorageForUser(user);
-    const product = await tenantStorage.updateProduct(id, updateData);
-    
-    if (!product) {
-      console.log('❌ Product not found:', id);
-      return res.status(404).json({ error: 'Product not found' });
-    }
-
-    console.log('✅ Product updated successfully:', product.id);
-    res.json(product);
-
-  } catch (error) {
-    console.error('❌ Error updating product:', error);
-    res.status(500).json({ 
-      error: 'Failed to update product',
-      message: error.message 
-    });
-  }
-});
-// ✅ PRODUCTOS - DELETE (CORREGIDO para usar tenant storage)
-apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const id = parseInt(req.params.id);
-    
-    // ✅ CORREGIDO: Usar tenant storage en lugar de storage global
-    
-    
-    
-    const tenantStorage = await getTenantStorageForUser(user);
-    
-    await tenantStorage.deleteProduct(id);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting product:', error);
-    res.status(500).json({ error: 'Failed to delete product' });
-  }
-});
-
-// Endpoint para probar Supabase Storage
-apiRouter.get('/debug/supabase-storage', async (req, res) => {
-  try {
-    console.log('🔍 Testing Supabase Storage...');
-    
-    // Verificar variables de entorno
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    console.log('Environment check:', {
-      hasUrl: !!supabaseUrl,
-      hasServiceKey: !!serviceKey,
-      urlPreview: supabaseUrl ? supabaseUrl.substring(0, 50) + '...' : null
-    });
-
-    if (!supabaseUrl || !serviceKey) {
-      return res.json({
-        status: 'error',
-        message: 'Missing Supabase environment variables',
-        hasUrl: !!supabaseUrl,
-        hasServiceKey: !!serviceKey
-      });
-    }
-
-    // Importar y probar Supabase
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(supabaseUrl, serviceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    });
-
-    console.log('✅ Supabase client created');
-
-    // Listar buckets
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-    
-    if (bucketsError) {
-      console.error('❌ Buckets error:', bucketsError);
-      return res.json({
-        status: 'error',
-        message: 'Failed to list buckets',
-        error: bucketsError.message
-      });
-    }
-
-    console.log('✅ Buckets retrieved:', buckets?.length);
-
-    // Buscar bucket products
-    const productsBucket = buckets?.find(b => b.name === 'products');
-    console.log('Products bucket found:', !!productsBucket);
-
-    // Probar subida de un archivo PNG válido
-    let uploadTest = null;
-    try {
-      // Crear un pixel transparente PNG válido (1x1 pixel)
-      const pngBuffer = Buffer.from([
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-        0x08, 0x04, 0x00, 0x00, 0x00, 0xB5, 0x1C, 0x0C, 0x02, 0x00, 0x00, 0x00, 0x0B,
-        0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01,
-        0xE5, 0x27, 0xDE, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
-      ]);
-      
-      const testFileName = `debug/test-${Date.now()}.png`;
-      
-      console.log('🔄 Testing PNG upload...');
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('products')
-        .upload(testFileName, pngBuffer, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: 'image/png'
-        });
-
-      if (uploadError) {
-        console.error('❌ Upload error:', uploadError);
-        uploadTest = { success: false, error: uploadError.message };
-      } else {
-        console.log('✅ Upload successful:', uploadData.path);
-        uploadTest = { success: true, path: uploadData.path };
-        
-        // Obtener URL pública
-        const { data: urlData } = supabase.storage
-          .from('products')
-          .getPublicUrl(uploadData.path);
-        
-        uploadTest.publicUrl = urlData.publicUrl;
-        console.log('🔗 Public URL:', urlData.publicUrl);
-        
-        // Limpiar archivo de prueba
-        const { error: deleteError } = await supabase.storage
-          .from('products')
-          .remove([uploadData.path]);
-          
-        if (deleteError) {
-          console.warn('⚠️ Could not delete test file:', deleteError.message);
-        } else {
-          console.log('🧹 Test file cleaned up');
-        }
-      }
-    } catch (error) {
-      console.error('❌ Upload test error:', error);
-      uploadTest = { success: false, error: error.message };
-    }
-
-    const result = {
-      status: 'success',
-      timestamp: new Date().toISOString(),
-      config: {
-        hasUrl: !!supabaseUrl,
-        hasServiceKey: !!serviceKey,
-        urlPreview: supabaseUrl ? supabaseUrl.substring(0, 50) + '...' : null
-      },
-      buckets: buckets?.map(b => ({ 
-        name: b.name, 
-        public: b.public,
-        created_at: b.created_at 
-      })) || [],
-      productsBucket: productsBucket ? {
-        name: productsBucket.name,
-        public: productsBucket.public,
-        created_at: productsBucket.created_at
-      } : null,
-      uploadTest
-    };
-
-    console.log('📊 Final result:', result);
-    res.json(result);
-
-  } catch (error) {
-    console.error('💥 Supabase debug error:', error);
-    res.json({
-      status: 'error',
-      message: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-
-
-// CLIENTES
-apiRouter.get('/customers', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const customers = await storage.getAllCustomers(user.storeId);
-    res.json(customers);
-  } catch (error) {
-    console.error('Error fetching customers:', error);
-    res.status(500).json({ error: 'Failed to fetch customers' });
-  }
-});
-
-apiRouter.post('/customers', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const customerData = { ...req.body, storeId: user.storeId };
-    
-    const customer = await storage.createCustomer(customerData);
-    res.status(201).json(customer);
-  } catch (error) {
-    console.error('Error creating customer:', error);
-    res.status(500).json({ error: 'Failed to create customer' });
-  }
-});
-
-apiRouter.put('/customers/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const customer = await storage.updateCustomer(id, req.body, user.storeId);
-    if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
-    }
-    
-    res.json(customer);
-  } catch (error) {
-    console.error('Error updating customer:', error);
-    res.status(500).json({ error: 'Failed to update customer' });
-  }
-});
-
-apiRouter.delete('/customers/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const success = await storage.deleteCustomer(id, user.storeId);
-    if (!success) {
-      return res.status(404).json({ error: 'Customer not found' });
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting customer:', error);
-    res.status(500).json({ error: 'Failed to delete customer' });
-  }
-});
-
-// MÉTRICAS
-apiRouter.get('/metrics', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const metrics = await storage.getDashboardMetrics(user.storeId);
-    res.json(metrics);
-  } catch (error) {
-    console.error('Error fetching metrics:', error);
-    res.status(500).json({ error: 'Failed to fetch metrics' });
-  }
-});
-
-apiRouter.get('/dashboard/metrics', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const metrics = await storage.getDashboardMetrics(user.storeId);
-    res.json(metrics);
-  } catch (error) {
-    console.error('Error fetching dashboard metrics:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard metrics' });
-  }
-});
-
-// ÓRDENES
-apiRouter.get('/orders', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const orders = await tenantStorage.getAllOrders();
-    res.json(orders);
-  } catch (error) {
-    console.error('Error fetching orders:', error);
-    res.status(500).json({ error: 'Failed to fetch orders' });
-  }
-});
-
-apiRouter.get('/orders/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    
-    const order = await tenantStorage.getOrderById(id);
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-    
-    res.json(order);
-  } catch (error) {
-    console.error('Error fetching order:', error);
-    res.status(500).json({ error: 'Failed to fetch order' });
-  }
-});
-
-apiRouter.post('/orders', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    // Separamos items del resto de campos
-    const { items, ...rest } = req.body as {
-      items: Array<{
-        productId: number;
-        quantity: number;
-        unitPrice: string;
-        totalPrice: string;
-      }>;
-      [key: string]: any;
-    };
-
-    // 1. Construimos el objeto InsertOrder
-    const insertOrder = {
-      ...rest,
-      storeId: user.storeId
-    };
-
-    // 2. Llamamos con los dos argumentos
-    const order = await tenantStorage.createOrder(insertOrder, items);
-    res.status(201).json(order);
-  } catch (error) {
-    console.error('Error creating order:', error);
-    res.status(500).json({ error: 'Failed to create order' });
-  }
-});
-
-
-// USUARIOS (para gestión interna de tienda)
-apiRouter.get('/users', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const users = await tenantStorage.getAllUsers();
-    res.json(users);
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Failed to fetch users' });
-  }
-});
-
-// NOTIFICACIONES
-apiRouter.get('/notifications', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const notifications = await tenantStorage.getUserNotifications(user.id);
-    res.json(notifications);
-  } catch (error) {
-    console.error('Error fetching notifications:', error);
-    res.status(500).json({ error: 'Failed to fetch notifications' });
-  }
-});
-
-// Add this to your index.ts API routes
-apiRouter.get('/notifications/count', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const userId = parseInt(req.query.userId as string) || user.id;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const counts = await tenantStorage.getNotificationCounts(userId);
-    res.json(counts);
-  } catch (error) {
-    console.error('Error fetching notification counts:', error);
-    res.status(500).json({ error: 'Failed to fetch notification counts' });
-  }
-});
-
-// CONFIGURACIONES DE TIENDA
-apiRouter.get('/settings', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const settings = await tenantStorage.getStoreConfig();
-    res.json(settings);
-  } catch (error) {
-    console.error('Error fetching settings:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
-  }
-});
-
-apiRouter.put('/settings', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const settings = await tenantStorage.updateStoreSettings(req.body);
-    res.json(settings);
-  } catch (error) {
-    console.error('Error updating settings:', error);
-    res.status(500).json({ error: 'Failed to update settings' });
-  }
-});
-
-// CONFIGURACIÓN WHATSAPP (específica de tienda)
-apiRouter.get('/whatsapp-settings', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const config = await storage.getWhatsAppConfig(user.storeId);
-    res.json(config || {});
-  } catch (error) {
-    console.error('Error fetching WhatsApp settings:', error);
-    res.status(500).json({ error: 'Failed to fetch WhatsApp settings' });
-  }
-});
-
-apiRouter.put('/whatsapp-settings', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const config = await storage.updateWhatsAppConfig(req.body, user.storeId);
-    res.json(config);
-  } catch (error) {
-    console.error('Error updating WhatsApp settings:', error);
-    res.status(500).json({ error: 'Failed to update WhatsApp settings' });
-  }
-});
-
-// DASHBOARD STATS
-apiRouter.get('/dashboard/stats', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const stats = await storage.getDashboardStats(user.storeId);
-    res.json(stats);
-  } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
-  }
-});
-
-// MENSAJES
-apiRouter.get('/messages', authenticateToken, async (req, res) => {
-  try {
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    
-    const user = (req as any).user;
-    const conversationId = req.query.conversationId as string;
-    
-    if (conversationId) {
-      const messages = await storage.getMessagesByConversation(parseInt(conversationId), user.storeId);
-      res.json(messages);
-    } else {
-      const messages = await storage.getAllMessages(user.storeId);
-      res.json(messages);
-    }
-  } catch (error) {
-    console.error('Error fetching messages:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
-
-apiRouter.post('/messages', authenticateToken, async (req, res) => {
-  try {
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    
-    const user = (req as any).user;
-    const messageData = { ...req.body, storeId: user.storeId };
-    
-    const message = await storage.createMessage(messageData);
-    res.status(201).json(message);
-  } catch (error) {
-    console.error('Error creating message:', error);
-    res.status(500).json({ error: 'Failed to create message' });
-  }
-});
-
-// WEBHOOK WHATSAPP
-apiRouter.get('/webhook', (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-  
-  const verify_token = process.env.WEBHOOK_VERIFY_TOKEN || 'default_verify_token_12345';
-  
-  if (mode === 'subscribe' && token === verify_token) {
-    console.log('✅ Webhook verified successfully');
-    res.status(200).send(challenge);
-  } else {
-    console.log('❌ Webhook verification failed');
-    res.status(403).send('Forbidden');
-  }
-});
-
-apiRouter.post('/webhook', async (req, res) => {
-  try {
-    console.log('📥 Webhook received:', JSON.stringify(req.body, null, 2));
-    
-    // Process WhatsApp webhook
- const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
-await processWhatsAppMessageSimple(req.body);
-    
-    res.status(200).send('OK');
-  } catch (error) {
-    console.error('❌ Error processing webhook:', error);
-    res.status(500).send('Error');
-  }
-});
-
-// TIENDAS (para usuarios regulares)
-apiRouter.get('/stores', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    
-    if (user.level === 'global') {
-      // Super admin puede ver todas las tiendas
-      const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-      const stores = await storage.getAllVirtualStores();
-      res.json(stores);
-    } else {
-      // Usuarios regulares solo ven su tienda
-      const store = await getStoreInfo(user.storeId);
-      res.json(store ? [store] : []);
-    }
-  } catch (error) {
-    console.error('Error fetching stores:', error);
-    res.status(500).json({ error: 'Failed to fetch stores' });
-  }
-});
-
-apiRouter.get('/store-responses', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user as { storeId: number };
-    const responses = await storage.getAllAutoResponses(user.storeId);
-    res.setHeader('Content-Type', 'application/json');
-    res.json(responses);
-  } catch (error) {
-    console.error('Error fetching auto-responses:', error);
-    res.status(500).json({ error: 'Failed to fetch auto-responses' });
-  }
-});
-
-// ================================
-// ENDPOINTS ADICIONALES QUE PUEDEN ESTAR FALTANDO
-// ================================
-
-// AUTO RESPONSES (ya están implementados arriba pero con prefijo /store-responses)
-apiRouter.get('/auto-responses', authenticateToken, async (req, res) => {
-  try {
-    const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-    
-    const user = (req as any).user;
-    const responses = await storage.getAllAutoResponses(user.storeId);
-    res.json(responses);
-  } catch (error) {
-    console.error('Error fetching auto-responses:', error);
-    res.status(500).json({ error: 'Failed to fetch auto-responses' });
-  }
-});
-
-apiRouter.post('/auto-responses', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const responseData = { ...req.body, storeId: user.storeId };
-    
-    const response = await storage.createAutoResponse(responseData);
-    res.status(201).json(response);
-  } catch (error) {
-    console.error('Error creating auto-response:', error);
-    res.status(500).json({ error: 'Failed to create auto-response' });
-  }
-});
-
-apiRouter.put('/auto-responses/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const response = await storage.updateAutoResponse(id, req.body, user.storeId);
-    res.json(response);
-  } catch (error) {
-    console.error('Error updating auto-response:', error);
-    res.status(500).json({ error: 'Failed to update auto-response' });
-  }
-});
-
-apiRouter.delete('/auto-responses/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-
-    await storage.deleteAutoResponse(id, user.storeId);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting auto-response:', error);
-    res.status(500).json({ error: 'Failed to delete auto-response' });
-  }
-});
-
-// ASSIGNMENT RULES
-apiRouter.get('/assignment-rules', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const rules = await storage.getAllAssignmentRules(user.storeId);
-    res.json(rules);
-  } catch (error) {
-    console.error('Error fetching assignment rules:', error);
-    res.status(500).json({ error: 'Failed to fetch assignment rules' });
-  }
-});
-
-// EMPLOYEES/TECHNICIANS
-
-
-
-
-
-
-
-// CART/SHOPPING CART
-apiRouter.get('/cart', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const sessionId = req.query.sessionId as string;
-    const userId = user.id;
-    
-    const cart = await storage.getCart(sessionId, userId, user.storeId);
-    res.json(cart);
-  } catch (error) {
-    console.error('Error fetching cart:', error);
-    res.status(500).json({ error: 'Failed to fetch cart' });
-  }
-});
-
-apiRouter.post('/cart', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const { sessionId, productId, quantity } = req.body as {
-      sessionId: string;
-      productId: number;
-      quantity: number;
-    };
-
-    // 1) Añadimos al carrito con los 3–4 argumentos
-    await storage.addToCart(
-      sessionId,
-      productId,
-      quantity,
-      user.id      // o user.storeId, según tu diseño
-    );
-
-    // 2) (Opcional) Traemos el carrito actualizado y lo devolvemos
-    const cart = await storage.getCart(sessionId, user.id);
-    res.status(201).json(cart);
-  } catch (error) {
-    console.error('Error adding to cart:', error);
-    res.status(500).json({ error: 'Failed to add to cart' });
-  }
-});
-
-
-apiRouter.put('/cart/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    
-    const cartItem = await storage.updateCartItem(id, req.body, user.storeId);
-    if (!cartItem) {
-      return res.status(404).json({ error: 'Cart item not found' });
-    }
-    
-    res.json(cartItem);
-  } catch (error) {
-    console.error('Error updating cart item:', error);
-    res.status(500).json({ error: 'Failed to update cart item' });
-  }
-});
-
-apiRouter.delete('/cart/:productId', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user as { id: number; storeId: number };
-    const sessionId = req.query.sessionId as string;           // ej. /cart/42?sessionId=abc123
-    const productId = parseInt(req.params.productId, 10);
-
-    await storage.removeFromCart(
-      sessionId,
-      productId,
-      user.id                                               // o user.storeId si lo requieres
-    );
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error removing cart item:', error);
-    res.status(500).json({ error: 'Failed to remove cart item' });
-  }
-});
-
-
-// CATEGORIES
-
-// ✅ CATEGORÍAS - GET (ya está correcto, pero aquí está la versión optimizada)
-apiRouter.get('/categories', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    
-    // SIEMPRE usar tenant storage para categorías
-    
-    
-    
-    
-    
-    
-    const categories = await tenantStorage.getAllCategories();
-    res.json(categories);
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({ error: 'Failed to fetch categories' });
-  }
-});
-
-// ✅ CATEGORÍAS - GET BY ID
-apiRouter.get('/categories/:id', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const id = parseInt(req.params.id);
-    
-    
-    
-    
-    
-    
-    
-    const category = await tenantStorage.getCategoryById(id);
-    if (!category) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
-    
-    res.json(category);
-  } catch (error) {
-    console.error('Error fetching category:', error);
-    res.status(500).json({ error: 'Failed to fetch category' });
-  }
-});
-
-// ✅ CATEGORÍAS - POST (NUEVO/CORREGIDO)
 apiRouter.post('/categories', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
-    
-    // Usar tenant storage para categorías
-    
-    
-    
-    
-    
-    
+    const tenantStorage = await getTenantStorageForUser(user);
     const category = await tenantStorage.createCategory(req.body);
     res.status(201).json(category);
   } catch (error) {
@@ -2134,44 +243,31 @@ apiRouter.post('/categories', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ CATEGORÍAS - PUT (NUEVO/CORREGIDO)
 apiRouter.put('/categories/:id', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
     const id = parseInt(req.params.id);
     
-    // Usar tenant storage para categorías
-    
-    
-    
-    
-    
-    
+    const tenantStorage = await getTenantStorageForUser(user);
     const category = await tenantStorage.updateCategory(id, req.body);
+    
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });
     }
     
-    res.json(category);
+
   } catch (error) {
     console.error('Error updating category:', error);
     res.status(500).json({ error: 'Failed to update category' });
   }
 });
 
-// ✅ CATEGORÍAS - DELETE (NUEVO/CORREGIDO)
 apiRouter.delete('/categories/:id', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
     const id = parseInt(req.params.id);
     
-    // Usar tenant storage para categorías
-    
-    
-    
-    
-    
-    
+    const tenantStorage = await getTenantStorageForUser(user);
     await tenantStorage.deleteCategory(id);
     res.json({ success: true });
   } catch (error) {
@@ -2181,37 +277,25 @@ apiRouter.delete('/categories/:id', authenticateToken, async (req, res) => {
 });
 
 // ================================
-// ENDPOINT DE VALIDACIÓN DE SCHEMA
+// SCHEMA VALIDATION ENDPOINTS
 // ================================
 
-// ✅ NUEVO: Endpoint para validar que la tienda usa esquema correcto
 apiRouter.get('/store/schema-status', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
     
-    // Obtener información de la tienda
-    const allStores = await storage.getAllVirtualStores();
-    const store = allStores.find((s: any) => s.id === user.storeId);
+    const store = await masterStorage.getVirtualStore(user.storeId);
     
     if (!store) {
       return res.status(404).json({ error: 'Store not found' });
     }
     
-    // Verificar si tiene schema separado
     const schemaMatch = store.databaseUrl?.match(/schema=([^&]+)/);
     const hasSchema = !!schemaMatch;
     const schemaName = schemaMatch ? schemaMatch[1] : null;
     
-    // Verificar conectividad con tenant storage
     let tenantConnectionValid = false;
     try {
-      
-      
-      
-      
-      
-      
-      // Test básico
       const tenantStorage = await getTenantStorageForUser(user);
       await tenantStorage.getAllProducts();
       tenantConnectionValid = true;
@@ -2235,10 +319,9 @@ apiRouter.get('/store/schema-status', authenticateToken, async (req, res) => {
 });
 
 // ================================
-// MIDDLEWARE DE VALIDACIÓN ADICIONAL
+// TENANT STORAGE VALIDATION MIDDLEWARE
 // ================================
 
-// ✅ NUEVO: Middleware para validar que la tienda tenga tenant storage
 const validateTenantStorage = async (req: any, res: any, next: any) => {
   try {
     const user = req.user;
@@ -2247,9 +330,7 @@ const validateTenantStorage = async (req: any, res: any, next: any) => {
       return res.status(400).json({ error: 'Store ID is required' });
     }
     
-    // Verificar que la tienda existe y tiene schema separado
-    const allStores = await storage.getAllVirtualStores();
-    const store = allStores.find((s: any) => s.id === user.storeId);
+    const store = await masterStorage.getVirtualStore(user.storeId);
     
     if (!store) {
       return res.status(404).json({ error: 'Store not found' });
@@ -2271,8 +352,10 @@ const validateTenantStorage = async (req: any, res: any, next: any) => {
   }
 };
 
+// ================================
+// REPORTS/ANALYTICS ENDPOINTS (TENANT STORAGE)
+// ================================
 
-// REPORTS/ANALYTICS
 apiRouter.get('/reports', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
@@ -2292,13 +375,17 @@ apiRouter.get('/reports', authenticateToken, async (req, res) => {
   }
 });
 
+// ================================
+// FINAL SETUP AND SERVER START
+// ================================
+
 // Mount API router BEFORE any other middleware
 app.use('/api', apiRouter);
 
 // Start the application
 (async () => {
   try {
-    console.log('Starting application...');
+    console.log('🚀 Starting application with migrated storage...');
 
     // Register other routes
     await registerRoutes(app);
@@ -2354,8 +441,6 @@ app.use('/api', apiRouter);
           return res.status(403).json({ error: "Super admin access required" });
         }
 
-        const storage = new DatabaseStorage(process.env.DATABASE_URL!);
-        
         const storeData = {
           name: req.body.name,
           description: req.body.description || "",
@@ -2363,7 +448,7 @@ app.use('/api', apiRouter);
           isActive: req.body.isActive ?? true
         };
         
-        const result = await storage.createStore(storeData);
+        const result = await masterStorage.createStore(storeData);
         
         console.log('✅ Store created successfully:', result.name);
         res.json(result);
@@ -2379,7 +464,6 @@ app.use('/api', apiRouter);
         const storeId = parseInt(req.params.id);
         console.log('Store ID:', storeId);
         
-        // Obtener información de la tienda desde master DB
         const store = await getStoreInfo(storeId);
         
         if (!store) {
@@ -2400,11 +484,9 @@ app.use('/api', apiRouter);
           recommendations: [] as string[]
         };
 
-        // Validar arquitectura multi-tenant
         try {
           const tenantDb = await getTenantDb(storeId);
           
-          // Verificar existencia de tablas críticas
           const criticalTables = [
             'users', 'customers', 'products', 'orders', 'order_items',
             'conversations', 'messages', 'auto_responses', 'store_settings',
@@ -2421,14 +503,12 @@ app.use('/api', apiRouter);
             }
           }
 
-          // Verificar usuarios
           const users = await tenantDb.select().from(schema.users).limit(1);
           if (users.length === 0) {
             validationResults.issues.push('⚠️ No hay usuarios creados');
             validationResults.recommendations.push('Crear al menos un usuario administrador');
           }
 
-          // Verificar configuración de WhatsApp
           const whatsappConfig = await tenantDb.select().from(schema.whatsappSettings).limit(1);
           if (whatsappConfig.length === 0) {
             validationResults.issues.push('⚠️ WhatsApp no configurado');
@@ -2441,7 +521,6 @@ app.use('/api', apiRouter);
           validationResults.recommendations.push('Verificar configuración de base de datos y permisos');
         }
 
-        // Determinar estado general
         const valid = validationResults.issues.length === 0;
         const status = valid ? '✅ OPERACIONAL' : '❌ REQUIERE ATENCIÓN';
 
@@ -2461,150 +540,6 @@ app.use('/api', apiRouter);
         });
       }
     });
-
-apiRouter.post('/upload-image', authenticateToken, upload.single('image') as any, async (req, res) => {
-  try {
-    console.log('🔄 Upload image endpoint called');
-    
-    if (!req.file) {
-      return res.status(400).json({ error: 'No image file provided' });
-    }
-
-    const user = (req as any).user;
-    console.log('📋 User:', { id: user.id, storeId: user.storeId });
-    console.log('📁 File:', { 
-      name: req.file.originalname, 
-      size: req.file.size, 
-      type: req.file.mimetype 
-    });
-
-    // Crear instancia del storage manager
-    const storageManager = new SupabaseStorageManager(user.storeId);
-
-    // Convertir buffer a File-like object para Supabase
-    const file = {
-      name: req.file.originalname,
-      size: req.file.size,
-      type: req.file.mimetype,
-      arrayBuffer: async () => req.file!.buffer.buffer.slice(
-        req.file!.buffer.byteOffset,
-        req.file!.buffer.byteOffset + req.file!.buffer.byteLength
-      )
-    } as File;
-
-    // Subir a Supabase Storage
-    const imageUrl = await storageManager.uploadFile(file);
-    
-    console.log('✅ Image uploaded successfully:', imageUrl);
-    
-    res.json({ 
-      success: true, 
-      imageUrl: imageUrl,
-      message: 'Imagen subida exitosamente'
-    });
-
-  } catch (error) {
-    console.error('❌ Error uploading image:', error);
-    res.status(500).json({ 
-      error: 'Failed to upload image',
-      message: (error as Error).message 
-    });
-  }
-});
-
-// 🔥 ENDPOINT FALTANTE: POST /api/process-image-url
-apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
-  try {
-    console.log('🔄 Process image URL endpoint called');
-    
-    const { imageUrl } = req.body;
-    
-    if (!imageUrl) {
-      return res.status(400).json({ error: 'No imageUrl provided' });
-    }
-
-    const user = (req as any).user;
-    console.log('📋 User:', { id: user.id, storeId: user.storeId });
-    console.log('🔗 URL to process:', imageUrl);
-
-    // Validar URL básica
-    try {
-      new URL(imageUrl);
-    } catch {
-      return res.status(400).json({ error: 'Invalid URL format' });
-    }
-
-    // Crear instancia del storage manager
-    const storageManager = new SupabaseStorageManager(user.storeId);
-
-    // Procesar URL (descargar y subir a Supabase)
-    const processedImageUrl = await storageManager.uploadFromUrl(imageUrl);
-    
-    console.log('✅ URL processed successfully:', processedImageUrl);
-    
-    res.json({ 
-      success: true, 
-      imageUrl: processedImageUrl,
-      originalUrl: imageUrl,
-      message: 'URL procesada exitosamente'
-    });
-
-  } catch (error) {
-    console.error('❌ Error processing image URL:', error);
-    res.status(500).json({ 
-      error: 'Failed to process image URL',
-      message: (error as Error).message 
-    });
-  }
-});
-
-
-// 🔥 ENDPOINT FALTANTE: POST /api/process-image-url
-apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
-  try {
-    console.log('🔄 Process image URL endpoint called');
-    
-    const { imageUrl } = req.body;
-    
-    if (!imageUrl) {
-      return res.status(400).json({ error: 'No imageUrl provided' });
-    }
-
-    const user = (req as any).user;
-    console.log('📋 User:', { id: user.id, storeId: user.storeId });
-    console.log('🔗 URL to process:', imageUrl);
-
-    // Validar URL básica
-    try {
-      new URL(imageUrl);
-    } catch {
-      return res.status(400).json({ error: 'Invalid URL format' });
-    }
-
-    // Crear instancia del storage manager
-    const storageManager = new SupabaseStorageManager(user.storeId);
-
-    // Procesar URL (descargar y subir a Supabase)
-    const processedImageUrl = await storageManager.uploadFromUrl(imageUrl);
-    
-    console.log('✅ URL processed successfully:', processedImageUrl);
-    
-    res.json({ 
-      success: true, 
-      imageUrl: processedImageUrl,
-      originalUrl: imageUrl,
-      message: 'URL procesada exitosamente'
-    });
-
-  } catch (error) {
-    console.error('❌ Error processing image URL:', error);
-    res.status(500).json({ 
-      error: 'Failed to process image URL',
-      message: error.message 
-    });
-  }
-});
-
 
     app.get('/api/super-admin/stores/:id/validate-migration', async (req, res) => {
       try {
@@ -2672,7 +607,6 @@ apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
       }
     });
 
-    // Seed default data if needed
     try {
       console.log('Starting seed process...');
       // await seedAutoResponses();
@@ -2680,14 +614,12 @@ apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
       console.log('Seed process completed.');
     } catch (error) {
       console.error('Error during seeding:', error);
-      // Continue without seeding if there's an error
     }
 
     // Error handling middleware
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
-
       res.status(status).json({ message });
       console.error('Express error handler:', err);
     });
@@ -2696,11 +628,9 @@ apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
     if (process.env.NODE_ENV === 'development') {
       await setupVite(app, server);
     } else {
-      // In production, serve static files
       const staticPath = path.join(__dirname, 'public');
       app.use(express.static(staticPath));
       
-      // Handle client-side routing - MUST be last
       app.get('*', (req, res) => {
         if (req.path.startsWith('/api/')) {
           return res.status(404).json({ error: 'API endpoint not found' });
@@ -2710,102 +640,97 @@ apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
     }
 
     // WebSocket Server
-  const wss = new WebSocketServer({ 
-  server,
-  handleProtocols: () => false, // Evitar problemas de protocolo
-  perMessageDeflate: false // Desactivar compresión que puede causar errores
-});
+    const wss = new WebSocketServer({ 
+      server,
+      handleProtocols: () => false,
+      perMessageDeflate: false
+    });
 
-wss.on('connection', (socket, req) => {
-  console.log('🔌 Nueva conexión WebSocket');
-  
-  try {
-    const url = new URL(req.url!, `http://${req.headers.host}`);
-    const token = url.searchParams.get('token');
-
-    console.log('Token recibido:', token ? `${token.substring(0, 10)}...` : 'null');
-
-    // Validar JWT token si existe
-    if (token) {
+    wss.on('connection', (socket, req) => {
+      console.log('🔌 Nueva conexión WebSocket');
+      
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
-        console.log('✅ Token válido para WebSocket');
+        const url = new URL(req.url!, `http://${req.headers.host}`);
+        const token = url.searchParams.get('token');
 
-        // Send welcome message
-        socket.send(JSON.stringify({ 
-          type: 'connected', 
-          message: 'WebSocket conectado exitosamente',
-          timestamp: new Date().toISOString()
-        }));
-      } catch (jwtError: any) {
-        console.log('❌ Token JWT inválido:', jwtError.message);
-        socket.send(JSON.stringify({ 
-          type: 'error', 
-          message: 'Token inválido' 
-        }));
-        socket.close(1000, 'Token inválido');
-        return;
+        console.log('Token recibido:', token ? `${token.substring(0, 10)}...` : 'null');
+
+        if (token) {
+          try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+            console.log('✅ Token válido para WebSocket');
+
+            socket.send(JSON.stringify({ 
+              type: 'connected', 
+              message: 'WebSocket conectado exitosamente',
+              timestamp: new Date().toISOString()
+            }));
+          } catch (jwtError: any) {
+            console.log('❌ Token JWT inválido:', jwtError.message);
+            socket.send(JSON.stringify({ 
+              type: 'error', 
+              message: 'Token inválido' 
+            }));
+            socket.close(1000, 'Token inválido');
+            return;
+          }
+        } else {
+          console.log('⚠️ WebSocket sin token - conexión limitada');
+          socket.send(JSON.stringify({ 
+            type: 'connected', 
+            message: 'WebSocket conectado sin autenticación' 
+          }));
+        }
+
+        socket.on('message', (data) => {
+          try {
+            const message = data.toString();
+            console.log('📩 Mensaje WebSocket:', message);
+            
+            socket.send(JSON.stringify({ 
+              type: 'echo', 
+              data: message 
+            }));
+          } catch (error) {
+            console.error('Error procesando mensaje WebSocket:', error);
+          }
+        });
+
+        socket.on('close', (code, reason) => {
+          console.log(`🔌 WebSocket cerrado - Code: ${code}, Reason: ${reason}`);
+        });
+
+        socket.on('error', (error) => {
+          console.error('❌ Error WebSocket:', error.message);
+        });
+
+      } catch (error: any) {
+        console.error('❌ Error configurando WebSocket:', error.message);
+        try {
+          socket.close(1000, 'Error de configuración');
+        } catch (closeError) {
+          console.error('Error cerrando socket:', closeError);
+        }
       }
-    } else {
-      console.log('⚠️ WebSocket sin token - conexión limitada');
-      socket.send(JSON.stringify({ 
-        type: 'connected', 
-        message: 'WebSocket conectado sin autenticación' 
-      }));
-    }
-
-    // Handle incoming messages
-    socket.on('message', (data) => {
-      try {
-        const message = data.toString();
-        console.log('📩 Mensaje WebSocket:', message);
-        
-        // Echo back para testing
-        socket.send(JSON.stringify({ 
-          type: 'echo', 
-          data: message 
-        }));
-      } catch (error) {
-        console.error('Error procesando mensaje WebSocket:', error);
-      }
     });
 
-    // Handle connection close
-    socket.on('close', (code, reason) => {
-      console.log(`🔌 WebSocket cerrado - Code: ${code}, Reason: ${reason}`);
+    wss.on('error', (error) => {
+      console.error('❌ Error del servidor WebSocket:', error.message);
     });
 
-    // Handle errors
-    socket.on('error', (error) => {
-      console.error('❌ Error WebSocket:', error.message);
-    });
+    console.log('🔌 Servidor WebSocket configurado con manejo de errores mejorado');
 
-  } catch (error: any) {
-    console.error('❌ Error configurando WebSocket:', error.message);
-    try {
-      socket.close(1000, 'Error de configuración');
-    } catch (closeError) {
-      console.error('Error cerrando socket:', closeError);
-    }
-  }
-});
-
-// Manejar errores del servidor WebSocket
-wss.on('error', (error) => {
-  console.error('❌ Error del servidor WebSocket:', error.message);
-});
-
-console.log('🔌 Servidor WebSocket configurado con manejo de errores mejorado');
-
-    // IMPORTANT: Use PORT from environment variable for Railway
     const PORT = parseInt(process.env.PORT || process.env.RAILWAY_PORT || '5000', 10);
-    const HOST = '0.0.0.0'; // Listen on all interfaces
+    const HOST = '0.0.0.0';
 
     server.listen(PORT, HOST, () => {
       log(`🚀 Server running on ${HOST}:${PORT}`);
       log(`📱 Health check available at http://${HOST}:${PORT}/api/health`);
       log(`🔌 WebSocket server ready`);
       log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      log(`✅ Storage migration applied successfully`);
+      log(`🏢 Master Storage: Global operations`);
+      log(`🏪 Tenant Storage: Store-specific operations`);
     });
 
   } catch (error) {
@@ -2813,3 +738,1663 @@ console.log('🔌 Servidor WebSocket configurado con manejo de errores mejorado'
     process.exit(1);
   }
 })();
+
+
+  
+
+ 
+
+
+// ================================
+// SCHEMA VALIDATION ENDPOINTS
+// ================================
+
+apiRouter.get('/store/schema-status', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    const store = await masterStorage.getVirtualStore(user.storeId);
+    
+    if (!store) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    
+    const schemaMatch = store.databaseUrl?.match(/schema=([^&]+)/);
+    const hasSchema = !!schemaMatch;
+    const schemaName = schemaMatch ? schemaMatch[1] : null;
+    
+    let tenantConnectionValid = false;
+    try {
+      const tenantStorage = await getTenantStorageForUser(user);
+      await tenantStorage.getAllProducts();
+      tenantConnectionValid = true;
+    } catch (error) {
+      console.error('Tenant connection test failed:', error);
+    }
+    
+    res.json({
+      storeId: user.storeId,
+      storeName: store.name,
+      hasSchema,
+      schemaName,
+      tenantConnectionValid,
+      status: hasSchema && tenantConnectionValid ? 'ready' : 'needs_migration',
+      databaseUrl: store.databaseUrl
+    });
+  } catch (error) {
+    console.error('Error checking schema status:', error);
+    res.status(500).json({ error: 'Failed to check schema status' });
+  }
+});
+
+// ================================
+// REPORTS/ANALYTICS ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/reports', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { type, startDate, endDate } = req.query;
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    const reports = await tenantStorage.getReports({
+      type: type as string,
+      startDate: startDate as string,
+      endDate: endDate as string
+    });
+    
+    res.json(reports);
+  } catch (error) {
+    console.error('Error fetching reports:', error);
+    res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+});
+
+// ================================
+// DEBUG TOKEN INFO ENDPOINT
+// ================================
+
+apiRouter.get('/debug/token-info', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    console.log('=== DEBUG TOKEN INFO ===');
+    console.log('AuthHeader:', authHeader);
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.json({
+        error: 'No token provided',
+        authHeader: authHeader
+      });
+    }
+
+    const token = authHeader.substring(7);
+    console.log('Token:', token);
+    
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    console.log('Decoded token:', decoded);
+    
+    const user = decoded;
+    console.log('User object:', user);
+    console.log('user.id:', user.id);
+    console.log('user.role:', user.role);
+    console.log('user.level:', user.level);
+    console.log('user.username:', user.username);
+    
+    const condition1 = !user;
+    const condition2 = user.level !== 'global';
+    const condition3 = user.role !== 'super_admin';
+    const overallCondition = condition1 || condition2 || condition3;
+    
+    console.log('Middleware checks:');
+    console.log('!user:', condition1);
+    console.log('user.level !== global:', condition2);
+    console.log('user.role !== super_admin:', condition3);
+    console.log('Overall (should fail):', overallCondition);
+    
+    res.json({
+      success: true,
+      user: user,
+      middlewareChecks: {
+        noUser: condition1,
+        levelNotGlobal: condition2,
+        roleNotSuperAdmin: condition3,
+        wouldFail: overallCondition
+      },
+      tokenValid: true,
+      jwtSecret: process.env.JWT_SECRET || 'dev-secret'
+    });
+    
+  } catch (error) {
+    console.error('Debug error:', error);
+    res.json({
+      error: error.message,
+      jwtSecret: process.env.JWT_SECRET || 'dev-secret'
+    });
+  }
+});
+
+// ================================
+// IMAGE UPLOAD ENDPOINTS
+// ================================
+
+apiRouter.post('/upload-image', authenticateToken, upload.single('image') as any, async (req, res) => {
+  try {
+    console.log('🔄 Upload image endpoint called');
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const user = (req as any).user;
+    console.log('📋 User:', { id: user.id, storeId: user.storeId });
+    console.log('📁 File:', { 
+      name: req.file.originalname, 
+      size: req.file.size, 
+      type: req.file.mimetype 
+    });
+
+    const storageManager = new SupabaseStorageManager(user.storeId);
+
+    const file = {
+      name: req.file.originalname,
+      size: req.file.size,
+      type: req.file.mimetype,
+      arrayBuffer: async () => req.file!.buffer.buffer.slice(
+        req.file!.buffer.byteOffset,
+        req.file!.buffer.byteOffset + req.file!.buffer.byteLength
+      )
+    } as File;
+
+    const imageUrl = await storageManager.uploadFile(file);
+    
+    console.log('✅ Image uploaded successfully:', imageUrl);
+    
+    res.json({ 
+      success: true, 
+      imageUrl: imageUrl,
+      message: 'Imagen subida exitosamente'
+    });
+
+  } catch (error) {
+    console.error('❌ Error uploading image:', error);
+    res.status(500).json({ 
+      error: 'Failed to upload image',
+      message: (error as Error).message 
+    });
+  }
+});
+
+apiRouter.post('/process-image-url', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔄 Process image URL endpoint called');
+    
+    const { imageUrl } = req.body;
+    
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'No imageUrl provided' });
+    }
+
+    const user = (req as any).user;
+    console.log('📋 User:', { id: user.id, storeId: user.storeId });
+    console.log('🔗 URL to process:', imageUrl);
+
+    try {
+      new URL(imageUrl);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    const storageManager = new SupabaseStorageManager(user.storeId);
+    const processedImageUrl = await storageManager.uploadFromUrl(imageUrl);
+    
+    console.log('✅ URL processed successfully:', processedImageUrl);
+    
+    res.json({ 
+      success: true, 
+      imageUrl: processedImageUrl,
+      originalUrl: imageUrl,
+      message: 'URL procesada exitosamente'
+    });
+
+  } catch (error) {
+    console.error('❌ Error processing image URL:', error);
+    res.status(500).json({ 
+      error: 'Failed to process image URL',
+      message: (error as Error).message 
+    });
+  }
+});
+
+
+
+
+// Agregar al apiRouter en server/index.ts
+
+apiRouter.get('/auth/debug-token', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    console.log('=== DEBUGGING TOKEN ===');
+    console.log('AuthHeader:', authHeader);
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.json({
+        error: 'No token provided',
+        authHeader: authHeader
+      });
+    }
+
+    const token = authHeader.substring(7);
+    console.log('Token extracted:', token.substring(0, 20) + '...');
+    
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    console.log('Token decoded:', decoded);
+    
+    const hasStoreId = 'storeId' in decoded;
+    const isObject = typeof decoded === 'object' && decoded !== null;
+    
+    res.json({
+      success: true,
+      decoded: {
+        id: decoded.id,
+        username: decoded.username,
+        role: decoded.role,
+        storeId: decoded.storeId,
+      },
+      validation: {
+        isObject,
+        hasStoreId,
+        storeIdValue: decoded.storeId,
+        middlewareWouldPass: isObject && hasStoreId
+      }
+    });
+    
+  } catch (error) {
+    res.json({
+      error: error.message,
+      step: 'JWT verification failed'
+    });
+  }
+});
+
+apiRouter.get('/auth/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'No token provided' });
+  }
+
+  const token = authHeader.substring(7);
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      id: decoded.id,
+      username: decoded.username,
+      role: decoded.role,
+      storeId: decoded.storeId,
+    });
+  } catch (error) {
+    res.status(401).json({ success: false, message: 'Invalid token' });
+  }
+});
+
+
+// ================================
+// PUBLIC STORE ENDPOINTS
+// ================================
+
+app.get('/api/public/stores/:storeId/products', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    // ✅ USAR MASTER STORAGE PARA VERIFICAR TIENDA
+    const store = await masterStorage.getVirtualStore(storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    // ✅ USAR TENANT STORAGE PARA PRODUCTOS
+    const tenantStorage = await storageFactory.getTenantStorage(storeId);
+    const products = await tenantStorage.getAllProducts();
+    const activeProducts = products.filter((product: any) => product.isActive !== false);
+    
+    res.json(activeProducts);
+  } catch (error) {
+    console.error('Error fetching public products:', error);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+app.get('/api/public/stores/:storeId/categories', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    const store = await masterStorage.getVirtualStore(storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    const tenantStorage = await storageFactory.getTenantStorage(storeId);
+    const categories = await tenantStorage.getAllCategories();
+    
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching public categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+app.get('/api/public/stores/:storeId/info', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    // ✅ USAR MASTER STORAGE
+    const store = await masterStorage.getVirtualStore(storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    const publicInfo = {
+      id: store.id,
+      name: store.name,
+      description: store.description,
+      domain: store.domain,
+      phone: store.whatsappNumber,
+      address: store.address,
+      logoUrl: store.logo,
+      timezone: store.timezone,
+      currency: store.currency,
+      isActive: store.isActive
+    };
+    
+    res.json(publicInfo);
+  } catch (error) {
+    console.error('Error fetching public store info:', error);
+    res.status(500).json({ error: 'Failed to fetch store info' });
+  }
+});
+
+app.get('/api/public/stores/:storeId/catalog-config', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    if (!storeId || isNaN(storeId)) {
+      return res.status(400).json({ error: 'Valid store ID required' });
+    }
+
+    const store = await masterStorage.getVirtualStore(storeId);
+    
+    if (!store || !store.isActive) {
+      return res.status(404).json({ error: 'Store not found or inactive' });
+    }
+
+    const catalogConfig = {
+      storeName: store.name,
+      whatsappNumber: store.whatsappNumber,
+      showPrices: true,
+      allowOrders: true,
+      currency: store.currency || 'MXN',
+      timezone: store.timezone || 'America/Mexico_City'
+    };
+    
+    res.json(catalogConfig);
+  } catch (error) {
+    console.error('Error fetching catalog config:', error);
+    res.status(500).json({ error: 'Failed to fetch catalog config' });
+  }
+});
+
+// ================================
+// EMPLOYEES ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/employees', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const employees = await tenantStorage.getAllEmployeeProfiles();
+    res.json(employees);
+  } catch (error) {
+    console.error('Error fetching tenant employees:', error);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
+apiRouter.post('/employees', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const employee = await tenantStorage.createEmployeeProfile(req.body);
+    res.status(201).json(employee);
+  } catch (error) {
+    console.error('Error creating tenant employee profile:', error);
+    res.status(500).json({ error: 'Failed to create employee profile' });
+  }
+});
+
+apiRouter.put('/employees/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    const employee = await tenantStorage.updateEmployeeProfile(id, req.body);
+    
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    res.json(employee);
+  } catch (error) {
+    console.error('Error updating tenant employee:', error);
+    res.status(500).json({ error: 'Failed to update employee' });
+  }
+});
+
+apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    const success = await tenantStorage.deleteEmployeeProfile(id);
+    
+    if (!success) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting tenant employee:', error);
+    res.status(500).json({ error: 'Failed to delete employee' });
+  }
+});
+
+apiRouter.post('/employees/generate-id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { department } = req.body;
+    
+    if (!department) {
+      return res.status(400).json({ error: 'Department is required' });
+    }
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    const employeeId = await tenantStorage.generateEmployeeId(department);
+    res.json({ employeeId });
+  } catch (error) {
+    console.error('Error generating tenant employee ID:', error);
+    res.status(500).json({ error: 'Failed to generate employee ID' });
+  }
+});
+
+// ================================
+// AUTO RESPONSES ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/store-responses', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user as { storeId: number };
+    const responses = await masterStorage.getAllAutoResponses(user.storeId);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(responses);
+  } catch (error) {
+    console.error('Error fetching auto-responses:', error);
+    res.status(500).json({ error: 'Failed to fetch auto-responses' });
+  }
+});
+
+apiRouter.post('/store-responses', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret') as AuthUser;
+    
+    const data = {
+      ...req.body,
+      storeId: payload.storeId
+    };
+    
+    const response = await masterStorage.createAutoResponse(data);
+    res.setHeader('Content-Type', 'application/json');
+    res.status(201).json(response);
+  } catch (error) {
+    console.error('Error creating auto-response:', error);
+    res.status(500).json({ error: 'Failed to create auto-response' });
+  }
+});
+
+apiRouter.put('/store-responses/:id', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, process.env.JWT_SECRET || 'dev-secret') as AuthUser;
+    
+    const id = parseInt(req.params.id);
+    const response = await masterStorage.updateAutoResponse(id, req.body, payload.storeId);
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json(response);
+  } catch (error) {
+    console.error('Error updating auto-response:', error);
+    res.status(500).json({ error: 'Failed to update auto-response' });
+  }
+});
+
+apiRouter.delete('/store-responses/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user as AuthUser;
+    const id = parseInt(req.params.id);
+    await masterStorage.deleteAutoResponse(id, user.storeId);
+
+    res.setHeader('Content-Type', 'application/json');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting auto-response:', error);
+    res.status(500).json({ error: 'Failed to delete auto-response' });
+  }
+});
+
+apiRouter.post('/store-responses/reset-defaults', async (req, res) => {
+  try {
+    const authHeader = Array.isArray(req.headers.authorization)
+      ? req.headers.authorization[0]
+      : req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as AuthUser;
+
+    await masterStorage.resetAutoResponsesToDefault(payload.storeId!);
+    res.json({ success: true, message: 'Auto-responses reset to defaults' });
+  } catch (error) {
+    console.error('Error resetting auto-responses:', error);
+    res.status(500).json({ error: 'Failed to reset auto-responses' });
+  }
+});
+
+// ================================
+// SUPER ADMIN WHATSAPP MANAGEMENT (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/super-admin/whatsapp-configs', async (req, res) => {
+  try {
+    const configs = await masterStorage.getAllWhatsAppConfigs();
+    const stores = await masterStorage.getAllVirtualStores();
+    
+    const enrichedConfigs = configs.map(config => ({
+      ...config,
+      storeName: stores.find(store => store.id === config.storeId)?.name || `Tienda ${config.storeId}`
+    }));
+    
+    res.json(enrichedConfigs);
+  } catch (error) {
+    console.error("Error getting WhatsApp configs:", error);
+    res.status(500).json({ error: "Error al obtener configuraciones de WhatsApp" });
+  }
+});
+
+apiRouter.post('/super-admin/whatsapp-configs', async (req, res) => {
+  try {
+    const { z } = await import('zod');
+    const configData = z.object({
+      storeId: z.number(),
+      accessToken: z.string().min(1, "Token de acceso requerido"),
+      phoneNumberId: z.string().min(1, "Phone Number ID requerido"),
+      webhookVerifyToken: z.string().min(1, "Webhook verify token requerido"),
+      businessAccountId: z.string().optional(),
+      appId: z.string().optional(),
+      isActive: z.boolean().default(true)
+    }).parse(req.body);
+
+    const config = await masterStorage.updateWhatsAppConfig(configData, configData.storeId);
+    res.json({ success: true, config });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: "Datos de configuración inválidos", details: error.errors });
+    }
+    console.error("Error creating WhatsApp config:", error);
+    res.status(500).json({ error: "Error al crear configuración de WhatsApp" });
+  }
+});
+
+apiRouter.put('/super-admin/whatsapp-configs/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { z } = await import('zod');
+    const configData = z.object({
+      storeId: z.number(),
+      accessToken: z.string().min(1, "Token de acceso requerido"),
+      phoneNumberId: z.string().min(1, "Phone Number ID requerido"),
+      webhookVerifyToken: z.string().min(1, "Webhook verify token requerido"),
+      businessAccountId: z.string().optional(),
+      appId: z.string().optional(),
+      isActive: z.boolean().default(true)
+    }).parse(req.body);
+
+    const config = await masterStorage.updateWhatsAppConfigById(id, configData);
+    res.json({ success: true, config });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: "Datos de configuración inválidos", details: error.errors });
+    }
+    console.error("Error updating WhatsApp config:", error);
+    res.status(500).json({ error: "Error al actualizar configuración de WhatsApp" });
+  }
+});
+
+apiRouter.delete('/super-admin/whatsapp-configs/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const success = await masterStorage.deleteWhatsAppConfig(id);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "Configuración no encontrada" });
+    }
+  } catch (error) {
+    console.error("Error deleting WhatsApp config:", error);
+    res.status(500).json({ error: "Error al eliminar configuración de WhatsApp" });
+  }
+});
+
+apiRouter.post('/super-admin/whatsapp-test', async (req, res) => {
+  try {
+    const { storeId } = req.body;
+    
+    const config = await masterStorage.getWhatsAppConfig(storeId);
+    
+    if (!config) {
+      return res.json({
+        success: false,
+        error: "NO_CONFIG",
+        message: "No se encontró configuración de WhatsApp para esta tienda"
+      });
+    }
+
+    const missingFields = [];
+    if (!config.accessToken) missingFields.push("accessToken");
+    if (!config.phoneNumberId) missingFields.push("phoneNumberId");
+    
+    if (missingFields.length > 0) {
+      return res.json({
+        success: false,
+        error: "MISSING_CREDENTIALS",
+        message: "Faltan credenciales obligatorias",
+        missingFields
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Configuración válida",
+      details: {
+        storeId,
+        phoneNumberId: config.phoneNumberId,
+        hasToken: !!config.accessToken,
+        hasBusinessAccountId: !!config.businessAccountId,
+        isActive: config.isActive
+      }
+    });
+  } catch (error) {
+    console.error("Error testing WhatsApp config:", error);
+    res.status(500).json({ error: "Error al probar configuración" });
+  }
+});
+
+apiRouter.get('/super-admin/stores', async (req, res) => {
+  try {
+    const stores = await masterStorage.getAllVirtualStores();
+    res.json(stores);
+  } catch (error) {
+    console.error("Error getting stores:", error);
+    res.status(500).json({ error: "Error al obtener tiendas" });
+  }
+});
+
+// ================================
+// WHATSAPP LOGS ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/whatsapp/logs', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    const { limit = 50, offset = 0, type, phoneNumber, status } = req.query;
+    
+    const filters = {
+      type: type ? String(type) : undefined,
+      phoneNumber: phoneNumber ? String(phoneNumber) : undefined,
+      status: status ? String(status) : undefined,
+    };
+    
+    let logs;
+    if (user.level === 'global') {
+      logs = await masterStorage.getAllWhatsAppLogs(
+        parseInt(String(limit)), 
+        parseInt(String(offset)), 
+        filters
+      );
+    } else {
+      logs = await masterStorage.getWhatsAppLogs(
+        user.storeId,
+        parseInt(String(limit)), 
+        parseInt(String(offset)), 
+        filters
+      );
+    }
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      logs,
+      pagination: {
+        limit: parseInt(String(limit)),
+        offset: parseInt(String(offset)),
+        total: logs.length
+      }
+    });
+  } catch (error) {
+    console.error('Error getting WhatsApp logs:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error al obtener logs de WhatsApp' 
+    });
+  }
+});
+
+apiRouter.get('/whatsapp/logs/stats', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    let stats;
+    if (user.level === 'global') {
+      stats = await masterStorage.getWhatsAppLogStats();
+    } else {
+      stats = await masterStorage.getWhatsAppLogStats(user.storeId);
+    }
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      stats: {
+        total: stats.total || 0,
+        success: stats.success || 0,
+        errors: stats.errors || 0,
+        today: stats.today || 0,
+        thisWeek: stats.thisWeek || 0,
+        thisMonth: stats.thisMonth || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error getting WhatsApp log stats:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error al obtener estadísticas de logs' 
+    });
+  }
+});
+
+apiRouter.delete('/whatsapp/logs/cleanup', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    if (user.level !== 'global' || user.role !== 'super_admin') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Super admin access required' 
+      });
+    }
+    
+    const { days = 30 } = req.body;
+    
+    const deletedCount = await masterStorage.cleanupOldWhatsAppLogs(parseInt(String(days)));
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      message: `${deletedCount} logs eliminados`,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('Error cleaning up WhatsApp logs:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Error al limpiar logs antiguos' 
+    });
+  }
+});
+
+// ================================
+// CONVERSATIONS ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/conversations', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const conversations = await masterStorage.getAllConversations(user.storeId);
+    res.json(conversations);
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const conversation = await masterStorage.getConversation(id);
+    
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    
+    res.json(conversation);
+  } catch (error) {
+    console.error('Error fetching conversation:', error);
+    res.status(500).json({ error: 'Failed to fetch conversation' });
+  }
+});
+
+// ================================
+// PRODUCTS ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/products', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const products = await tenantStorage.getAllProducts();
+    res.json(products);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    const product = await tenantStorage.getProductById(id);
+    
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    
+    res.json(product);
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({ error: 'Failed to fetch product' });
+  }
+});
+
+apiRouter.post('/products', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const product = await tenantStorage.createProduct(req.body);
+    res.status(201).json(product);
+  } catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: 'Failed to create product' });
+  }
+});
+
+apiRouter.put('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔄 PUT /products/:id called');
+    
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    console.log('📋 Update product request:', { 
+      productId: id, 
+      userId: user.id, 
+      storeId: user.storeId,
+      bodyKeys: Object.keys(req.body)
+    });
+
+    const tenantStorage = await getTenantStorageForUser(user);
+    const updateData = { ...req.body };
+
+    if (updateData.images && Array.isArray(updateData.images)) {
+      console.log('🖼️ Processing images:', updateData.images);
+      
+      const validUrls = updateData.images.filter(url => {
+        try {
+          new URL(url);
+          return true;
+        } catch {
+          console.warn('⚠️ Invalid image URL:', url);
+          return false;
+        }
+      });
+
+      updateData.images = validUrls;
+      console.log('✅ Valid image URLs:', validUrls.length);
+    }
+
+    const product = await tenantStorage.updateProduct(id, updateData);
+    
+    if (!product) {
+      console.log('❌ Product not found:', id);
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    console.log('✅ Product updated successfully:', product.id);
+    res.json(product);
+
+  } catch (error) {
+    console.error('❌ Error updating product:', error);
+    res.status(500).json({ 
+      error: 'Failed to update product',
+      message: error.message 
+    });
+  }
+});
+
+apiRouter.delete('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    await tenantStorage.deleteProduct(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+});
+
+// ================================
+// DEBUG SUPABASE STORAGE
+// ================================
+
+apiRouter.get('/debug/supabase-storage', async (req, res) => {
+  try {
+    console.log('🔍 Testing Supabase Storage...');
+    
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    console.log('Environment check:', {
+      hasUrl: !!supabaseUrl,
+      hasServiceKey: !!serviceKey,
+      urlPreview: supabaseUrl ? supabaseUrl.substring(0, 50) + '...' : null
+    });
+
+    if (!supabaseUrl || !serviceKey) {
+      return res.json({
+        status: 'error',
+        message: 'Missing Supabase environment variables',
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!serviceKey
+      });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    console.log('✅ Supabase client created');
+
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+    
+    if (bucketsError) {
+      console.error('❌ Buckets error:', bucketsError);
+      return res.json({
+        status: 'error',
+        message: 'Failed to list buckets',
+        error: bucketsError.message
+      });
+    }
+
+    console.log('✅ Buckets retrieved:', buckets?.length);
+
+    const productsBucket = buckets?.find(b => b.name === 'products');
+    console.log('Products bucket found:', !!productsBucket);
+
+    let uploadTest = null;
+    try {
+      const pngBuffer = Buffer.from([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x04, 0x00, 0x00, 0x00, 0xB5, 0x1C, 0x0C, 0x02, 0x00, 0x00, 0x00, 0x0B,
+        0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01,
+        0xE5, 0x27, 0xDE, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+      ]);
+      
+      const testFileName = `debug/test-${Date.now()}.png`;
+      
+      console.log('🔄 Testing PNG upload...');
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('products')
+        .upload(testFileName, pngBuffer, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: 'image/png'
+        });
+
+      if (uploadError) {
+        console.error('❌ Upload error:', uploadError);
+        uploadTest = { success: false, error: uploadError.message };
+      } else {
+        console.log('✅ Upload successful:', uploadData.path);
+        uploadTest = { success: true, path: uploadData.path };
+        
+        const { data: urlData } = supabase.storage
+          .from('products')
+          .getPublicUrl(uploadData.path);
+        
+        uploadTest.publicUrl = urlData.publicUrl;
+        console.log('🔗 Public URL:', urlData.publicUrl);
+        
+        const { error: deleteError } = await supabase.storage
+          .from('products')
+          .remove([uploadData.path]);
+          
+        if (deleteError) {
+          console.warn('⚠️ Could not delete test file:', deleteError.message);
+        } else {
+          console.log('🧹 Test file cleaned up');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Upload test error:', error);
+      uploadTest = { success: false, error: error.message };
+    }
+
+    const result = {
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      config: {
+        hasUrl: !!supabaseUrl,
+        hasServiceKey: !!serviceKey,
+        urlPreview: supabaseUrl ? supabaseUrl.substring(0, 50) + '...' : null
+      },
+      buckets: buckets?.map(b => ({ 
+        name: b.name, 
+        public: b.public,
+        created_at: b.created_at 
+      })) || [],
+      productsBucket: productsBucket ? {
+        name: productsBucket.name,
+        public: productsBucket.public,
+        created_at: productsBucket.created_at
+      } : null,
+      uploadTest
+    };
+
+    console.log('📊 Final result:', result);
+    res.json(result);
+
+  } catch (error) {
+    console.error('💥 Supabase debug error:', error);
+    res.json({
+      status: 'error',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ================================
+// CUSTOMERS ENDPOINTS (MASTER STORAGE - TRANSITIONAL)
+// ================================
+
+apiRouter.get('/customers', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const customers = await masterStorage.getAllCustomers(user.storeId);
+    res.json(customers);
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+});
+
+apiRouter.post('/customers', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const customerData = { ...req.body, storeId: user.storeId };
+    
+    const customer = await masterStorage.createCustomer(customerData);
+    res.status(201).json(customer);
+  } catch (error) {
+    console.error('Error creating customer:', error);
+    res.status(500).json({ error: 'Failed to create customer' });
+  }
+});
+
+apiRouter.put('/customers/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const customer = await masterStorage.updateCustomer(id, req.body, user.storeId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    
+    res.json(customer);
+  } catch (error) {
+    console.error('Error updating customer:', error);
+    res.status(500).json({ error: 'Failed to update customer' });
+  }
+});
+
+apiRouter.delete('/customers/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const success = await masterStorage.deleteCustomer(id, user.storeId);
+    if (!success) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting customer:', error);
+    res.status(500).json({ error: 'Failed to delete customer' });
+  }
+});
+
+// ================================
+// METRICS & DASHBOARD (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/metrics', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const metrics = await masterStorage.getDashboardMetrics(user.storeId);
+    res.json(metrics);
+  } catch (error) {
+    console.error('Error fetching metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch metrics' });
+  }
+});
+
+apiRouter.get('/dashboard/metrics', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const metrics = await masterStorage.getDashboardMetrics(user.storeId);
+    res.json(metrics);
+  } catch (error) {
+    console.error('Error fetching dashboard metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard metrics' });
+  }
+});
+
+apiRouter.get('/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const stats = await masterStorage.getDashboardStats(user.storeId);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+});
+
+// ================================
+// ORDERS ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/orders', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const orders = await tenantStorage.getAllOrders();
+    res.json(orders);
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+apiRouter.get('/orders/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    
+    const order = await tenantStorage.getOrderById(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    res.json(order);
+  } catch (error) {
+    console.error('Error fetching order:', error);
+    res.status(500).json({ error: 'Failed to fetch order' });
+  }
+});
+
+apiRouter.post('/orders', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const { items, ...rest } = req.body as {
+      items: Array<{
+        productId: number;
+        quantity: number;
+        unitPrice: string;
+        totalPrice: string;
+      }>;
+      [key: string]: any;
+    };
+
+    const insertOrder = {
+      ...rest,
+      storeId: user.storeId
+    };
+
+    const order = await tenantStorage.createOrder(insertOrder, items);
+    res.status(201).json(order);
+  } catch (error) {
+    console.error('Error creating order:', error);
+    res.status(500).json({ error: 'Failed to create order' });
+  }
+});
+
+// ================================
+// USERS ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/users', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const users = await tenantStorage.getAllUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// ================================
+// NOTIFICATIONS ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/notifications', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const notifications = await tenantStorage.getUserNotifications(user.id);
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+apiRouter.get('/notifications/count', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const userId = parseInt(req.query.userId as string) || user.id;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const counts = await tenantStorage.getNotificationCounts(userId);
+    res.json(counts);
+  } catch (error) {
+    console.error('Error fetching notification counts:', error);
+    res.status(500).json({ error: 'Failed to fetch notification counts' });
+  }
+});
+
+// ================================
+// STORE SETTINGS ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/settings', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const settings = await tenantStorage.getStoreConfig();
+    res.json(settings);
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+apiRouter.put('/settings', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const settings = await tenantStorage.updateStoreSettings(req.body);
+    res.json(settings);
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// ================================
+// WHATSAPP SETTINGS ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/whatsapp-settings', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const config = await masterStorage.getWhatsAppConfig(user.storeId);
+    res.json(config || {});
+  } catch (error) {
+    console.error('Error fetching WhatsApp settings:', error);
+    res.status(500).json({ error: 'Failed to fetch WhatsApp settings' });
+  }
+});
+
+apiRouter.put('/whatsapp-settings', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const config = await masterStorage.updateWhatsAppConfig(req.body, user.storeId);
+    res.json(config);
+  } catch (error) {
+    console.error('Error updating WhatsApp settings:', error);
+    res.status(500).json({ error: 'Failed to update WhatsApp settings' });
+  }
+});
+
+// ================================
+// MESSAGES ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/messages', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const conversationId = req.query.conversationId as string;
+    
+    if (conversationId) {
+      const messages = await masterStorage.getMessagesByConversation(parseInt(conversationId), user.storeId);
+      res.json(messages);
+    } else {
+      const messages = await masterStorage.getAllMessages(user.storeId);
+      res.json(messages);
+    }
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+apiRouter.post('/messages', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const messageData = { ...req.body, storeId: user.storeId };
+    
+    const message = await masterStorage.createMessage(messageData);
+    res.status(201).json(message);
+  } catch (error) {
+    console.error('Error creating message:', error);
+    res.status(500).json({ error: 'Failed to create message' });
+  }
+});
+
+// ================================
+// WEBHOOK WHATSAPP ENDPOINTS
+// ================================
+
+apiRouter.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  
+  const verify_token = process.env.WEBHOOK_VERIFY_TOKEN || 'default_verify_token_12345';
+  
+  if (mode === 'subscribe' && token === verify_token) {
+    console.log('✅ Webhook verified successfully');
+    res.status(200).send(challenge);
+  } else {
+    console.log('❌ Webhook verification failed');
+    res.status(403).send('Forbidden');
+  }
+});
+
+apiRouter.post('/webhook', async (req, res) => {
+  try {
+    console.log('📥 Webhook received:', JSON.stringify(req.body, null, 2));
+    
+    const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
+    await processWhatsAppMessageSimple(req.body);
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('❌ Error processing webhook:', error);
+    res.status(500).send('Error');
+  }
+});
+
+// ================================
+// STORES ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/stores', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    
+    if (user.level === 'global') {
+      const stores = await masterStorage.getAllVirtualStores();
+      res.json(stores);
+    } else {
+      const store = await getStoreInfo(user.storeId);
+      res.json(store ? [store] : []);
+    }
+  } catch (error) {
+    console.error('Error fetching stores:', error);
+    res.status(500).json({ error: 'Failed to fetch stores' });
+  }
+});
+
+// ================================
+// AUTO RESPONSES ALIAS ENDPOINTS
+// ================================
+
+apiRouter.get('/auto-responses', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const responses = await masterStorage.getAllAutoResponses(user.storeId);
+    res.json(responses);
+  } catch (error) {
+    console.error('Error fetching auto-responses:', error);
+    res.status(500).json({ error: 'Failed to fetch auto-responses' });
+  }
+});
+
+apiRouter.post('/auto-responses', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const responseData = { ...req.body, storeId: user.storeId };
+    
+    const response = await masterStorage.createAutoResponse(responseData);
+    res.status(201).json(response);
+  } catch (error) {
+    console.error('Error creating auto-response:', error);
+    res.status(500).json({ error: 'Failed to create auto-response' });
+  }
+});
+
+apiRouter.put('/auto-responses/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const response = await masterStorage.updateAutoResponse(id, req.body, user.storeId);
+    res.json(response);
+  } catch (error) {
+    console.error('Error updating auto-response:', error);
+    res.status(500).json({ error: 'Failed to update auto-response' });
+  }
+});
+
+apiRouter.delete('/auto-responses/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+
+    await masterStorage.deleteAutoResponse(id, user.storeId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting auto-response:', error);
+    res.status(500).json({ error: 'Failed to delete auto-response' });
+  }
+});
+
+// ================================
+// ASSIGNMENT RULES ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/assignment-rules', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const rules = await masterStorage.getAllAssignmentRules(user.storeId);
+    res.json(rules);
+  } catch (error) {
+    console.error('Error fetching assignment rules:', error);
+    res.status(500).json({ error: 'Failed to fetch assignment rules' });
+  }
+});
+
+// ================================
+// CART ENDPOINTS (MASTER STORAGE)
+// ================================
+
+apiRouter.get('/cart', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const sessionId = req.query.sessionId as string;
+    const userId = user.id;
+    
+    const cart = await masterStorage.getCart(sessionId, userId, user.storeId);
+    res.json(cart);
+  } catch (error) {
+    console.error('Error fetching cart:', error);
+    res.status(500).json({ error: 'Failed to fetch cart' });
+  }
+});
+
+apiRouter.post('/cart', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { sessionId, productId, quantity } = req.body as {
+      sessionId: string;
+      productId: number;
+      quantity: number;
+    };
+
+    await masterStorage.addToCart(sessionId, productId, quantity, user.id);
+    const cart = await masterStorage.getCart(sessionId, user.id);
+    res.status(201).json(cart);
+  } catch (error) {
+    console.error('Error adding to cart:', error);
+    res.status(500).json({ error: 'Failed to add to cart' });
+  }
+});
+
+apiRouter.put('/cart/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = (req as any).user;
+    
+    const cartItem = await masterStorage.updateCartItem(id, req.body, user.storeId);
+    if (!cartItem) {
+      return res.status(404).json({ error: 'Cart item not found' });
+    }
+    
+    res.json(cartItem);
+  } catch (error) {
+    console.error('Error updating cart item:', error);
+    res.status(500).json({ error: 'Failed to update cart item' });
+  }
+});
+
+apiRouter.delete('/cart/:productId', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user as { id: number; storeId: number };
+    const sessionId = req.query.sessionId as string;
+    const productId = parseInt(req.params.productId, 10);
+
+    await masterStorage.removeFromCart(sessionId, productId, user.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing cart item:', error);
+    res.status(500).json({ error: 'Failed to remove cart item' });
+  }
+});
+
+// ================================
+// CATEGORIES ENDPOINTS (TENANT STORAGE)
+// ================================
+
+apiRouter.get('/categories', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const tenantStorage = await getTenantStorageForUser(user);
+    const categories = await tenantStorage.getAllCategories();
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+apiRouter.get('/categories/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const id = parseInt(req.params.id);
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    const category = await tenantStorage.getCategoryById(id);
+    
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    res.json(category);  // ✅ CORREGIDO - Agregué "category)" para cerrar la función
+  } catch (error) {
+    console.error('Error fetching category:', error);
+    res.status(500).json({ error: 'Failed to fetch category' });
+  }
+});
+

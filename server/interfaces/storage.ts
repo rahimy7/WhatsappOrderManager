@@ -201,6 +201,8 @@ export interface MasterStorage extends BaseStorage {
   listGlobalUsers(): Promise<GlobalUser[]>;
   updateGlobalUser(id: number, updates: Partial<InsertGlobalUser>): Promise<GlobalUser>;
   deleteGlobalUser(id: number): Promise<boolean>;
+  getGlobalUserByUsername(username: string): Promise<GlobalUser | null>;
+
 
   // ========================================
   // STORE USERS (Owners, Admins)
