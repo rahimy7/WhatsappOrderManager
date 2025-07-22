@@ -1663,7 +1663,7 @@ apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
   }
 });
 
-apiRouter.post('/api/products', authenticateToken, async (req, res) => {
+apiRouterapp.post('/api/products', authenticateToken, async (req, res) => {
   try {
     console.log('🔄 POST /api/products called');
     console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
@@ -1741,6 +1741,10 @@ apiRouter.post('/api/products', authenticateToken, async (req, res) => {
       message: error.message,
       details: error.stack
     });
+  }
+}) catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: 'Failed to create product' });
   }
 });
 

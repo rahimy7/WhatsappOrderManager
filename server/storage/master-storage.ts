@@ -1335,4 +1335,142 @@ export class MasterStorageService implements MasterStorage {
       errors
     };
   }
+
+
+  // ================================
+// VIRTUAL STORES MANAGEMENT
+// ================================
+async createVirtualStore(storeData: any) {
+  try {
+    const [store] = await this.db
+      .insert(schema.virtualStores)
+      .values({
+        ...storeData,
+        createdAt: new Date()
+      })
+      .returning();
+
+    console.log('✅ Virtual store created:', store.name);
+    return store;
+  } catch (error) {
+    console.error('Error creating virtual store:', error);
+    throw error;
+  }
+}
+
+async updateVirtualStore(id: number, updateData: any) {
+  try {
+    const [store] = await this.db
+      .update(schema.virtualStores)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(schema.virtualStores.id, id))
+      .returning();
+
+    if (!store) {
+      throw new Error('Virtual store not found');
+    }
+
+    console.log('✅ Virtual store updated:', store.name);
+    return store;
+  } catch (error) {
+    console.error('Error updating virtual store:', error);
+    throw error;
+  }
+}
+
+async deleteVirtualStore(id: number) {
+  try {
+    const [deletedStore] = await this.db
+      .delete(schema.virtualStores)
+      .where(eq(schema.virtualStores.id, id))
+      .returning();
+
+    if (!deletedStore) {
+      throw new Error('Virtual store not found');
+    }
+
+    console.log('✅ Virtual store deleted:', deletedStore.name);
+    return true;
+  } catch (error) {
+    console.error('Error deleting virtual store:', error);
+    throw error;
+  }
+}
+
+// ================================
+// WHATSAPP LOGS (COMPLETAR)
+// ================================
+async getWhatsAppLogs(storeId: number, phoneNumberId?: string, limit = 50, offset = 0) {
+  try {
+    let query = this.db
+      .select()
+      .from(schema.whatsappLogs)
+      .where(eq(schema.whatsappLogs.storeId, storeId));
+
+    if (phoneNumberId) {
+      query = query.where(eq(schema.whatsappLogs.phoneNumberId, phoneNumberId));
+    }
+
+    const logs = await query
+      .orderBy(desc(schema.whatsappLogs.timestamp))
+      .limit(limit)
+      .offset(offset);
+
+    return logs;
+  } catch (error) {
+    console.error('Error getting WhatsApp logs:', error);
+    return [];
+  }
+}
+
+
+
+
+
+// ================================
+// USER MANAGEMENT (COMPLETAR)
+// ================================
+async getAllGlobalUsers() {
+  try {
+    return await this.db
+      .select()
+      .from(schema.systemUsers)
+      .where(eq(schema.systemUsers.level, 'global'))
+      .orderBy(desc(schema.systemUsers.createdAt));
+  } catch (error) {
+    console.error('Error getting global users:', error);
+    return [];
+  }
+}
+
+
+async updateUser(id: number, updateData: any) {
+  try {
+    const [user] = await this.db
+      .update(schema.systemUsers)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(schema.systemUsers.id, id))
+      .returning();
+
+    return user;
+  } catch (error) {
+    console.error('Error updating user:', error);
+    throw error;
+  }
+}
+
+async deleteUser(id: number) {
+  try {
+    await this.db
+      .delete(schema.systemUsers)
+      .where(eq(schema.systemUsers.id, id));
+
+    console.log('✅ User deleted:', id);
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    throw error;
+  }
+}
+
+
 }

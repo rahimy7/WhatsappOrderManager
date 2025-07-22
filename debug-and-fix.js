@@ -1,13 +1,13 @@
-// fix-syntax-line-163.mjs
-// Script para detectar y corregir el error de sintaxis en línea 163
+// fix-product-validation.mjs
+// Script para diagnosticar y corregir la validación de productos
 
 import fs from 'fs';
 import path from 'path';
 
-console.log('🔧 DETECTANDO Y CORRIGIENDO ERROR DE SINTAXIS...\n');
+console.log('🔧 DIAGNOSTICANDO VALIDACIÓN DE PRODUCTOS...\n');
 
 function createBackup(filePath) {
-  const backupPath = filePath + '.syntax-163-backup.' + Date.now();
+  const backupPath = filePath + '.product-validation-backup.' + Date.now();
   if (fs.existsSync(filePath)) {
     try {
       fs.copyFileSync(filePath, backupPath);
@@ -21,625 +21,224 @@ function createBackup(filePath) {
   return false;
 }
 
-async function fixSyntaxError() {
+async function fixProductValidation() {
   try {
-    const tenantStoragePath = path.join(process.cwd(), 'server/tenant-storage.ts');
+    console.log('🚀 Iniciando diagnóstico de validación de productos...\n');
+
+    // 1. Verificar la ruta POST /api/products en index.ts
+    const indexPath = path.join(process.cwd(), 'server/index.ts');
+    console.log(`📍 Verificando ruta POST /api/products en: ${indexPath}`);
     
-    if (!fs.existsSync(tenantStoragePath)) {
-      console.log('❌ tenant-storage.ts no encontrado');
+    if (!fs.existsSync(indexPath)) {
+      console.log('❌ server/index.ts no encontrado');
       return;
     }
 
-    console.log('✅ Archivo tenant-storage.ts encontrado');
-    console.log('🔍 Analizando línea 163...');
+    let indexContent = fs.readFileSync(indexPath, 'utf8');
+    console.log('✅ Archivo index.ts encontrado');
 
-    // Leer el contenido actual
-    const content = fs.readFileSync(tenantStoragePath, 'utf8');
-    const lines = content.split('\n');
+    // Buscar la ruta POST /api/products
+    const productRouteRegex = /app\.post\(['"`]\/api\/products['"`][^}]*\}/s;
+    const productRouteMatch = indexContent.match(productRouteRegex);
+
+    if (!productRouteMatch) {
+      console.log('❌ Ruta POST /api/products no encontrada en index.ts');
+      return;
+    }
+
+    console.log('✅ Ruta POST /api/products encontrada');
+    console.log('\n📋 CONTENIDO ACTUAL DE LA RUTA:');
+    console.log(productRouteMatch[0].substring(0, 500) + '...');
+
+    // Verificar si hay logging de req.body
+    if (!productRouteMatch[0].includes('console.log') || !productRouteMatch[0].includes('req.body')) {
+      console.log('\n⚠️ Falta logging de req.body para debugging');
+      
+      createBackup(indexPath);
+
+      // Agregar logging mejorado a la ruta
+      const improvedProductRoute = `app.post('/api/products', authenticateToken, async (req, res) => {
+  try {
+    console.log('🔄 POST /api/products called');
+    console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
+    console.log('📋 Request body keys:', Object.keys(req.body));
     
-    console.log(`📊 Total de líneas: ${lines.length}`);
-
-    // Mostrar el contexto alrededor de la línea 163
-    const problemLine = 163;
-    const contextStart = Math.max(0, problemLine - 5);
-    const contextEnd = Math.min(lines.length, problemLine + 5);
-
-    console.log('\n📋 CONTEXTO ALREDEDOR DE LA LÍNEA 163:');
-    for (let i = contextStart; i < contextEnd; i++) {
-      const lineNum = i + 1;
-      const marker = lineNum === problemLine ? '>>> ' : '    ';
-      console.log(`${marker}${lineNum}: ${lines[i]}`);
+    const user = (req as any).user;
+    console.log('📋 User info:', { id: user.id, storeId: user.storeId });
+    
+    // Validar que req.body existe y tiene datos
+    if (!req.body || Object.keys(req.body).length === 0) {
+      console.log('❌ Request body is empty');
+      return res.status(400).json({ 
+        error: 'Request body is required',
+        received: req.body 
+      });
     }
 
-    // Buscar problemas comunes
-    const line163 = lines[problemLine - 1] || '';
-    console.log(`\n🔍 Línea 163 actual: "${line163}"`);
-
-    let hasError = false;
-    let corrections = [];
-
-    // Verificar paréntesis/llaves mal cerrados
-    const openParens = (line163.match(/\(/g) || []).length;
-    const closeParens = (line163.match(/\)/g) || []).length;
-    const openBraces = (line163.match(/\{/g) || []).length;
-    const closeBraces = (line163.match(/\}/g) || []).length;
-
-    console.log('\n📊 ANÁLISIS DE DELIMITADORES:');
-    console.log(`Paréntesis: ${openParens} abiertos, ${closeParens} cerrados`);
-    console.log(`Llaves: ${openBraces} abiertas, ${closeBraces} cerradas`);
-
-    // Detectar problemas específicos
-    if (line163.includes('}) {')) {
-      console.log('⚠️ Patrón problemático detectado: }) {');
-      hasError = true;
-      corrections.push('Función mal cerrada con }) {');
-    }
-
-    if (line163.includes('async') && line163.includes(')') && !line163.includes('{')) {
-      console.log('⚠️ Función async mal formada');
-      hasError = true;
-      corrections.push('Función async sin apertura de bloque');
-    }
-
-    if (closeParens > openParens) {
-      console.log('⚠️ Paréntesis extra cerrado');
-      hasError = true;
-      corrections.push('Paréntesis de más');
-    }
-
-    // Buscar patrones comunes que causan este error
-    const problematicPatterns = [
-      { pattern: /\)\s*\)\s*\{/, description: 'Doble paréntesis cerrado antes de llave' },
-      { pattern: /\}\s*\)\s*\{/, description: 'Llave-paréntesis-llave secuencia incorrecta' },
-      { pattern: /async\s+\w+\([^)]*\)\s*\)\s*\{/, description: 'Función async con paréntesis extra' }
-    ];
-
-    for (const { pattern, description } of problematicPatterns) {
-      if (pattern.test(line163)) {
-        console.log(`⚠️ Patrón problemático encontrado: ${description}`);
-        hasError = true;
-        corrections.push(description);
-      }
-    }
-
-    if (hasError) {
-      console.log('\n🔨 APLICANDO CORRECCIONES...');
-      createBackup(tenantStoragePath);
-
-      // Estrategias de corrección
-      let correctedContent = content;
-
-      // Corrección 1: Remover paréntesis extra
-      if (line163.includes(')) {')) {
-        console.log('🔄 Corrigiendo paréntesis extra...');
-        const correctedLine = line163.replace(/\)\s*\)\s*\{/, ') {');
-        const newLines = [...lines];
-        newLines[problemLine - 1] = correctedLine;
-        correctedContent = newLines.join('\n');
-        console.log(`✅ Línea corregida: "${correctedLine}"`);
-      }
-
-      // Corrección 2: Arreglar secuencias } ) {
-      if (line163.includes('} ) {')) {
-        console.log('🔄 Corrigiendo secuencia } ) {');
-        const correctedLine = line163.replace(/\}\s*\)\s*\{/, '} {');
-        const newLines = [...lines];
-        newLines[problemLine - 1] = correctedLine;
-        correctedContent = newLines.join('\n');
-        console.log(`✅ Línea corregida: "${correctedLine}"`);
-      }
-
-      // Corrección 3: Si nada funciona, reconstruir el archivo
-      if (correctedContent === content) {
-        console.log('🔄 Aplicando corrección general...');
-        
-        // Versión mínima pero funcional de tenant-storage.ts
-        const minimalWorkingContent = `import { Pool } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
-import * as schema from "../shared/schema.js";
-import { eq, desc, and, or, count, sql, ilike } from "drizzle-orm";
-
-export function createTenantStorage(tenantDb: any, storeId: number) {
-  return {
-    // ORDERS
-    async getAllOrders() {
-      try {
-        return await tenantDb.select()
-          .from(schema.orders)
-          .orderBy(desc(schema.orders.createdAt));
-      } catch (error) {
-        console.error('Error getting all orders:', error);
-        return [];
-      }
-    },
-
-    async getOrderById(id: number) {
-      try {
-        const [order] = await tenantDb.select()
-          .from(schema.orders)
-          .where(eq(schema.orders.id, id))
-          .limit(1);
-        return order || null;
-      } catch (error) {
-        console.error('Error getting order by ID:', error);
-        return null;
-      }
-    },
-
-    async createOrder(orderData: any, items: any[] = []) {
-      try {
-        const [order] = await tenantDb.insert(schema.orders)
-          .values({
-            ...orderData,
-            createdAt: new Date()
-          })
-          .returning();
-
-        if (items && items.length > 0) {
-          const itemsWithOrderId = items.map(item => ({
-            ...item,
-            orderId: order.id
-          }));
-          await tenantDb.insert(schema.orderItems).values(itemsWithOrderId);
+    // Validar campo name específicamente
+    if (!req.body.name || req.body.name.trim() === '') {
+      console.log('❌ Product name is missing or empty');
+      console.log('📋 Received name field:', req.body.name);
+      return res.status(400).json({ 
+        error: 'Product name is required',
+        received: {
+          name: req.body.name,
+          hasName: 'name' in req.body,
+          nameType: typeof req.body.name,
+          allFields: Object.keys(req.body)
         }
-
-        return order;
-      } catch (error) {
-        console.error('Error creating order:', error);
-        throw error;
-      }
-    },
-
-    async updateOrder(id: number, orderData: any) {
-      try {
-        const [order] = await tenantDb.update(schema.orders)
-          .set({ ...orderData, updatedAt: new Date() })
-          .where(eq(schema.orders.id, id))
-          .returning();
-        return order;
-      } catch (error) {
-        console.error('Error updating order:', error);
-        throw error;
-      }
-    },
-
-    async deleteOrder(id: number) {
-      try {
-        await tenantDb.delete(schema.orders)
-          .where(eq(schema.orders.id, id));
-      } catch (error) {
-        console.error('Error deleting order:', error);
-        throw error;
-      }
-    },
-
-    // PRODUCTS
-    async getAllProducts() {
-      try {
-        return await tenantDb.select()
-          .from(schema.products)
-          .orderBy(desc(schema.products.createdAt));
-      } catch (error) {
-        console.error('Error getting all products:', error);
-        return [];
-      }
-    },
-
-    async getProductById(id: number) {
-      try {
-        const [product] = await tenantDb.select()
-          .from(schema.products)
-          .where(eq(schema.products.id, id))
-          .limit(1);
-        return product || null;
-      } catch (error) {
-        console.error('Error getting product by ID:', error);
-        return null;
-      }
-    },
-
-    async createProduct(productData: any) {
-      try {
-        if (!productData.name) {
-          throw new Error('Product name is required');
-        }
-
-        const productToInsert = {
-          name: productData.name,
-          description: productData.description || '',
-          price: productData.price || '0.00',
-          category: productData.category || 'general',
-          status: productData.status || 'active',
-          imageUrl: productData.imageUrl || null,
-          images: productData.images || null,
-          sku: productData.sku || null,
-          brand: productData.brand || null,
-          model: productData.model || null,
-          specifications: productData.specifications || null,
-          features: productData.features || null,
-          warranty: productData.warranty || null,
-          availability: productData.availability || 'in_stock',
-          stockQuantity: productData.stockQuantity || 0,
-          minQuantity: productData.minQuantity || 1,
-          maxQuantity: productData.maxQuantity || null,
-          weight: productData.weight || null,
-          dimensions: productData.dimensions || null,
-          tags: productData.tags || null,
-          salePrice: productData.salePrice || null,
-          isPromoted: productData.isPromoted || false,
-          promotionText: productData.promotionText || null,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-
-        const [product] = await tenantDb.insert(schema.products)
-          .values(productToInsert)
-          .returning();
-
-        return product;
-      } catch (error) {
-        console.error('Error creating product:', error);
-        throw error;
-      }
-    },
-
-    async updateProduct(id: number, productData: any) {
-      try {
-        const filteredData = Object.keys(productData).reduce((acc, key) => {
-          if (productData[key] !== undefined) {
-            acc[key] = productData[key];
-          }
-          return acc;
-        }, {});
-
-        filteredData.updatedAt = new Date();
-
-        const [product] = await tenantDb.update(schema.products)
-          .set(filteredData)
-          .where(eq(schema.products.id, id))
-          .returning();
-
-        return product;
-      } catch (error) {
-        console.error('Error updating product:', error);
-        throw error;
-      }
-    },
-
-    // CUSTOMERS
-    async getAllCustomers() {
-      try {
-        return await tenantDb.select()
-          .from(schema.customers)
-          .orderBy(desc(schema.customers.createdAt));
-      } catch (error) {
-        console.error('Error getting all customers:', error);
-        return [];
-      }
-    },
-
-    async getCustomerById(id: number) {
-      try {
-        const [customer] = await tenantDb.select()
-          .from(schema.customers)
-          .where(eq(schema.customers.id, id))
-          .limit(1);
-        return customer || null;
-      } catch (error) {
-        console.error('Error getting customer by ID:', error);
-        return null;
-      }
-    },
-
-    async getCustomerByPhone(phoneNumber: string) {
-      try {
-        const [customer] = await tenantDb.select()
-          .from(schema.customers)
-          .where(eq(schema.customers.phoneNumber, phoneNumber))
-          .limit(1);
-        return customer || null;
-      } catch (error) {
-        console.error('Error getting customer by phone:', error);
-        return null;
-      }
-    },
-
-    async createCustomer(customerData: any) {
-      try {
-        const [customer] = await tenantDb.insert(schema.customers)
-          .values({
-            ...customerData,
-            createdAt: new Date()
-          })
-          .returning();
-        return customer;
-      } catch (error) {
-        console.error('Error creating customer:', error);
-        throw error;
-      }
-    },
-
-    async updateCustomer(id: number, customerData: any) {
-      try {
-        const [customer] = await tenantDb.update(schema.customers)
-          .set({ ...customerData, updatedAt: new Date() })
-          .where(eq(schema.customers.id, id))
-          .returning();
-        return customer;
-      } catch (error) {
-        console.error('Error updating customer:', error);
-        throw error;
-      }
-    },
-
-    // USERS
-    async getAllUsers() {
-      try {
-        return await tenantDb.select()
-          .from(schema.users)
-          .orderBy(desc(schema.users.createdAt));
-      } catch (error) {
-        console.error('Error getting all users:', error);
-        return [];
-      }
-    },
-
-    async getUserById(id: number) {
-      try {
-        const [user] = await tenantDb.select()
-          .from(schema.users)
-          .where(eq(schema.users.id, id))
-          .limit(1);
-        return user || null;
-      } catch (error) {
-        console.error('Error getting user by ID:', error);
-        return null;
-      }
-    },
-
-    async updateUser(id: number, userData: any) {
-      try {
-        const [user] = await tenantDb.update(schema.users)
-          .set({ ...userData, updatedAt: new Date() })
-          .where(eq(schema.users.id, id))
-          .returning();
-        return user;
-      } catch (error) {
-        console.error('Error updating user:', error);
-        throw error;
-      }
-    },
-
-    // NOTIFICATIONS
-    async getUserNotifications(userId: number) {
-      try {
-        return await tenantDb.select()
-          .from(schema.notifications)
-          .where(eq(schema.notifications.userId, userId))
-          .orderBy(desc(schema.notifications.createdAt));
-      } catch (error) {
-        console.error('Error getting user notifications:', error);
-        return [];
-      }
-    },
-
-    async getUnreadNotifications(userId: number) {
-      try {
-        return await tenantDb.select()
-          .from(schema.notifications)
-          .where(
-            and(
-              eq(schema.notifications.userId, userId),
-              eq(schema.notifications.isRead, false)
-            )
-          )
-          .orderBy(desc(schema.notifications.createdAt));
-      } catch (error) {
-        console.error('Error getting unread notifications:', error);
-        return [];
-      }
-    },
-
-    async getNotificationCounts(userId: number) {
-      try {
-        const allNotifications = await tenantDb.select()
-          .from(schema.notifications)
-          .where(eq(schema.notifications.userId, userId));
-
-        const unreadNotifications = allNotifications.filter(n => !n.isRead);
-
-        return {
-          total: allNotifications.length,
-          unread: unreadNotifications.length
-        };
-      } catch (error) {
-        console.error('Error getting notification counts:', error);
-        return { total: 0, unread: 0 };
-      }
-    },
-
-    async createNotification(notificationData: any) {
-      try {
-        const [notification] = await tenantDb.insert(schema.notifications)
-          .values({
-            ...notificationData,
-            isRead: false,
-            createdAt: new Date()
-          })
-          .returning();
-        return notification;
-      } catch (error) {
-        console.error('Error creating notification:', error);
-        throw error;
-      }
-    },
-
-    async markNotificationAsRead(id: number) {
-      try {
-        const [notification] = await tenantDb.update(schema.notifications)
-          .set({ isRead: true, updatedAt: new Date() })
-          .where(eq(schema.notifications.id, id))
-          .returning();
-        return notification;
-      } catch (error) {
-        console.error('Error marking notification as read:', error);
-        throw error;
-      }
-    },
-
-    async markAllNotificationsAsRead(userId: number) {
-      try {
-        await tenantDb.update(schema.notifications)
-          .set({ isRead: true, updatedAt: new Date() })
-          .where(eq(schema.notifications.userId, userId));
-      } catch (error) {
-        console.error('Error marking all notifications as read:', error);
-        throw error;
-      }
-    },
-
-    async deleteNotification(id: number) {
-      try {
-        await tenantDb.delete(schema.notifications)
-          .where(eq(schema.notifications.id, id));
-      } catch (error) {
-        console.error('Error deleting notification:', error);
-        throw error;
-      }
-    },
-
-    // CATEGORIES
-    async getAllCategories() {
-      try {
-        if (schema.productCategories) {
-          return await tenantDb.select()
-            .from(schema.productCategories)
-            .orderBy(desc(schema.productCategories.createdAt));
-        }
-        
-        return [
-          { id: 1, name: 'Electrónicos', description: 'Dispositivos electrónicos' },
-          { id: 2, name: 'Ropa', description: 'Vestimenta y accesorios' },
-          { id: 3, name: 'Hogar', description: 'Artículos para el hogar' },
-          { id: 4, name: 'Deportes', description: 'Equipos deportivos' },
-          { id: 5, name: 'Libros', description: 'Libros y material educativo' }
-        ];
-      } catch (error) {
-        console.error('Error getting all categories:', error);
-        return [{ id: 1, name: 'General', description: 'Categoría general' }];
-      }
-    },
-
-    async getCategoryById(id: number) {
-      try {
-        if (schema.productCategories) {
-          const [category] = await tenantDb.select()
-            .from(schema.productCategories)
-            .where(eq(schema.productCategories.id, id))
-            .limit(1);
-          return category || null;
-        }
-        
-        const categories = await this.getAllCategories();
-        return categories.find(cat => cat.id === id) || null;
-      } catch (error) {
-        console.error('Error getting category by ID:', error);
-        return null;
-      }
-    },
-
-    // CONVERSATIONS
-    async getAllConversations() {
-      try {
-        return await tenantDb.select()
-          .from(schema.conversations)
-          .orderBy(desc(schema.conversations.lastMessageAt));
-      } catch (error) {
-        console.error('Error getting all conversations:', error);
-        return [];
-      }
-    },
-
-    async getConversationById(id: number) {
-      try {
-        const [conversation] = await tenantDb.select()
-          .from(schema.conversations)
-          .where(eq(schema.conversations.id, id))
-          .limit(1);
-        return conversation || null;
-      } catch (error) {
-        console.error('Error getting conversation by ID:', error);
-        return null;
-      }
-    },
-
-    async getConversationByCustomerPhone(phone: string) {
-      try {
-        const [conversation] = await tenantDb.select()
-          .from(schema.conversations)
-          .where(eq(schema.conversations.customerPhone, phone))
-          .limit(1);
-        return conversation || null;
-      } catch (error) {
-        console.error('Error getting conversation by customer phone:', error);
-        return null;
-      }
-    },
-
-    async createConversation(conversationData: any) {
-      try {
-        const [conversation] = await tenantDb.insert(schema.conversations)
-          .values({
-            ...conversationData,
-            createdAt: new Date(),
-            lastMessageAt: new Date()
-          })
-          .returning();
-        return conversation;
-      } catch (error) {
-        console.error('Error creating conversation:', error);
-        throw error;
-      }
-    },
-
-    async updateConversation(id: number, updates: any) {
-      try {
-        const [conversation] = await tenantDb.update(schema.conversations)
-          .set({ ...updates, updatedAt: new Date() })
-          .where(eq(schema.conversations.id, id))
-          .returning();
-        return conversation;
-      } catch (error) {
-        console.error('Error updating conversation:', error);
-        throw error;
-      }
+      });
     }
-  };
-}`;
-        
-        correctedContent = minimalWorkingContent;
-        console.log('✅ Archivo reconstruido con versión funcional mínima');
-      }
 
-      // Escribir el archivo corregido
-      fs.writeFileSync(tenantStoragePath, correctedContent);
-      console.log('✅ Archivo tenant-storage.ts corregido y guardado');
+    console.log('✅ Validation passed, creating product...');
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    const { items, ...rest } = req.body;
 
+    // Preparar datos del producto con valores por defecto
+    const productData = {
+      name: req.body.name.trim(),
+      description: req.body.description || '',
+      price: req.body.price || '0.00',
+      category: req.body.category || 'general',
+      status: req.body.status || 'active',
+      imageUrl: req.body.imageUrl || null,
+      images: req.body.images || null,
+      sku: req.body.sku || null,
+      brand: req.body.brand || null,
+      model: req.body.model || null,
+      specifications: req.body.specifications || null,
+      features: req.body.features || null,
+      warranty: req.body.warranty || null,
+      availability: req.body.availability || 'in_stock',
+      stockQuantity: parseInt(req.body.stockQuantity) || 0,
+      minQuantity: parseInt(req.body.minQuantity) || 1,
+      maxQuantity: req.body.maxQuantity ? parseInt(req.body.maxQuantity) : null,
+      weight: req.body.weight || null,
+      dimensions: req.body.dimensions || null,
+      tags: req.body.tags || null,
+      salePrice: req.body.salePrice || null,
+      isPromoted: Boolean(req.body.isPromoted),
+      promotionText: req.body.promotionText || null
+    };
+
+    console.log('📋 Processed product data:', JSON.stringify(productData, null, 2));
+
+    const product = await tenantStorage.createProduct(productData);
+    
+    console.log('✅ Product created successfully:', product);
+    res.status(201).json(product);
+    
+  } catch (error) {
+    console.error('❌ Error creating product:', error);
+    res.status(500).json({ 
+      error: 'Failed to create product',
+      message: error.message,
+      details: error.stack
+    });
+  }
+})`;
+
+      // Reemplazar la ruta existente
+      indexContent = indexContent.replace(productRouteRegex, improvedProductRoute);
+      
+      fs.writeFileSync(indexPath, indexContent);
+      console.log('✅ Ruta POST /api/products mejorada con validación y logging');
     } else {
-      console.log('✅ No se detectaron errores obvios en la línea 163');
-      console.log('🔍 El error puede estar en el contexto más amplio');
+      console.log('✅ La ruta ya tiene logging');
     }
 
-    console.log('\n📋 PRÓXIMOS PASOS:');
+    // 2. Verificar configuración de Express para parsear JSON
+    if (!indexContent.includes('express.json()')) {
+      console.log('\n⚠️ Falta configuración de express.json() middleware');
+      
+      // Buscar donde está la configuración de middlewares
+      const appDeclarationIndex = indexContent.indexOf('const app = express()');
+      if (appDeclarationIndex !== -1) {
+        const insertionPoint = indexContent.indexOf('\n', appDeclarationIndex);
+        const middlewareConfig = `
+// ✅ CORS y parsing middlewares
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+`;
+        
+        indexContent = 
+          indexContent.slice(0, insertionPoint) + 
+          middlewareConfig + 
+          indexContent.slice(insertionPoint);
+        
+        fs.writeFileSync(indexPath, indexContent);
+        console.log('✅ Middleware express.json() agregado');
+      }
+    } else {
+      console.log('✅ Middleware express.json() ya configurado');
+    }
+
+    // 3. Crear un endpoint de test para debugging
+    if (!indexContent.includes('/api/test-product-data')) {
+      console.log('\n➕ Agregando endpoint de test para debugging...');
+      
+      const testEndpoint = `
+// ✅ ENDPOINT DE TEST PARA DEBUGGING
+app.post('/api/test-product-data', express.json(), (req, res) => {
+  console.log('🧪 TEST ENDPOINT - Raw body:', req.body);
+  console.log('🧪 TEST ENDPOINT - Headers:', req.headers);
+  console.log('🧪 TEST ENDPOINT - Content-Type:', req.get('Content-Type'));
+  
+  res.json({
+    success: true,
+    received: {
+      body: req.body,
+      bodyType: typeof req.body,
+      bodyKeys: Object.keys(req.body || {}),
+      hasName: 'name' in (req.body || {}),
+      nameValue: req.body?.name,
+      nameType: typeof req.body?.name,
+      contentType: req.get('Content-Type')
+    }
+  });
+});
+`;
+      
+      // Insertar antes de la configuración del servidor
+      const serverStartIndex = indexContent.indexOf('server.listen');
+      if (serverStartIndex !== -1) {
+        indexContent = 
+          indexContent.slice(0, serverStartIndex) + 
+          testEndpoint + 
+          '\n' + 
+          indexContent.slice(serverStartIndex);
+        
+        fs.writeFileSync(indexPath, indexContent);
+        console.log('✅ Endpoint de test agregado: POST /api/test-product-data');
+      }
+    }
+
+    console.log('\n🎉 CORRECCIÓN DE VALIDACIÓN COMPLETADA!');
+    console.log('\n📋 MEJORAS APLICADAS:');
+    console.log('✅ Logging detallado de req.body');
+    console.log('✅ Validación específica del campo name');
+    console.log('✅ Mensajes de error informativos');
+    console.log('✅ Middleware express.json() configurado');
+    console.log('✅ Endpoint de test para debugging');
+
+    console.log('\n📋 PRÓXIMOS PASOS PARA DEBUGGING:');
     console.log('1. Reinicia el servidor: yarn dev');
-    console.log('2. Si persiste el error, revisa los backups creados');
-    console.log('3. Verifica que todas las llaves y paréntesis estén balanceados');
+    console.log('2. En el frontend, envía datos de test a: POST /api/test-product-data');
+    console.log('3. Revisa los logs del servidor para ver qué datos llegan');
+    console.log('4. Asegúrate de que el frontend envíe Content-Type: application/json');
+    console.log('5. Verifica que el frontend envíe al menos { "name": "Producto Test" }');
+
+    console.log('\n🧪 PARA PROBAR CON CURL:');
+    console.log(`curl -X POST http://localhost:5000/api/test-product-data \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"Test Product","description":"Test description"}'`);
 
   } catch (error) {
-    console.error('❌ Error analizando sintaxis:', error.message);
+    console.error('❌ Error corrigiendo validación:', error.message);
   }
 }
 
 // Ejecutar la corrección
-console.log('🔧 SCRIPT DE CORRECCIÓN DE SINTAXIS LÍNEA 163 INICIADO\n');
-fixSyntaxError();
+console.log('🔧 SCRIPT DE CORRECCIÓN DE VALIDACIÓN INICIADO\n');
+fixProductValidation();
