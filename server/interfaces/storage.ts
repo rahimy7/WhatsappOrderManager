@@ -256,6 +256,30 @@ export interface MasterStorage extends BaseStorage {
     totalRevenue: number;
     totalMessages: number;
   }>;
+
+   /**
+   * Test de conectividad
+   */
+  testConnection(): Promise<{ connected: boolean; message: string }>;
+
+  /**
+   * Obtiene logs de WhatsApp
+   */
+  getWhatsAppLogs(
+    storeId: number,
+    phoneNumberId?: string,
+    limit?: number,
+    offset?: number
+  ): Promise<WhatsAppLog[]>;
+
+  /**
+   * Gestión de tiendas virtuales
+   */
+  createVirtualStore(storeData: any): Promise<VirtualStore>;
+  updateVirtualStore(id: number, updates: any): Promise<VirtualStore | null>;
+  deleteVirtualStore(id: number): Promise<void>;
+  getVirtualStore(id: number): Promise<VirtualStore | null>;
+  getAllVirtualStores(): Promise<VirtualStore[]>;
 }
 
 // ================================

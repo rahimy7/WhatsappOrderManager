@@ -1663,7 +1663,7 @@ apiRouter.get('/products/:id', authenticateToken, async (req, res) => {
   }
 });
 
-apiRouter.post('/api/products', authenticateToken, async (req, res) => {
+apiRouter.post('/products', authenticateToken, async (req, res) => {
   try {
     console.log('🔄 POST /api/products called');
     console.log('📋 Request body:', JSON.stringify(req.body, null, 2));

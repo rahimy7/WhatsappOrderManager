@@ -34,13 +34,6 @@ export const getTenantStorage = (storeId: number): Promise<TenantStorage> => {
 };
 
 /**
- * Obtiene storage compatible con funciones legacy del storage original
- */
-export const getLegacyStorage = (storeId: number) => {
-  return storageFactory.getLegacyCompatibleStorage(storeId);
-};
-
-/**
  * ✅ CORRECCIÓN: Obtiene tenant storage para un usuario autenticado
  */
 export const getTenantStorageForUser = async (user: { storeId?: number }) => {
@@ -98,105 +91,76 @@ export const createMasterOnlyStorage = (): UnifiedStorageInterface => {
  * Limpia cache de tenant storages
  */
 export const clearTenantCache = (storeId?: number): void => {
-  storageFactory.clearTenantCache(storeId);
-};
-
-/**
- * Refresca el storage de un tenant específico
- */
-export const refreshTenantStorage = async (storeId: number): Promise<TenantStorage> => {
-  return await storageFactory.refreshTenantStorage(storeId);
-};
-
-// ========================================
-// UTILIDADES DE MIGRACIÓN Y VALIDACIÓN
-// ========================================
-
-/**
- * Valida que una tienda esté correctamente migrada al nuevo sistema
- */
-export const validateStoreMigration = async (storeId: number) => {
-  try {
-    const masterStorage = getMasterStorage();
-    const store = await masterStorage.getVirtualStore(storeId);
-    
-    if (!store) {
-      return {
-        valid: false,
-        error: 'Store not found in master storage',
-        storeId
-      };
-    }
-
-    if (!store.databaseUrl?.includes('schema=')) {
-      return {
-        valid: false,
-        error: 'Store not configured for tenant storage',
-        storeId,
-        storeName: store.name,
-        needsMigration: true
-      };
-    }
-
-    // Test tenant storage connection
-    const tenantStorage = await getTenantStorage(storeId);
-    await tenantStorage.getAllProducts(); // Test query
-    
-    return {
-      valid: true,
-      storeId,
-      storeName: store.name,
-      schemaConfigured: true,
-      connectionTested: true
-    };
-
-  } catch (error) {
-    return {
-      valid: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      storeId
-    };
+  if (storeId) {
+    storageFactory.clearCacheForStore(storeId);
+  } else {
+    storageFactory.clearAllCaches();
   }
 };
 
+/**
+ * Refresca tenant storage para una tienda específica
+ */
+export const refreshTenantStorage = async (storeId: number): Promise<TenantStorage> => {
+  storageFactory.clearCacheForStore(storeId);
+  return await storageFactory.getTenantStorage(storeId);
+};
+
 // ========================================
-// HEALTH CHECK Y DEBUGGING
+// FUNCIONES DE UTILIDAD Y DEBUGGING
 // ========================================
 
 /**
- * Verifica el estado de health del sistema de storage
+ * Health check del sistema de storage
  */
 export const healthCheck = async () => {
-  return await storageFactory.healthCheck();
+  const masterStorage = getMasterStorage();
+  const masterHealth = await masterStorage.testConnection();
+  const cacheStats = storageFactory.getCacheStats();
+  
+  return {
+    master: masterHealth,
+    cache: cacheStats,
+    timestamp: new Date().toISOString()
+  };
 };
 
 /**
- * Información de debug del factory
+ * Debug del storage factory
  */
 export const debugStorageFactory = () => {
-  return storageFactory.debugStorageFactory();
+  const stats = storageFactory.getCacheStats();
+  console.log('🔍 Storage Factory Debug:', {
+    tenantCacheSize: stats.tenantCacheSize,
+    connectionCacheSize: stats.connectionCacheSize,
+    timestamp: new Date().toISOString()
+  });
+  return stats;
 };
 
 /**
- * ✅ CORRECCIÓN: Función que obtiene storage para usuario (compatible con routes)
+ * Obtiene storage para un usuario (función de conveniencia)
  */
-export const getStorageForUser = async (user: { storeId?: number }) => {
+export const getStorageForUser = async (user: { storeId: number }) => {
   if (!user.storeId) {
     throw new Error('User must have a store ID for this operation');
   }
-  return await getLegacyStorage(user.storeId);
+  return await getTenantStorage(user.storeId);
 };
 
-// ========================================
-// FUNCIONES DEPRECADAS (PARA COMPATIBILIDAD)
-// ========================================
-
 /**
- * @deprecated Use getTenantStorage() instead.
+ * Valida migración de tienda
  */
-export const getStoreSpecificStorage = async (storeId: number) => {
-  console.warn('getStoreSpecificStorage is deprecated. Use getTenantStorage() instead.');
-  return await getTenantStorage(storeId);
+export const validateStoreMigration = async (storeId: number): Promise<boolean> => {
+  try {
+    const tenantStorage = await getTenantStorage(storeId);
+    // Test básico de conectividad
+    await tenantStorage.getAllProducts();
+    return true;
+  } catch (error) {
+    console.error(`Migration validation failed for store ${storeId}:`, error);
+    return false;
+  }
 };
 
 // ========================================

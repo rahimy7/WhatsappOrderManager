@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { makeInsertSchema } from "./schema.utils";
@@ -166,6 +166,7 @@ export const storeSettings = pgTable("store_settings", {
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
+  lastLogin: timestamp("last_login"),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
@@ -258,6 +259,7 @@ export const products = pgTable("products", {
   promotionText: text("promotion_text"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+   storeId: integer("store_id").notNull(),
 });
 
 export const orders = pgTable("orders", {
@@ -272,6 +274,7 @@ export const orders = pgTable("orders", {
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+   storeId: integer("store_id").notNull(),
 });
 
 export const orderItems = pgTable("order_items", {
@@ -305,12 +308,14 @@ export const orderHistory = pgTable("order_history", {
 });
 
 export const conversations = pgTable("conversations", {
+  
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => customers.id).notNull(),
   orderId: integer("order_id").references(() => orders.id),
   conversationType: text("conversation_type").notNull().default("initial"), // 'initial', 'tracking', 'support'
   status: text("status").notNull().default("active"), // 'active', 'closed'
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+   storeId: integer("store_id").notNull(),
 });
 
 export const messages = pgTable("messages", {
@@ -357,6 +362,11 @@ export const whatsappLogs = pgTable("whatsapp_logs", {
 
 export const autoResponses = pgTable("auto_responses", {
   id: serial("id").primaryKey(),
+   storeId: integer("store_id").notNull(), // ← Debe estar presente
+  message: text("message").notNull(),     // ← Debe estar presente
+  isInteractive: boolean("is_interactive").default(false), // ← Debe estar presente
+  interactiveData: jsonb("interactive_data"), // ← Debe estar presente
+  triggerText: text("trigger_text"),      // ← Debe estar presente
   name: text("name").notNull(),
   trigger: text("trigger").notNull(), // welcome, menu, product_inquiry, service_inquiry, contact_request, order_status, support, tracking
   isActive: boolean("is_active").default(true),
@@ -483,6 +493,7 @@ export const shoppingCart = pgTable("shopping_cart", {
 // Product categories for better organization
 export const productCategories = pgTable("product_categories", {
   id: serial("id").primaryKey(),
+  storeId: integer("store_id").notNull(),
   name: text("name").notNull(),
   description: text("description"),
   parentId: integer("parent_id"), // For subcategories - self-reference
@@ -491,6 +502,7 @@ export const productCategories = pgTable("product_categories", {
   isActive: boolean("is_active").default(true),
     createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  
 });
 
 // Insert schemas

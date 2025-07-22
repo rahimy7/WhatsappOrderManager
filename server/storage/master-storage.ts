@@ -29,7 +29,7 @@ import {
 import ws from "ws";
 
 if (typeof globalThis.WebSocket === 'undefined') {
-  globalThis.WebSocket = ws;
+  (globalThis as any).WebSocket = ws;
 }
 
 export class MasterStorageService implements MasterStorage {
@@ -211,34 +211,7 @@ export class MasterStorageService implements MasterStorage {
     }
   }
 
-  async getVirtualStore(id: number): Promise<any | null> {
-    try {
-      const [store] = await this.db
-        .select()
-        .from(schema.virtualStores)
-        .where(eq(schema.virtualStores.id, id))
-        .limit(1);
 
-      return store || null;
-    } catch (error) {
-      console.error(`Error getting virtual store by ID ${id}:`, error);
-      return null;
-    }
-  }
-
-  async getAllVirtualStores(): Promise<any[]> {
-    try {
-      const stores = await this.db
-        .select()
-        .from(schema.virtualStores)
-        .orderBy(desc(schema.virtualStores.createdAt));
-
-      return stores;
-    } catch (error) {
-      console.error('Error getting all virtual stores:', error);
-      return [];
-    }
-  }
 
   // ========================================
   // WHATSAPP CONFIG MANAGEMENT
@@ -299,16 +272,7 @@ export class MasterStorageService implements MasterStorage {
   // CONNECTION TESTING
   // ========================================
 
-  async testConnection(): Promise<boolean> {
-    try {
-      await this.db.execute('SELECT 1 as test');
-      console.log('✅ Master storage connection test passed');
-      return true;
-    } catch (error) {
-      console.error('❌ Master storage connection test failed:', error);
-      return false;
-    }
-  }
+
 
   // ========================================
   // CLEANUP
@@ -1378,7 +1342,7 @@ async updateVirtualStore(id: number, updateData: any) {
   }
 }
 
-async deleteVirtualStore(id: number) {
+async deleteVirtualStore(id: number): Promise<void> {
   try {
     const [deletedStore] = await this.db
       .delete(schema.virtualStores)
@@ -1390,7 +1354,7 @@ async deleteVirtualStore(id: number) {
     }
 
     console.log('✅ Virtual store deleted:', deletedStore.name);
-    return true;
+    // ✅ No retornar nada (void)
   } catch (error) {
     console.error('Error deleting virtual store:', error);
     throw error;
@@ -1471,6 +1435,58 @@ async deleteUser(id: number) {
     throw error;
   }
 }
+/**
+   * Test de conectividad de la base de datos
+   */
+  async testConnection(): Promise<{ connected: boolean; message: string }> {
+    try {
+      // Test simple de conectividad
+      await this.db.select().from(schema.virtualStores).limit(1);
+      return {
+        connected: true,
+        message: 'Master database connection successful'
+      };
+    } catch (error) {
+      console.error('Master storage connection test failed:', error);
+      return {
+        connected: false,
+        message: error instanceof Error ? error.message : 'Unknown connection error'
+      };
+    }
+  }
+
+  /**
+   * Obtiene una tienda virtual por ID
+   */
+  async getVirtualStore(id: number): Promise<VirtualStore | null> {
+    try {
+      const [store] = await this.db
+        .select()
+        .from(schema.virtualStores)
+        .where(eq(schema.virtualStores.id, id))
+        .limit(1);
+
+      return store || null;
+    } catch (error) {
+      console.error('Error getting virtual store:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene todas las tiendas virtuales
+   */
+  async getAllVirtualStores(): Promise<VirtualStore[]> {
+    try {
+      return await this.db
+        .select()
+        .from(schema.virtualStores)
+        .orderBy(desc(schema.virtualStores.createdAt));
+    } catch (error) {
+      console.error('Error getting all virtual stores:', error);
+      return [];
+    }
+  }
 
 
 }

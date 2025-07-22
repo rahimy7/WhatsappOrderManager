@@ -23,17 +23,25 @@ import { authenticateToken, requireSuperAdmin } from "./authMiddleware";
 // Storage Layer
 import { StorageFactory } from './storage/storage-factory';
 import { UnifiedStorage } from './storage/unified-storage';
-import { getTenantStorageForUser, getMasterStorage, getTenantStorage } from './storage/index';
+import { getMasterStorage, getTenantStorage, healthCheck } from './storage/index';
 import { db as masterDb } from './db'; // ✅ Usar db como masterDb
 import * as schema from '@shared/schema'; // ✅ Importar schema directamente
 
+const storageFactory = StorageFactory.getInstance();
+
+// Helper function corregida para obtener tenant storage
+async function getTenantStorageForUser(user: { storeId: number }) {
+  if (!user.storeId) {
+    throw new Error('User does not have a valid store ID');
+  }
+  return await storageFactory.getTenantStorage(user.storeId);
+}
 // Utilities
 // import { SupabaseStorageManager } from './supabase-storage-manager'; // Commented out until file is created
 
 // ================================
 // STORAGE INITIALIZATION
 // ================================
-const storageFactory = StorageFactory.getInstance();
 const masterStorage = getMasterStorage();
 
 // ================================
@@ -270,6 +278,9 @@ const getProductByIdHandler = async (req: any, res: any) => {
 
 const createProductHandler = async (req: any, res: any) => {
   try {
+    console.log('🔍 Headers:', req.headers);
+    console.log('🔍 Content-Type:', req.headers['content-type']);
+    console.log('🔍 Raw body:', req.body);
     const user = req.user as AuthUser;
     
     if (!user.storeId) {
@@ -279,15 +290,51 @@ const createProductHandler = async (req: any, res: any) => {
     }
 
     console.log('➕ Creating product for store:', user.storeId);
+    console.log('📋 Request body received:', JSON.stringify(req.body, null, 2));
+
+    // ✅ VALIDACIÓN EXPLÍCITA DEL NOMBRE
+    if (!req.body || !req.body.name || req.body.name.trim() === '') {
+      console.log('❌ Product name validation failed:', {
+        hasBody: !!req.body,
+        name: req.body?.name,
+        nameType: typeof req.body?.name
+      });
+      return res.status(400).json({
+        error: "El nombre del producto es requerido"
+      });
+    }
 
     const tenantStorage = await getTenantStorageForUser(user);
     
-    // Procesar datos del producto
+    // ✅ CONSTRUCCIÓN EXPLÍCITA DE PRODUCTDATA
     const productData = {
-      ...req.body,
+      name: req.body.name.trim(),  // ← Asegurar que el name está presente
+      description: req.body.description || '',
+      price: req.body.price || '0.00',
+      category: req.body.category || 'general',
+      status: req.body.status || 'active',
+      imageUrl: req.body.imageUrl || null,
       images: req.body.images || [],
+      sku: req.body.sku || null,
+      brand: req.body.brand || null,
+      model: req.body.model || null,
+      specifications: req.body.specifications || null,
+      features: req.body.features || null,
+      warranty: req.body.warranty || null,
+      availability: req.body.availability || 'in_stock',
+      stockQuantity: parseInt(req.body.stockQuantity) || 0,
+      minQuantity: parseInt(req.body.minQuantity) || 1,
+      maxQuantity: req.body.maxQuantity ? parseInt(req.body.maxQuantity) : null,
+      weight: req.body.weight || null,
+      dimensions: req.body.dimensions || null,
+      tags: req.body.tags || null,
+      salePrice: req.body.salePrice || null,
+      isPromoted: Boolean(req.body.isPromoted),
+      promotionText: req.body.promotionText || null,
       isActive: req.body.isActive !== undefined ? req.body.isActive : true
     };
+
+    console.log('📋 Final productData to send:', JSON.stringify(productData, null, 2));
 
     // Si hay archivos subidos, procesarlos
     if (req.files && req.files.length > 0) {
@@ -315,7 +362,7 @@ const createProductHandler = async (req: any, res: any) => {
         });
       }
       
-      if (error.message.includes('validation')) {
+      if (error.message.includes('validation') || error.message.includes('required')) {
         return res.status(400).json({
           error: error.message
         });
@@ -323,7 +370,8 @@ const createProductHandler = async (req: any, res: any) => {
     }
 
     res.status(500).json({
-      error: "Error interno del servidor"
+      error: "Error interno del servidor",
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 };
@@ -843,89 +891,8 @@ export async function registerRoutes(app: express.Application) {
 
   router.get('/products', authenticateToken, getProductsHandler);
   router.get('/products/:id', authenticateToken, getProductByIdHandler);
-  router.post('/api/products', authenticateToken, async (req, res) => {
-  try {
-    console.log('🔄 POST /api/products called');
-    console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
-  
-
-    console.log('📋 Request body keys:', Object.keys(req.body || {}));
-    
-    const user = (req as any).user;
-    console.log('📋 User info:', { id: user.id, storeId: user.storeId });
-    
-    // Validar que req.body existe y tiene datos
-    if (!req.body || Object.keys(req.body).length === 0) {
-      console.log('❌ Request body is empty');
-      return res.status(400).json({ 
-        error: 'Request body is required',
-        received: req.body 
-      });
-    }
-
-    // Validar campo name específicamente
-    if (!req.body.name || req.body.name.trim() === '') {
-      console.log('❌ Product name is missing or empty');
-      console.log('📋 Received name field:', req.body.name);
-      return res.status(400).json({ 
-        error: 'Product name is required',
-        received: {
-          name: req.body.name,
-          hasName: 'name' in req.body,
-          nameType: typeof req.body.name,
-          allFields: Object.keys(req.body)
-        }
-      });
-    }
-
-    console.log('✅ Validation passed, creating product...');
-    
-    const tenantStorage = await getTenantStorageForUser(user);
-
-    // Preparar datos del producto
-    const productData = {
-      name: req.body.name.trim(),
-      description: req.body.description || '',
-      price: req.body.price || '0.00',
-      category: req.body.category || 'general',
-      status: req.body.status || 'active',
-      imageUrl: req.body.imageUrl || null,
-      images: req.body.images || null,
-      sku: req.body.sku || null,
-      brand: req.body.brand || null,
-      model: req.body.model || null,
-      specifications: req.body.specifications || null,
-      features: req.body.features || null,
-      warranty: req.body.warranty || null,
-      availability: req.body.availability || 'in_stock',
-      stockQuantity: parseInt(req.body.stockQuantity) || 0,
-      minQuantity: parseInt(req.body.minQuantity) || 1,
-      maxQuantity: req.body.maxQuantity ? parseInt(req.body.maxQuantity) : null,
-      weight: req.body.weight || null,
-      dimensions: req.body.dimensions || null,
-      tags: req.body.tags || null,
-      salePrice: req.body.salePrice || null,
-      isPromoted: Boolean(req.body.isPromoted),
-      promotionText: req.body.promotionText || null
-    };
-
-    console.log('📋 Processed product data:', JSON.stringify(productData, null, 2));
-
-    const product = await tenantStorage.createProduct(productData);
-    
-    console.log('✅ Product created successfully:', product);
-    res.status(201).json(product);
-    
-  } catch (error) {
-    console.error('❌ Error creating product:', error);
-    res.status(500).json({ 
-      error: 'Failed to create product',
-      message: error.message,
-      details: error.stack
-    });
-  }
-});
-      createProductHandler(req, res);
+router.post('/products', authenticateToken, createProductHandler);
+      
     
 
   router.put('/products/:id', authenticateToken, updateProductHandler);
@@ -1835,7 +1802,7 @@ export async function registerRoutes(app: express.Application) {
 
   router.get('/health', async (req: any, res: any) => {
     try {
-      const healthStatus = await storageFactory.healthCheck();
+      const healthStatus = await healthCheck();
       
       res.json({
         status: 'healthy',
