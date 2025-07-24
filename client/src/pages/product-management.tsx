@@ -331,6 +331,12 @@ export default function ImprovedProductManagement() {
   };
 
   const openDialog = (mode: 'create' | 'edit' | 'view', product?: Product) => {
+    if (mode === 'edit' && product) {
+      // Para editar, navegar a la página de agregar productos con parámetros
+      window.location.href = `/add-product?mode=edit&id=${product.id}`;
+      return;
+    }
+    
     setDialogMode(mode);
     setSelectedProduct(product || null);
     setIsDialogOpen(true);
@@ -761,194 +767,135 @@ export default function ImprovedProductManagement() {
         </Card>
       )}
 
-      {/* Dialog reutilizable */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      {/* Dialog solo para modo view */}
+      <Dialog open={isDialogOpen && dialogMode === 'view'} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle>
-              {dialogMode === 'create' && 'Crear Nuevo Producto'}
-              {dialogMode === 'edit' && 'Editar Producto'}
-              {dialogMode === 'view' && 'Detalles del Producto'}
-            </DialogTitle>
+            <DialogTitle>Detalles del Producto</DialogTitle>
             <DialogDescription>
-              {dialogMode === 'create' && 'Completa la información para crear un nuevo producto'}
-              {dialogMode === 'edit' && 'Modifica los campos que necesites actualizar'}
-              {dialogMode === 'view' && 'Información detallada del producto'}
+              Información detallada del producto
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Columna izquierda: Información básica */}
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Nombre del Producto *</Label>
+                  <Label>Nombre del Producto</Label>
                   <Input
-                    id="name"
-                    {...register("name")}
-                    placeholder="Nombre del producto"
-                    disabled={isReadOnly}
-                    className={isReadOnly ? "bg-gray-50" : ""}
+                    value={selectedProduct?.name || ''}
+                    disabled
+                    className="bg-gray-50"
                   />
-                  {errors.name && (
-                    <p className="text-sm text-red-600 mt-1">{errors.name.message}</p>
-                  )}
                 </div>
 
                 <div>
-                  <Label htmlFor="description">Descripción *</Label>
+                  <Label>Descripción</Label>
                   <Textarea
-                    id="description"
-                    {...register("description")}
-                    placeholder="Descripción detallada del producto"
-                    disabled={isReadOnly}
-                    className={isReadOnly ? "bg-gray-50" : ""}
-                    rows={3}
-                  />
-                  {errors.description && (
-                    <p className="text-sm text-red-600 mt-1">{errors.description.message}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="price">Precio *</Label>
-                    <Input
-                      id="price"
-                      {...register("price")}
-                      placeholder="0.00"
-                      disabled={isReadOnly}
-                      className={isReadOnly ? "bg-gray-50" : ""}
-                    />
-                    {errors.price && (
-                      <p className="text-sm text-red-600 mt-1">{errors.price.message}</p>
-                    )}
-                  </div>
-                  <div>
-                    <Label htmlFor="installationCost">Costo Instalación</Label>
-                    <Input
-                      id="installationCost"
-                      {...register("installationCost")}
-                      placeholder="0.00"
-                      disabled={isReadOnly}
-                      className={isReadOnly ? "bg-gray-50" : ""}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="category">Categoría *</Label>
-                  <Select
-                    value={watch("category")}
-                    onValueChange={(value) => setValue("category", value)}
-                    disabled={isReadOnly}
-                  >
-                    <SelectTrigger className={isReadOnly ? "bg-gray-50" : ""}>
-                      <SelectValue placeholder="Seleccionar categoría" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.name}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.category && (
-                    <p className="text-sm text-red-600 mt-1">{errors.category.message}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="brand">Marca</Label>
-                    <Input
-                      id="brand"
-                      {...register("brand")}
-                      placeholder="Marca del producto"
-                      disabled={isReadOnly}
-                      className={isReadOnly ? "bg-gray-50" : ""}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="sku">SKU</Label>
-                    <Input
-                      id="sku"
-                      {...register("sku")}
-                      placeholder="Código SKU"
-                      disabled={isReadOnly}
-                      className={isReadOnly ? "bg-gray-50" : ""}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="stock">Stock</Label>
-                    <Input
-                      id="stock"
-                      type="number"
-                      {...register("stock", { valueAsNumber: true })}
-                      placeholder="0"
-                      disabled={isReadOnly}
-                      className={isReadOnly ? "bg-gray-50" : ""}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="warrantyMonths">Garantía (meses)</Label>
-                    <Input
-                      id="warrantyMonths"
-                      type="number"
-                      {...register("warrantyMonths", { valueAsNumber: true })}
-                      placeholder="0"
-                      disabled={isReadOnly}
-                      className={isReadOnly ? "bg-gray-50" : ""}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="specifications">Especificaciones</Label>
-                  <Textarea
-                    id="specifications"
-                    {...register("specifications")}
-                    placeholder="Especificaciones técnicas del producto"
-                    disabled={isReadOnly}
-                    className={isReadOnly ? "bg-gray-50" : ""}
+                    value={selectedProduct?.description || ''}
+                    disabled
+                    className="bg-gray-50"
                     rows={3}
                   />
                 </div>
 
-                {!isReadOnly && (
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="isActive"
-                      checked={watch("isActive")}
-                      onCheckedChange={(checked) => setValue("isActive", checked)}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Precio</Label>
+                    <Input
+                      value={formatCurrency(selectedProduct?.price || "0")}
+                      disabled
+                      className="bg-gray-50"
                     />
-                    <Label htmlFor="isActive">Producto activo</Label>
+                  </div>
+                  <div>
+                    <Label>Costo Instalación</Label>
+                    <Input
+                      value={selectedProduct?.installationCost ? formatCurrency(selectedProduct.installationCost) : 'No especificado'}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Categoría</Label>
+                  <Input
+                    value={selectedProduct?.category || ''}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Marca</Label>
+                    <Input
+                      value={selectedProduct?.brand || 'No especificada'}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>SKU</Label>
+                    <Input
+                      value={selectedProduct?.sku || 'No especificado'}
+                      disabled
+                      className="bg-gray-50 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Stock</Label>
+                    <Input
+                      value={selectedProduct?.stock?.toString() || '0'}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Garantía (meses)</Label>
+                    <Input
+                      value={selectedProduct?.warrantyMonths?.toString() || '0'}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
+                </div>
+
+                {selectedProduct?.specifications && (
+                  <div>
+                    <Label>Especificaciones</Label>
+                    <Textarea
+                      value={selectedProduct.specifications}
+                      disabled
+                      className="bg-gray-50"
+                      rows={3}
+                    />
                   </div>
                 )}
               </div>
 
-              {/* Columna derecha: Gestión de imágenes */}
+              {/* Columna derecha: Imágenes e información adicional */}
               <div className="space-y-4">
                 <div>
                   <Label>Imágenes del Producto</Label>
                   
-                  {/* Galería de imágenes */}
-                  {productImages.length > 0 ? (
+                  {getProductImages(selectedProduct || {} as Product).length > 0 ? (
                     <div className="space-y-4">
                       {/* Imagen principal */}
                       <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
                         <img
-                          src={productImages[currentImageIndex]?.url}
+                          src={getProductImages(selectedProduct || {} as Product)[currentImageIndex]}
                           alt={`Imagen ${currentImageIndex + 1}`}
                           className="w-full h-full object-cover"
                         />
                         
                         {/* Controles de navegación */}
-                        {productImages.length > 1 && !isReadOnly && (
+                        {getProductImages(selectedProduct || {} as Product).length > 1 && (
                           <>
                             <Button
                               type="button"
@@ -971,42 +918,28 @@ export default function ImprovedProductManagement() {
                           </>
                         )}
 
-                        {/* Eliminar imagen actual */}
-                        {!isReadOnly && (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-2 right-2"
-                            onClick={() => removeImage(productImages[currentImageIndex]?.id)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        )}
-
                         {/* Indicador de posición */}
-                        {productImages.length > 1 && (
+                        {getProductImages(selectedProduct || {} as Product).length > 1 && (
                           <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                            {currentImageIndex + 1} / {productImages.length}
+                            {currentImageIndex + 1} / {getProductImages(selectedProduct || {} as Product).length}
                           </div>
                         )}
                       </div>
 
                       {/* Miniaturas */}
-                      {productImages.length > 1 && (
+                      {getProductImages(selectedProduct || {} as Product).length > 1 && (
                         <div className="flex gap-2 overflow-x-auto pb-2">
-                          {productImages.map((image, index) => (
+                          {getProductImages(selectedProduct || {} as Product).map((image, index) => (
                             <button
-                              key={image.id}
+                              key={index}
                               type="button"
                               className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
                                 index === currentImageIndex ? 'border-blue-500' : 'border-gray-200'
                               }`}
                               onClick={() => setCurrentImageIndex(index)}
-                              disabled={isReadOnly}
                             >
                               <img
-                                src={image.url}
+                                src={image}
                                 alt={`Miniatura ${index + 1}`}
                                 className="w-full h-full object-cover"
                               />
@@ -1023,154 +956,99 @@ export default function ImprovedProductManagement() {
                       </div>
                     </div>
                   )}
+                </div>
 
-                  {/* Controles para agregar imágenes (solo en modo edición/creación) */}
-                  {!isReadOnly && (
-                    <div className="space-y-2 mt-4">
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => document.getElementById('image-upload')?.click()}
-                          className="flex items-center gap-2"
-                        >
-                          <Upload className="w-4 h-4" />
-                          Subir Imagen
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleAddImageUrl}
-                          className="flex items-center gap-2"
-                        >
-                          <LinkIcon className="w-4 h-4" />
-                          Agregar URL
-                        </Button>
+                {/* Información adicional */}
+                <div className="space-y-4">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">Información del Producto</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Tipo:</span>
+                        <Badge variant="outline" className="ml-2">
+                          {selectedProduct?.type === "service" ? "Servicio" : "Producto"}
+                        </Badge>
                       </div>
-                      
-                      <input
-                        id="image-upload"
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                      
-                      <p className="text-xs text-gray-500">
-                        Formatos soportados: JPG, PNG, WEBP. Máximo 5MB por imagen.
+                      <div>
+                        <span className="text-gray-600">Estado:</span>
+                        <Badge variant={selectedProduct?.isActive ? "default" : "secondary"} className="ml-2">
+                          {selectedProduct?.isActive ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </div>
+                      {selectedProduct?.brand && (
+                        <div>
+                          <span className="text-gray-600">Marca:</span>
+                          <span className="ml-2 font-medium">{selectedProduct.brand}</span>
+                        </div>
+                      )}
+                      {selectedProduct?.model && (
+                        <div>
+                          <span className="text-gray-600">Modelo:</span>
+                          <span className="ml-2 font-medium">{selectedProduct.model}</span>
+                        </div>
+                      )}
+                      {selectedProduct?.sku && (
+                        <div>
+                          <span className="text-gray-600">SKU:</span>
+                          <span className="ml-2 font-mono text-xs bg-gray-200 px-2 py-1 rounded">
+                            {selectedProduct.sku}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-gray-600">Stock:</span>
+                        <span className="ml-2 font-medium">{selectedProduct?.stock || 0}</span>
+                      </div>
+                      {selectedProduct?.warrantyMonths && selectedProduct.warrantyMonths > 0 && (
+                        <div>
+                          <span className="text-gray-600">Garantía:</span>
+                          <span className="ml-2 font-medium">{selectedProduct.warrantyMonths} meses</span>
+                        </div>
+                      )}
+                      {selectedProduct?.installationCost && (
+                        <div>
+                          <span className="text-gray-600">Costo instalación:</span>
+                          <span className="ml-2 font-medium text-green-600">
+                            {formatCurrency(selectedProduct.installationCost)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedProduct?.specifications && (
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-blue-900 mb-2">Especificaciones Técnicas</h4>
+                      <p className="text-sm text-blue-800 whitespace-pre-line">
+                        {selectedProduct.specifications}
                       </p>
                     </div>
                   )}
                 </div>
-
-                {/* Vista de especificaciones en modo de solo lectura */}
-                {isReadOnly && (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-gray-900 mb-2">Información del Producto</h4>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Tipo:</span>
-                          <Badge variant="outline" className="ml-2">
-                            {watch("type") === "service" ? "Servicio" : "Producto"}
-                          </Badge>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Estado:</span>
-                          <Badge variant={watch("isActive") ? "default" : "secondary"} className="ml-2">
-                            {watch("isActive") ? "Activo" : "Inactivo"}
-                          </Badge>
-                        </div>
-                        {watch("brand") && (
-                          <div>
-                            <span className="text-gray-600">Marca:</span>
-                            <span className="ml-2 font-medium">{watch("brand")}</span>
-                          </div>
-                        )}
-                        {watch("model") && (
-                          <div>
-                            <span className="text-gray-600">Modelo:</span>
-                            <span className="ml-2 font-medium">{watch("model")}</span>
-                          </div>
-                        )}
-                        {watch("sku") && (
-                          <div>
-                            <span className="text-gray-600">SKU:</span>
-                            <span className="ml-2 font-mono text-xs bg-gray-200 px-2 py-1 rounded">
-                              {watch("sku")}
-                            </span>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-gray-600">Stock:</span>
-                          <span className="ml-2 font-medium">{watch("stock")}</span>
-                        </div>
-                        {watch("warrantyMonths") > 0 && (
-                          <div>
-                            <span className="text-gray-600">Garantía:</span>
-                            <span className="ml-2 font-medium">{watch("warrantyMonths")} meses</span>
-                          </div>
-                        )}
-                        {watch("installationCost") && (
-                          <div>
-                            <span className="text-gray-600">Costo instalación:</span>
-                            <span className="ml-2 font-medium text-green-600">
-                              {formatCurrency(watch("installationCost"))}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {watch("specifications") && (
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <h4 className="font-medium text-blue-900 mb-2">Especificaciones Técnicas</h4>
-                        <p className="text-sm text-blue-800 whitespace-pre-line">
-                          {watch("specifications")}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
+          </div>
 
-            {/* Footer del dialog */}
-            <DialogFooter className="flex gap-2">
-              <Button type="button" variant="outline" onClick={closeDialog}>
-                {isReadOnly ? 'Cerrar' : 'Cancelar'}
+          {/* Footer del dialog */}
+          <DialogFooter className="flex gap-2">
+            <Button type="button" variant="outline" onClick={closeDialog}>
+              Cerrar
+            </Button>
+            
+            {selectedProduct && (
+              <Button
+                type="button"
+                onClick={() => {
+                  closeDialog();
+                  openDialog('edit', selectedProduct);
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Editar Producto
               </Button>
-              
-              {!isReadOnly && (
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                      {dialogMode === 'create' ? 'Creando...' : 'Actualizando...'}
-                    </>
-                  ) : (
-                    dialogMode === 'create' ? 'Crear Producto' : 'Actualizar Producto'
-                  )}
-                </Button>
-              )}
-
-              {isReadOnly && selectedProduct && (
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setDialogMode('edit');
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Editar Producto
-                </Button>
-              )}
-            </DialogFooter>
-          </form>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

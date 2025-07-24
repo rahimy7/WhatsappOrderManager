@@ -121,6 +121,7 @@ export interface ReportFilters {
 }
 
 export interface WhatsAppLogFilters {
+  storeId: any;
   type?: string;
   phoneNumber?: string;
   status?: string;

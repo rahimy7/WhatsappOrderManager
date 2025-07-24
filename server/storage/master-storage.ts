@@ -1060,7 +1060,7 @@ export class MasterStorageService implements MasterStorage {
           storeName: schema.virtualStores.name,
           isActive: schema.virtualStores.isActive,
           createdAt: schema.virtualStores.createdAt,
-          planType: schema.virtualStores.planType
+          planType: schema.virtualStores.subscription
         })
         .from(schema.virtualStores)
         .orderBy(desc(schema.virtualStores.createdAt));
