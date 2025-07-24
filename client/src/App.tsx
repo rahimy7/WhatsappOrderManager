@@ -52,7 +52,8 @@ import { useEffect, useRef } from 'react';
 import { ErrorBoundary } from "./ErrorBoundary";
 import React from "react";
 import { ToastProvider } from '@/components/ui/use-toast';
-import { ProductManagement } from "./pages/product-management";
+import  ProductManagement  from "./pages/product-management";
+import AddProduct from "@/pages/add-product";
 
 
 function ProtectedRoute({ component: Component, permission }: { component: React.ComponentType, permission?: string }) {
@@ -122,6 +123,7 @@ function Router() {
       <Route path="/team" component={() => <ProtectedRoute component={Team} permission="manage_users" />} />
       <Route path="/products" component={() => <ProtectedRoute component={Products} permission="manage_orders" />} />
       <Route path="/product-management" component={() => <ProtectedRoute component={ProductManagement} permission="manage_products" />} />
+      <Route path="/add-product" component={() => <ProtectedRoute component={AddProduct} permission="manage_products" />} />
       <Route path="/reports" component={() => <ProtectedRoute component={Reports} permission="view_reports" />} />
       <Route path="/billing" component={() => <ProtectedRoute component={Billing} permission="view_reports" />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} permission="manage_settings" />} />

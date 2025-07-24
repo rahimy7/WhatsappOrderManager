@@ -102,50 +102,51 @@ export function createTenantStorage(tenantDb: any, storeId: number) {
       }
     },
 
-    async createProduct(productData: any) {
-      try {
-        if (!productData.name) {
-          throw new Error('Product name is required');
-        }
+   async createProduct(productData: any, storeId: number) {
+  try {
+    if (!productData.name) {
+      throw new Error('Product name is required');
+    }
 
-        const productToInsert = {
-          name: productData.name,
-          description: productData.description || '',
-          price: productData.price || '0.00',
-          category: productData.category || 'general',
-          status: productData.status || 'active',
-          imageUrl: productData.imageUrl || null,
-          images: productData.images || null,
-          sku: productData.sku || null,
-          brand: productData.brand || null,
-          model: productData.model || null,
-          specifications: productData.specifications || null,
-          features: productData.features || null,
-          warranty: productData.warranty || null,
-          availability: productData.availability || 'in_stock',
-          stockQuantity: productData.stockQuantity || 0,
-          minQuantity: productData.minQuantity || 1,
-          maxQuantity: productData.maxQuantity || null,
-          weight: productData.weight || null,
-          dimensions: productData.dimensions || null,
-          tags: productData.tags || null,
-          salePrice: productData.salePrice || null,
-          isPromoted: productData.isPromoted || false,
-          promotionText: productData.promotionText || null,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
+    const productToInsert = {
+      name: productData.name,
+      description: productData.description || '',
+      price: productData.price || '0.00',
+      category: productData.category || 'general',
+      status: productData.status || 'active',
+      imageUrl: productData.imageUrl || null,
+      images: productData.images || null,
+      sku: productData.sku || null,
+      brand: productData.brand || null,
+      model: productData.model || null,
+      specifications: productData.specifications || null,
+      features: productData.features || null,
+      warranty: productData.warranty || null,
+      availability: productData.availability || 'in_stock',
+      stockQuantity: productData.stockQuantity || 0,
+      minQuantity: productData.minQuantity || 1,
+      maxQuantity: productData.maxQuantity || null,
+      weight: productData.weight || null,
+      dimensions: productData.dimensions || null,
+      tags: productData.tags || null,
+      salePrice: productData.salePrice || null,
+      isPromoted: productData.isPromoted || false,
+      promotionText: productData.promotionText || null,
+      storeId: storeId,  // ← ¡Este campo falta!
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
-        const [product] = await tenantDb.insert(schema.products)
-          .values(productToInsert)
-          .returning();
+    const [product] = await tenantDb.insert(schema.products)
+      .values(productToInsert)
+      .returning();
 
-        return product;
-      } catch (error) {
-        console.error('Error creating product:', error);
-        throw error;
-      }
-    },
+    return product;
+  } catch (error) {
+    console.error('Error creating product:', error);
+    throw error;
+  }
+},
 
     async updateProduct(id: number, productData: any) {
       try {

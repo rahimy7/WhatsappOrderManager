@@ -1,102 +1,74 @@
-// product-management.tsx - Errores corregidos
-import React, { useState, useEffect, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-
-// Imports correctos para tus componentes UI
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-
-// Implementación inline de apiRequest (reemplaza @/lib/api)
-const apiRequest = async (method: string, url: string, data?: any) => {
-  const token = localStorage.getItem('auth_token'); // ✅ CORRECTO
-  
-  const options: RequestInit = {
-    method,
-    headers: {
-      'Authorization': token ? `Bearer ${token}` : '',
-      ...(data instanceof FormData ? {} : { 'Content-Type': 'application/json' })
-    },
-  };
-
-  if (data) {
-    if (data instanceof FormData) {
-      options.body = data;
-    } else {
-      options.body = JSON.stringify(data);
-    }
-  }
-
-  const response = await fetch(url, options);
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(errorData.message || `Error ${response.status}`);
-  }
-
-  return response.json();
-};
-
-// Hook de toast simplificado (implementación inline)
-const useToast = () => {
-  const toast = ({ title, description, variant }: { 
-    title: string; 
-    description?: string; 
-    variant?: 'default' | 'destructive' 
-  }) => {
-    if (variant === 'destructive') {
-      console.error(`❌ ${title}: ${description}`);
-      alert(`❌ Error: ${title}\n${description || ''}`);
-    } else {
-      console.log(`✅ ${title}: ${description}`);
-      alert(`✅ ${title}\n${description || ''}`);
-    }
-  };
-  return { toast };
-};
-
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import {
-  Plus,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Badge,
+} from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { useToast } from '@/hooks/use-toast';
+import {
   Search,
+  Plus,
+  Eye,
   Edit,
   Trash2,
   Package,
   Tag,
-  Image,
-  Upload,
-  Link,
   X,
-  Eye,
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  Move,
-  Filter,
-  MoreHorizontal,
-  DollarSign,
-  BarChart3,
-} from "lucide-react";
+  Upload,
+  Link as LinkIcon,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
-// Tipos e interfaces
-interface ImageData {
-  id: string;
-  url: string;
-  file?: File;
-  isUploaded: boolean;
-  isUploading?: boolean; // ← Agregar esto
-  uploadError?: string;  // ← Agregar esto
-  source: 'file' | 'url';
-  name: string;
-}
+// Esquemas de validación
+const productSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido'),
+  description: z.string().min(1, 'La descripción es requerida'),
+  price: z.string().min(1, 'El precio es requerido'),
+  category: z.string().min(1, 'La categoría es requerida'),
+  type: z.string().default('product'),
+  brand: z.string().optional(),
+  model: z.string().optional(),
+  sku: z.string().optional(),
+  isActive: z.boolean().default(true),
+  stock: z.number().min(0).default(0),
+  specifications: z.string().optional(),
+  installationCost: z.string().optional(),
+  warrantyMonths: z.number().min(0).default(0),
+  images: z.array(z.string()).default([]),
+});
+
+type ProductFormData = z.infer<typeof productSchema>;
 
 interface Product {
   id: number;
@@ -113,651 +85,240 @@ interface Product {
   specifications?: string;
   installationCost?: string;
   warrantyMonths?: number;
-  imageUrl?: string;
   images?: string[];
-  createdAt?: string;
-  updatedAt?: string;
+  imageUrl?: string;
 }
 
 interface Category {
   id: number;
   name: string;
   description?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
-interface ProductFormData {
+interface ImageData {
+  id: string;
+  url: string;
+  file?: File;
+  isUploaded: boolean;
+  source: 'file' | 'url';
   name: string;
-  description: string;
-  price: string;
-  category: string;
-  type: string;
-  brand: string;
-  model: string;
-  sku: string;
-  isActive: boolean;
-  stock: number;
-  specifications: string;
-  installationCost: string;
-  warrantyMonths: number;
-  imageUrl: string;
-  images: string[];
 }
-
-interface CategoryFormData {
-  name: string;
-  description: string;
-}
-
-// Componente de carga de imágenes mejorado
-const EnhancedImageUpload: React.FC<{
-  images: ImageData[];
-  onImagesChange: (images: ImageData[]) => void;
-  maxImages?: number;
-  maxFileSize?: number;
-  allowedTypes?: string[];
-}> = ({
-  images,
-  onImagesChange,
-  maxImages = 5,
-  maxFileSize = 5,
-  allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-}) => {
-  const [urlInput, setUrlInput] = useState('');
-  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
-
-  // Manejo de archivos
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files) return;
-
-    const newFiles = Array.from(files);
-    
-    if (images.length + newFiles.length > maxImages) {
-      toast({
-        title: "⚠️ Límite de imágenes",
-        description: `Solo puedes subir un máximo de ${maxImages} imágenes`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const processedFiles = newFiles.map(file => {
-      if (file.size > maxFileSize * 1024 * 1024) {
-        toast({
-          title: "⚠️ Archivo muy grande",
-          description: `${file.name} es mayor a ${maxFileSize}MB`,
-          variant: "destructive",
-        });
-        return null;
-      }
-
-      if (!allowedTypes.includes(file.type)) {
-        toast({
-          title: "⚠️ Formato no válido",
-          description: `${file.name} no es un formato permitido`,
-          variant: "destructive",
-        });
-        return null;
-      }
-
-       return {
-    id: `file-${Date.now()}-${Math.random()}`,
-    url: URL.createObjectURL(file),
-    file,
-    isUploaded: false,    // ← Esto se queda igual
-    isUploading: false,   // ← AGREGAR esto
-    source: 'file' as const,
-    name: file.name
-  };
-}).filter(Boolean) as ImageData[];
-
-onImagesChange([...images, ...processedFiles]);
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Manejo de URL
-  const handleUrlAdd = async () => {
-    if (!urlInput.trim()) return;
-
-    if (images.length >= maxImages) {
-      toast({
-        title: "⚠️ Límite de imágenes",
-        description: `Solo puedes subir un máximo de ${maxImages} imágenes`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      new URL(urlInput);
-    } catch {
-      toast({
-        title: "⚠️ URL inválida",
-        description: "Por favor ingresa una URL válida",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoadingUrl(true);
-
-    try {
-      const response = await fetch(urlInput, { method: 'HEAD' });
-      
-      if (!response.ok) {
-        throw new Error('No se pudo acceder a la imagen');
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.startsWith('image/')) {
-        throw new Error('La URL no apunta a una imagen válida');
-      }
-
-      if (!allowedTypes.includes(contentType)) {
-        throw new Error('Formato de imagen no permitido');
-      }
-
-      const contentLength = response.headers.get('content-length');
-      if (contentLength && parseInt(contentLength) > maxFileSize * 1024 * 1024) {
-        throw new Error(`La imagen es muy grande (máximo ${maxFileSize}MB)`);
-      }
-
-      const newImage: ImageData = {
-        id: `url-${Date.now()}-${Math.random()}`,
-        url: urlInput,
-        isUploaded: false,
-        source: 'url',
-        name: urlInput.split('/').pop() || 'imagen-url'
-      };
-
-      onImagesChange([...images, newImage]);
-      setUrlInput('');
-
-      toast({
-        title: "✅ Imagen agregada",
-        description: "La imagen desde URL se agregó exitosamente",
-      });
-
-    } catch (error) {
-      toast({
-        title: "❌ Error",
-        description: error instanceof Error ? error.message : "Error al cargar imagen desde URL",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingUrl(false);
-    }
-  };
-
-  const removeImage = (id: string) => {
-    const updatedImages = images.filter(img => img.id !== id);
-    onImagesChange(updatedImages);
-    
-    const imageToRemove = images.find(img => img.id === id);
-    if (imageToRemove?.file && imageToRemove.url.startsWith('blob:')) {
-      URL.revokeObjectURL(imageToRemove.url);
-    }
-  };
-
-  const previewImage = (url: string) => {
-    window.open(url, '_blank');
-  };
-
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    
-    if (draggedIndex === null) return;
-    
-    const newImages = [...images];
-    const draggedImage = newImages[draggedIndex];
-    
-    newImages.splice(draggedIndex, 1);
-    newImages.splice(dropIndex, 0, draggedImage);
-    
-    onImagesChange(newImages);
-    setDraggedIndex(null);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <Label className="text-base font-medium">
-          Imágenes del producto (máximo {maxImages})
-        </Label>
-        <p className="text-sm text-muted-foreground mt-1">
-          Sube archivos o agrega imágenes desde URL. Formatos: JPG, PNG, GIF, WebP (máximo {maxFileSize}MB)
-        </p>
-      </div>
-
-      <Tabs defaultValue="files" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="files" className="flex items-center gap-2">
-            <Upload className="w-4 h-4" />
-            Subir archivos
-          </TabsTrigger>
-          <TabsTrigger value="url" className="flex items-center gap-2">
-            <Link className="w-4 h-4" />
-            Desde URL
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="files" className="space-y-4">
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={allowedTypes.join(',')}
-              onChange={handleFileUpload}
-              className="hidden"
-              id="file-upload"
-              disabled={images.length >= maxImages}
-            />
-            <label
-              htmlFor="file-upload"
-              className={`cursor-pointer inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white transition-colors ${
-                images.length >= maxImages 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
-              }`}
-            >
-              <Image className="w-5 h-5 mr-2" />
-              {images.length >= maxImages ? 'Límite alcanzado' : 'Seleccionar archivos'}
-            </label>
-            <p className="text-sm text-gray-500 mt-2">
-              O arrastra y suelta archivos aquí
-            </p>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="url" className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="https://ejemplo.com/imagen.jpg"
-              disabled={isLoadingUrl || images.length >= maxImages}
-              onKeyPress={(e) => e.key === 'Enter' && handleUrlAdd()}
-            />
-            <Button 
-              onClick={handleUrlAdd} 
-              disabled={isLoadingUrl || !urlInput.trim() || images.length >= maxImages}
-              className="px-4"
-            >
-              {isLoadingUrl ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Link className="w-4 h-4 mr-2" />
-                  Agregar
-                </>
-              )}
-            </Button>
-          </div>
-          
-          {images.length >= maxImages && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Has alcanzado el límite máximo de {maxImages} imágenes.
-              </AlertDescription>
-            </Alert>
-          )}
-        </TabsContent>
-      </Tabs>
-
-      {images.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">
-              Imágenes cargadas ({images.length}/{maxImages})
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Arrastra para reordenar
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-3">
-            {images.map((image, index) => (
-              <div
-                key={image.id}
-                className="flex items-center gap-3 p-3 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
-                draggable
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, index)}
-              >
-                <div className="flex-shrink-0">
-                  <img
-                    src={image.url}
-                    alt={image.name}
-                    className="w-12 h-12 object-cover rounded border"
-                  />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{image.name}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant={image.source === 'file' ? 'default' : 'secondary'} className="text-xs">
-                      {image.source === 'file' ? 'Archivo' : 'URL'}
-                    </Badge>
-                    {image.isUploaded ? (
-                      <Badge variant="outline" className="text-xs text-green-600">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Subido
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-yellow-600">
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Pendiente
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => previewImage(image.url)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 cursor-move"
-                  >
-                    <Move className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeImage(image.id)}
-                    className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {images.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
-          <Image className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No hay imágenes cargadas</p>
-        </div>
-      )}
-    </div>
-  );
-};
 
 // Componente principal
-export const ProductManagement: React.FC = () => {
-  // Estados principales
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [activeTab, setActiveTab] = useState("products");
-
-  // Estados de filtrado y búsqueda
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterCategory, setFilterCategory] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-
-  // Estados de formularios
-  const [productForm, setProductForm] = useState<ProductFormData>({
-    name: "",
-    description: "",
-    price: "",
-    category: "",
-    type: "product",
-    brand: "",
-    model: "",
-    sku: "",
-    isActive: true,
-    stock: 0,
-    specifications: "",
-    installationCost: "",
-    warrantyMonths: 0,
-    imageUrl: "",
-    images: [],
-  });
-
-  const [categoryForm, setCategoryForm] = useState<CategoryFormData>({
-    name: "",
-    description: "",
-  });
-
-  // Estados de imágenes
-  const [productImages, setProductImages] = useState<ImageData[]>([]);
-  const [isProcessingImages, setIsProcessingImages] = useState(false);
-
+export default function ImprovedProductManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit' | 'view'>('create');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [productImages, setProductImages] = useState<ImageData[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  // Queries
-// ✅ CORRECTO - queryKey debe coincidir con la URL
-const { data: products = [], isLoading: loadingProducts } = useQuery({
-  queryKey: ["/api/products"], // ← Cambiar esto
-  queryFn: () => apiRequest("GET", "/api/products"),
-  staleTime: 30000,
-  retry: 3,
-  retryDelay: 1000,
-});
+  // Queries para obtener datos reales
+  const { data: products = [], isLoading: loadingProducts, error: productsError } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+  });
 
-const { data: categories = [], isLoading: loadingCategories } = useQuery({
-  queryKey: ["/api/categories"], // ← Cambiar esto  
-  queryFn: () => apiRequest("GET", "/api/categories"),
-  staleTime: 30000,
-  retry: 3,
-  retryDelay: 1000,
-});
+  const { data: categories = [], isLoading: loadingCategories, error: categoriesError } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
 
-  // Función auxiliar para procesar imágenes (CORREGIDA - compatible con todas las versiones de TypeScript)
-  const prepareImageFormData = (images: ImageData[]): { formData: FormData; imageUrls: string[] } => {
-    const formData = new FormData();
-    const imageUrls: string[] = [];
-
-    images.forEach((image) => {
-      if (image.source === 'file' && image.file) {
-        formData.append('images', image.file);
-      } else if (image.source === 'url') {
-        imageUrls.push(image.url);
-      }
-    });
-
-    return { formData, imageUrls };
-  };
-
-  // Función auxiliar para combinar FormData (CORREGIDA)
-  const appendFormData = (targetFormData: FormData, sourceFormData: FormData) => {
-    // Convertir a array para compatibilidad con versiones anteriores de TypeScript
-    const entries = Array.from(sourceFormData.entries());
-    entries.forEach(([key, value]) => {
-      targetFormData.append(key, value);
-    });
-  };
-
-  // Mutations
+  // Mutations para crear/actualizar productos
   const createProductMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      setIsProcessingImages(true);
-
-      try {
-        const formData = new FormData();
-        
-        Object.entries(data).forEach(([key, value]) => {
-          if (key !== 'images' && value !== undefined && value !== null && value !== '') {
-            formData.append(key, value.toString());
-          }
-        });
-
-        const { formData: imageFormData, imageUrls } = prepareImageFormData(productImages);
-        
-        // Usar la función auxiliar para evitar problemas de iteración
-        appendFormData(formData, imageFormData);
-
-        if (imageUrls.length > 0) {
-          formData.append('imageUrls', JSON.stringify(imageUrls));
+      const formData = new FormData();
+      
+      // Agregar datos del producto
+      Object.entries(data).forEach(([key, value]) => {
+        if (key !== 'images' && value != null) {
+          formData.append(key, value.toString());
         }
+      });
 
-        return apiRequest("POST", "/api/products", formData);
-      } finally {
-        setIsProcessingImages(false);
+      // Agregar imágenes
+      productImages.forEach((image, index) => {
+        if (image.file) {
+          formData.append('images', image.file);
+        } else if (image.source === 'url') {
+          formData.append('imageUrls', image.url);
+        }
+      });
+
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al crear el producto');
       }
+
+      return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      setIsCreateDialogOpen(false);
-      resetProductForm();
-      resetImageStates();
-      setProductImages(prev => prev.map(img => ({ ...img, isUploaded: true })));
       toast({
-        title: "✅ Producto creado",
-        description: "El producto se ha creado exitosamente con todas las imágenes.",
+        title: "Producto creado",
+        description: "El producto se ha creado correctamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      closeDialog();
     },
     onError: (error: any) => {
       toast({
-        title: "❌ Error",
+        title: "Error",
         description: error.message || "Error al crear el producto",
         variant: "destructive",
       });
     }
   });
 
-// 🔍 DIAGNÓSTICO FRONTEND - Reemplazar updateProductMutation en product-management.tsx
+  const updateProductMutation = useMutation({
+    mutationFn: async (data: ProductFormData & { id: number }) => {
+      const { id, ...productData } = data;
+      const formData = new FormData();
+      
+      // Agregar datos del producto
+      Object.entries(productData).forEach(([key, value]) => {
+        if (key !== 'images' && value != null) {
+          formData.append(key, value.toString());
+        }
+      });
 
-const updateProductMutation = useMutation({
-  mutationFn: async (data: ProductFormData & { id: number }) => {
-    // El frontend ya envía solo las URLs finales
-    const result = await apiRequest("PUT", `/api/products/${data.id}`, data);
-    return result;
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-    setIsEditDialogOpen(false);
-    setSelectedProduct(null);
-    resetProductForm();
-    resetImageStates();
-    setProductImages(prev => prev.map(img => ({ ...img, isUploaded: true })));
-    toast({
-      title: "✅ Producto actualizado",
-      description: "El producto se ha actualizado exitosamente.",
-    });
-  },
-  onError: (error: any) => {
-    console.error('❌ MUTATION ERROR:', error);
-    toast({
-      title: "❌ Error",
-      description: error.message || "Error al actualizar el producto",
-      variant: "destructive",
-    });
-  }
-});
+      // Agregar imágenes
+      productImages.forEach((image, index) => {
+        if (image.file) {
+          formData.append('images', image.file);
+        } else if (image.source === 'url') {
+          formData.append('imageUrls', image.url);
+        }
+      });
 
-  const deleteProductMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/products/${id}`);
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al actualizar el producto');
+      }
+
+      return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({
-        title: "✅ Producto eliminado",
-        description: "El producto se ha eliminado exitosamente.",
+        title: "Producto actualizado",
+        description: "El producto se ha actualizado correctamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      closeDialog();
     },
     onError: (error: any) => {
       toast({
-        title: "❌ Error",
+        title: "Error",
+        description: error.message || "Error al actualizar el producto",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation para eliminar producto
+  const deleteProductMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al eliminar el producto');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Producto eliminado",
+        description: "El producto se ha eliminado correctamente",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
         description: error.message || "Error al eliminar el producto",
         variant: "destructive",
       });
     }
   });
 
-  const createCategoryMutation = useMutation({
-    mutationFn: async (data: CategoryFormData) => {
-      return apiRequest("POST", "/api/categories", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      setIsCategoryDialogOpen(false);
-      resetCategoryForm();
-      toast({
-        title: "✅ Categoría creada",
-        description: "La categoría se ha creado exitosamente.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "❌ Error",
-        description: error.message || "Error al crear la categoría",
-        variant: "destructive",
-      });
-    }
-  });
+  // Log para debugging
+  console.log('📦 Productos cargados:', products);
+  console.log('📂 Categorías cargadas:', categories);
+  console.log('❌ Error productos:', productsError);
+  console.log('❌ Error categorías:', categoriesError);
 
-  // Resto de mutations y funciones auxiliares...
-  const resetProductForm = () => {
-    setProductForm({
-      name: "",
-      description: "",
-      price: "",
-      category: "",
+  // Formulario
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ProductFormData>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
       type: "product",
-      brand: "",
-      model: "",
-      sku: "",
       isActive: true,
       stock: 0,
-      specifications: "",
-      installationCost: "",
       warrantyMonths: 0,
-      imageUrl: "",
       images: [],
-    });
-  };
+    },
+  });
 
-  const resetCategoryForm = () => {
-    setCategoryForm({
-      name: "",
-      description: "",
-    });
-  };
+  // Efectos
+  useEffect(() => {
+    if (selectedProduct && (dialogMode === 'edit' || dialogMode === 'view')) {
+      reset({
+        name: selectedProduct.name,
+        description: selectedProduct.description || "",
+        price: selectedProduct.price || "",
+        category: selectedProduct.category || "",
+        type: selectedProduct.type || "product",
+        brand: selectedProduct.brand || "",
+        model: selectedProduct.model || "",
+        sku: selectedProduct.sku || "",
+        isActive: selectedProduct.isActive ?? true,
+        stock: selectedProduct.stock || 0,
+        specifications: selectedProduct.specifications || "",
+        installationCost: selectedProduct.installationCost || "",
+        warrantyMonths: selectedProduct.warrantyMonths || 0,
+        images: selectedProduct.images || [],
+      });
 
-  const resetImageStates = () => {
-    productImages.forEach(image => {
-      if (image.file && image.url.startsWith('blob:')) {
-        URL.revokeObjectURL(image.url);
+      // Cargar imágenes existentes del producto
+      if (selectedProduct.images && selectedProduct.images.length > 0) {
+        loadExistingImages(selectedProduct.images);
+      } else if (selectedProduct.imageUrl) {
+        loadExistingImages([selectedProduct.imageUrl]);
+      } else {
+        setProductImages([]);
       }
-    });
-    setProductImages([]);
-  };
+    } else if (dialogMode === 'create') {
+      reset({
+        type: "product",
+        isActive: true,
+        stock: 0,
+        warrantyMonths: 0,
+        images: [],
+      });
+      setProductImages([]);
+    }
+  }, [selectedProduct, dialogMode, reset]);
 
+  // Funciones auxiliares
   const loadExistingImages = (imageUrls: string[]) => {
     const existingImages: ImageData[] = imageUrls.map((url, index) => ({
       id: `existing-${index}-${Date.now()}`,
@@ -766,200 +327,208 @@ const updateProductMutation = useMutation({
       source: 'url' as const,
       name: `imagen-${index + 1}`
     }));
-    
     setProductImages(existingImages);
   };
 
-  const openProductEditDialog = (product: Product) => {
-    setSelectedProduct(product);
-    setProductForm({
-      name: product.name,
-      description: product.description || "",
-      price: product.price || "",
-      category: product.category || "",
-      type: product.type || "product",
-      brand: product.brand || "",
-      model: product.model || "",
-      sku: product.sku || "",
-      isActive: product.isActive ?? true,
-      stock: product.stock || 0,
-      specifications: product.specifications || "",
-      installationCost: product.installationCost || "",
-      warrantyMonths: product.warrantyMonths || 0,
-      imageUrl: product.imageUrl || "",
-      images: product.images || [],
-    });
-    
-    if (product.images && product.images.length > 0) {
-      loadExistingImages(product.images);
-    } else {
-      setProductImages([]);
-    }
-    
-    setIsEditDialogOpen(true);
+  const openDialog = (mode: 'create' | 'edit' | 'view', product?: Product) => {
+    setDialogMode(mode);
+    setSelectedProduct(product || null);
+    setIsDialogOpen(true);
+    setCurrentImageIndex(0);
   };
 
- const handleImagesChange = async (newImages: ImageData[]) => {
-  setProductImages(newImages);
-  
-  // Subir inmediatamente las nuevas imágenes (archivos y URLs)
-  const processedImages = await Promise.all(
-    newImages.map(async (image) => {
-      if (image.isUploaded) {
-        // Ya está subida, no hacer nada
-        return image;
-      }
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setSelectedProduct(null);
+    setProductImages([]);
+    reset();
+  };
 
-      try {
-        // Marcar como procesando
-        setProductImages(prev => 
-          prev.map(img => 
-            img.id === image.id 
-              ? { ...img, isUploading: true } 
-              : img
-          )
-        );
+  // Función de envío del formulario
+  const onSubmit = (data: ProductFormData) => {
+    console.log('Enviando formulario:', data);
+    console.log('Imágenes:', productImages);
+    
+    if (dialogMode === 'create') {
+      createProductMutation.mutate(data);
+    } else if (dialogMode === 'edit' && selectedProduct) {
+      updateProductMutation.mutate({ ...data, id: selectedProduct.id });
+    }
+  };
 
-        let finalUrl = image.url;
+  // Función para eliminar producto
+  const handleDeleteProduct = (productId: number) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+      deleteProductMutation.mutate(productId);
+    }
+  };
 
-        if (image.source === 'file' && image.file) {
-          // Subir archivo a Supabase inmediatamente
-          console.log('🔄 Uploading file to Supabase:', image.name);
-          
-          const formData = new FormData();
-          formData.append('image', image.file);
-          
-          const response = await apiRequest("POST", "/api/upload-image", formData);
-          finalUrl = response.imageUrl;
-          
-          console.log('✅ File uploaded successfully:', finalUrl);
-        } else if (image.source === 'url') {
-          // Validar y potencialmente procesar URL
-          console.log('🔗 Processing URL:', image.url);
-          
-          try {
-            const response = await apiRequest("POST", "/api/process-image-url", {
-              imageUrl: image.url
-            });
-            finalUrl = response.imageUrl || image.url;
-            
-            console.log('✅ URL processed successfully:', finalUrl);
-          } catch (error) {
-            console.warn('⚠️ URL processing failed, using original:', error);
-            // Usar URL original si falla el procesamiento
-          }
-        }
+  // Gestión de imágenes
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
 
-        return {
-          ...image,
-          url: finalUrl,
-          isUploaded: true,
-          isUploading: false
-        };
-
-      } catch (error) {
-        console.error('❌ Error uploading image:', error);
-        
-        toast({
-          title: "❌ Error al subir imagen",
-          description: `No se pudo subir ${image.name}`,
-          variant: "destructive",
-        });
-
-        return {
-          ...image,
+    Array.from(files).forEach((file) => {
+      const id = `file-${Date.now()}-${Math.random()}`;
+      const url = URL.createObjectURL(file);
+      
+      setProductImages((prev) => [
+        ...prev,
+        {
+          id,
+          url,
+          file,
           isUploaded: false,
-          isUploading: false,
-          uploadError: error.message
-        };
-      }
-    })
-  );
+          source: 'file',
+          name: file.name,
+        },
+      ]);
+    });
+  };
 
-  // Actualizar estado con imágenes procesadas
-  setProductImages(processedImages);
-  
-  // Actualizar URLs en el formulario
-  const successfulUrls = processedImages
-    .filter(img => img.isUploaded)
-    .map(img => img.url);
-    
-  setProductForm(prev => ({
-    ...prev,
-    images: successfulUrls
-  }));
-};
-
-  const handleProductSubmit = () => {
-    if (!productForm.name || !productForm.description || !productForm.price || !productForm.category) {
-      toast({
-        title: "❌ Error",
-        description: "Por favor completa todos los campos requeridos",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (selectedProduct) {
-      updateProductMutation.mutate({ ...productForm, id: selectedProduct.id });
-    } else {
-      createProductMutation.mutate(productForm);
+  const handleAddImageUrl = () => {
+    const url = prompt("Ingresa la URL de la imagen:");
+    if (url && url.trim()) {
+      const id = `url-${Date.now()}-${Math.random()}`;
+      setProductImages((prev) => [
+        ...prev,
+        {
+          id,
+          url: url.trim(),
+          isUploaded: true,
+          source: 'url',
+          name: 'Imagen externa',
+        },
+      ]);
     }
   };
 
-  // Filtrar productos
-  const filteredProducts = Array.isArray(products) 
-    ? products.filter((product: Product) => {
-        const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             (product.description || "").toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = filterCategory === "all" || product.category === filterCategory;
-        const matchesStatus = filterStatus === "all" || 
-                             (filterStatus === "active" && product.isActive) ||
-                             (filterStatus === "inactive" && !product.isActive);
-        
-        return matchesSearch && matchesCategory && matchesStatus;
-      })
-    : [];
+  const removeImage = (id: string) => {
+    setProductImages((prev) => {
+      const imageToRemove = prev.find(img => img.id === id);
+      if (imageToRemove?.file && imageToRemove.url.startsWith('blob:')) {
+        URL.revokeObjectURL(imageToRemove.url);
+      }
+      return prev.filter(img => img.id !== id);
+    });
+  };
 
-  const formatCurrency = (price: string) => {
-    return parseFloat(price).toLocaleString('es-MX', {
+  const nextImage = () => {
+    if (productImages.length > 0) {
+      setCurrentImageIndex((prev) => (prev + 1) % productImages.length);
+    }
+  };
+
+  const prevImage = () => {
+    if (productImages.length > 0) {
+      setCurrentImageIndex((prev) => (prev - 1 + productImages.length) % productImages.length);
+    }
+  };
+
+  // Filtrado
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = 
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.sku || "").toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesCategory = filterCategory === "all" || product.category === filterCategory;
+    
+    // Filtrar solo productos activos si no están en modo debug
+    const isActive = product.isActive !== false;
+    
+    return matchesSearch && matchesCategory && isActive;
+  });
+
+  const formatCurrency = (price: string | number) => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return '$0.00';
+    return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN',
-    });
+    }).format(numPrice);
+  };
+
+  // Función para obtener la imagen principal del producto
+  const getProductMainImage = (product: Product) => {
+    // Prioridad: images[0] -> imageUrl -> null
+    if (product.images && product.images.length > 0) {
+      return product.images[0];
+    }
+    if (product.imageUrl) {
+      return product.imageUrl;
+    }
+    return null;
+  };
+
+  // Función para obtener todas las imágenes del producto
+  const getProductImages = (product: Product) => {
+    const images = [];
+    
+    // Agregar images array si existe
+    if (product.images && product.images.length > 0) {
+      images.push(...product.images);
+    }
+    
+    // Agregar imageUrl si existe y no está ya en images
+    if (product.imageUrl && !images.includes(product.imageUrl)) {
+      images.push(product.imageUrl);
+    }
+    
+    return images;
   };
 
   if (loadingProducts || loadingCategories) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Cargando gestión de productos...</p>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
       </div>
     );
   }
 
+  // Mostrar error si hay problemas cargando los datos
+  if (productsError || categoriesError) {
+    return (
+      <div className="container mx-auto p-6">
+        <Card>
+          <CardContent className="text-center py-12">
+            <Package className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Error al cargar datos
+            </h3>
+            <p className="text-gray-600 mb-4">
+              {productsError?.message || categoriesError?.message || 'Hubo un problema al cargar los productos'}
+            </p>
+            <Button onClick={() => window.location.reload()}>
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const isReadOnly = dialogMode === 'view';
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestión de Productos</h1>
-          <p className="text-muted-foreground">
-            Administra tu inventario y categorías de productos
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Productos</h1>
+          <p className="text-gray-600 mt-1">
+            Administra tu catálogo de productos y servicios
           </p>
         </div>
         <div className="flex gap-2">
           <Button
-            onClick={() => setIsCategoryDialogOpen(true)}
+            onClick={() => setViewMode(viewMode === 'grid' ? 'table' : 'grid')}
             variant="outline"
-            className="flex items-center gap-2"
           >
-            <Tag className="w-4 h-4" />
-            Nueva Categoría
+            {viewMode === 'grid' ? 'Vista Tabla' : 'Vista Tarjetas'}
           </Button>
           <Button
-            onClick={() => setIsCreateDialogOpen(true)}
+            onClick={() => openDialog('create')}
             className="flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
@@ -968,8 +537,8 @@ const updateProductMutation = useMutation({
         </div>
       </div>
 
-      {/* Búsqueda simplificada */}
-      <Card>
+      {/* Búsqueda y filtros */}
+      <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -989,7 +558,7 @@ const updateProductMutation = useMutation({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas las categorías</SelectItem>
-                {categories.map((category: Category) => (
+                {categories.map((category) => (
                   <SelectItem key={category.id} value={category.name}>
                     {category.name}
                   </SelectItem>
@@ -1001,231 +570,632 @@ const updateProductMutation = useMutation({
       </Card>
 
       {/* Lista de productos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Productos ({filteredProducts.length})</span>
-            <Badge variant="outline">{filteredProducts.length} resultados</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Imagen</TableHead>
-                  <TableHead>Producto</TableHead>
-                  <TableHead>Categoría</TableHead>
-                  <TableHead>Precio</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProducts.map((product: Product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      <div className="w-12 h-12 rounded border overflow-hidden bg-gray-100">
-                        {product.images && product.images.length > 0 ? (
-                          <img
-                            src={product.images[0]}
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Image className="w-6 h-6 text-gray-400" />
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredProducts.map((product) => (
+            <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-4">
+                {/* Imagen del producto */}
+                <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg flex items-center justify-center relative overflow-hidden group">
+                  {getProductMainImage(product) ? (
+                    <img
+                      src={getProductMainImage(product)}
+                      alt={product.name}
+                      className="w-full h-full object-cover rounded-lg"
+                      onError={(e) => {
+                        // Si la imagen falla al cargar, mostrar el fallback
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : (
+                    <Package className="w-16 h-16 text-gray-400" />
+                  )}
+                  
+                  {/* Fallback cuando la imagen no carga */}
+                  <div className="hidden absolute inset-0 flex items-center justify-center">
+                    <Package className="w-16 h-16 text-gray-400" />
+                  </div>
+                  
+                  {/* Indicador de múltiples imágenes */}
+                  {getProductImages(product).length > 1 && (
+                    <div className="absolute bottom-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                      +{getProductImages(product).length - 1} más
+                    </div>
+                  )}
+
+                  {/* Overlay con acciones */}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openDialog('view', product)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openDialog('edit', product)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDeleteProduct(product.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <CardTitle className="text-lg line-clamp-2 mt-3">{product.name}</CardTitle>
+                <CardDescription className="text-sm text-gray-600 line-clamp-2">
+                  {product.description}
+                </CardDescription>
+              </CardHeader>
+              
+              <CardContent className="pt-0">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xl font-bold text-green-600">
+                    {formatCurrency(product.price || "0")}
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {product.category}
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">
+                    Stock: {product.stock || 0}
+                  </span>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openDialog('view', product)}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openDialog('edit', product)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteProduct(product.id)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        // Vista de tabla (implementación simplificada)
+        <Card>
+          <CardHeader>
+            <CardTitle>Productos ({filteredProducts.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {filteredProducts.map((product) => (
+                <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                      {getProductMainImage(product) ? (
+                        <img
+                          src={getProductMainImage(product)}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : (
+                        <Package className="w-8 h-8 text-gray-400" />
+                      )}
+                      {/* Fallback */}
+                      <div className="hidden">
+                        <Package className="w-8 h-8 text-gray-400" />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{product.name}</h3>
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">{product.description}</p>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <Badge variant={product.type === "service" ? "secondary" : "default"}>
+                          {product.type === "service" ? "Servicio" : "Producto"}
+                        </Badge>
+                        <Badge variant="outline">{product.category}</Badge>
+                        <span className="text-sm font-medium text-green-600">
+                          {formatCurrency(product.price || "0")}
+                        </span>
+                        {getProductImages(product).length > 1 && (
+                          <Badge variant="outline" className="text-xs">
+                            {getProductImages(product).length} imágenes
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openDialog('view', product)}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openDialog('edit', product)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteProduct(product.id)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Dialog reutilizable */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {dialogMode === 'create' && 'Crear Nuevo Producto'}
+              {dialogMode === 'edit' && 'Editar Producto'}
+              {dialogMode === 'view' && 'Detalles del Producto'}
+            </DialogTitle>
+            <DialogDescription>
+              {dialogMode === 'create' && 'Completa la información para crear un nuevo producto'}
+              {dialogMode === 'edit' && 'Modifica los campos que necesites actualizar'}
+              {dialogMode === 'view' && 'Información detallada del producto'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Columna izquierda: Información básica */}
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Nombre del Producto *</Label>
+                  <Input
+                    id="name"
+                    {...register("name")}
+                    placeholder="Nombre del producto"
+                    disabled={isReadOnly}
+                    className={isReadOnly ? "bg-gray-50" : ""}
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-red-600 mt-1">{errors.name.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="description">Descripción *</Label>
+                  <Textarea
+                    id="description"
+                    {...register("description")}
+                    placeholder="Descripción detallada del producto"
+                    disabled={isReadOnly}
+                    className={isReadOnly ? "bg-gray-50" : ""}
+                    rows={3}
+                  />
+                  {errors.description && (
+                    <p className="text-sm text-red-600 mt-1">{errors.description.message}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="price">Precio *</Label>
+                    <Input
+                      id="price"
+                      {...register("price")}
+                      placeholder="0.00"
+                      disabled={isReadOnly}
+                      className={isReadOnly ? "bg-gray-50" : ""}
+                    />
+                    {errors.price && (
+                      <p className="text-sm text-red-600 mt-1">{errors.price.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="installationCost">Costo Instalación</Label>
+                    <Input
+                      id="installationCost"
+                      {...register("installationCost")}
+                      placeholder="0.00"
+                      disabled={isReadOnly}
+                      className={isReadOnly ? "bg-gray-50" : ""}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="category">Categoría *</Label>
+                  <Select
+                    value={watch("category")}
+                    onValueChange={(value) => setValue("category", value)}
+                    disabled={isReadOnly}
+                  >
+                    <SelectTrigger className={isReadOnly ? "bg-gray-50" : ""}>
+                      <SelectValue placeholder="Seleccionar categoría" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.category && (
+                    <p className="text-sm text-red-600 mt-1">{errors.category.message}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="brand">Marca</Label>
+                    <Input
+                      id="brand"
+                      {...register("brand")}
+                      placeholder="Marca del producto"
+                      disabled={isReadOnly}
+                      className={isReadOnly ? "bg-gray-50" : ""}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="sku">SKU</Label>
+                    <Input
+                      id="sku"
+                      {...register("sku")}
+                      placeholder="Código SKU"
+                      disabled={isReadOnly}
+                      className={isReadOnly ? "bg-gray-50" : ""}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="stock">Stock</Label>
+                    <Input
+                      id="stock"
+                      type="number"
+                      {...register("stock", { valueAsNumber: true })}
+                      placeholder="0"
+                      disabled={isReadOnly}
+                      className={isReadOnly ? "bg-gray-50" : ""}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="warrantyMonths">Garantía (meses)</Label>
+                    <Input
+                      id="warrantyMonths"
+                      type="number"
+                      {...register("warrantyMonths", { valueAsNumber: true })}
+                      placeholder="0"
+                      disabled={isReadOnly}
+                      className={isReadOnly ? "bg-gray-50" : ""}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="specifications">Especificaciones</Label>
+                  <Textarea
+                    id="specifications"
+                    {...register("specifications")}
+                    placeholder="Especificaciones técnicas del producto"
+                    disabled={isReadOnly}
+                    className={isReadOnly ? "bg-gray-50" : ""}
+                    rows={3}
+                  />
+                </div>
+
+                {!isReadOnly && (
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="isActive"
+                      checked={watch("isActive")}
+                      onCheckedChange={(checked) => setValue("isActive", checked)}
+                    />
+                    <Label htmlFor="isActive">Producto activo</Label>
+                  </div>
+                )}
+              </div>
+
+              {/* Columna derecha: Gestión de imágenes */}
+              <div className="space-y-4">
+                <div>
+                  <Label>Imágenes del Producto</Label>
+                  
+                  {/* Galería de imágenes */}
+                  {productImages.length > 0 ? (
+                    <div className="space-y-4">
+                      {/* Imagen principal */}
+                      <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
+                        <img
+                          src={productImages[currentImageIndex]?.url}
+                          alt={`Imagen ${currentImageIndex + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        
+                        {/* Controles de navegación */}
+                        {productImages.length > 1 && !isReadOnly && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="absolute left-2 top-1/2 transform -translate-y-1/2"
+                              onClick={prevImage}
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="absolute right-2 top-1/2 transform -translate-y-1/2"
+                              onClick={nextImage}
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+
+                        {/* Eliminar imagen actual */}
+                        {!isReadOnly && (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="absolute top-2 right-2"
+                            onClick={() => removeImage(productImages[currentImageIndex]?.id)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+
+                        {/* Indicador de posición */}
+                        {productImages.length > 1 && (
+                          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                            {currentImageIndex + 1} / {productImages.length}
                           </div>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{product.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {product.sku && `SKU: ${product.sku}`}
+
+                      {/* Miniaturas */}
+                      {productImages.length > 1 && (
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {productImages.map((image, index) => (
+                            <button
+                              key={image.id}
+                              type="button"
+                              className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
+                                index === currentImageIndex ? 'border-blue-500' : 'border-gray-200'
+                              }`}
+                              onClick={() => setCurrentImageIndex(index)}
+                              disabled={isReadOnly}
+                            >
+                              <img
+                                src={image.url}
+                                alt={`Miniatura ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
                         </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="w-full h-64 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <Package className="w-16 h-16 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">Sin imágenes</p>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{product.category}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {product.price && formatCurrency(product.price)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={product.stock && product.stock > 0 ? "default" : "destructive"}>
-                        {product.stock || 0}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    </div>
+                  )}
+
+                  {/* Controles para agregar imágenes (solo en modo edición/creación) */}
+                  {!isReadOnly && (
+                    <div className="space-y-2 mt-4">
+                      <div className="flex gap-2">
                         <Button
-                          variant="ghost"
+                          type="button"
+                          variant="outline"
                           size="sm"
-                          onClick={() => openProductEditDialog(product)}
+                          onClick={() => document.getElementById('image-upload')?.click()}
+                          className="flex items-center gap-2"
                         >
-                          <Edit className="w-4 h-4" />
+                          <Upload className="w-4 h-4" />
+                          Subir Imagen
                         </Button>
                         <Button
-                          variant="ghost"
+                          type="button"
+                          variant="outline"
                           size="sm"
-                          onClick={() => deleteProductMutation.mutate(product.id)}
-                          className="text-red-600 hover:text-red-700"
+                          onClick={handleAddImageUrl}
+                          className="flex items-center gap-2"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <LinkIcon className="w-4 h-4" />
+                          Agregar URL
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Dialog para crear/editar producto */}
-      <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setIsCreateDialogOpen(false);
-          setIsEditDialogOpen(false);
-          setSelectedProduct(null);
-          resetProductForm();
-          resetImageStates();
-        }
-      }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedProduct ? "Editar Producto" : "Crear Nuevo Producto"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Columna izquierda: Datos del producto */}
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Nombre del producto *</Label>
-                <Input
-                  id="name"
-                  value={productForm.name}
-                  onChange={(e) => setProductForm({...productForm, name: e.target.value})}
-                  placeholder="Nombre del producto"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="description">Descripción *</Label>
-                <Textarea
-                  id="description"
-                  value={productForm.description}
-                  onChange={(e) => setProductForm({...productForm, description: e.target.value})}
-                  placeholder="Descripción del producto"
-                  rows={3}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="price">Precio *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    value={productForm.price}
-                    onChange={(e) => setProductForm({...productForm, price: e.target.value})}
-                    placeholder="0.00"
-                  />
+                      
+                      <input
+                        id="image-upload"
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                      
+                      <p className="text-xs text-gray-500">
+                        Formatos soportados: JPG, PNG, WEBP. Máximo 5MB por imagen.
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <Label htmlFor="stock">Stock</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    value={productForm.stock}
-                    onChange={(e) => setProductForm({...productForm, stock: parseInt(e.target.value) || 0})}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
 
-              <div>
-                <Label htmlFor="category">Categoría *</Label>
-                <Select
-                  value={productForm.category}
-                  onValueChange={(value) => setProductForm({...productForm, category: value})}
+                {/* Vista de especificaciones en modo de solo lectura */}
+                {isReadOnly && (
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-gray-900 mb-2">Información del Producto</h4>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Tipo:</span>
+                          <Badge variant="outline" className="ml-2">
+                            {watch("type") === "service" ? "Servicio" : "Producto"}
+                          </Badge>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Estado:</span>
+                          <Badge variant={watch("isActive") ? "default" : "secondary"} className="ml-2">
+                            {watch("isActive") ? "Activo" : "Inactivo"}
+                          </Badge>
+                        </div>
+                        {watch("brand") && (
+                          <div>
+                            <span className="text-gray-600">Marca:</span>
+                            <span className="ml-2 font-medium">{watch("brand")}</span>
+                          </div>
+                        )}
+                        {watch("model") && (
+                          <div>
+                            <span className="text-gray-600">Modelo:</span>
+                            <span className="ml-2 font-medium">{watch("model")}</span>
+                          </div>
+                        )}
+                        {watch("sku") && (
+                          <div>
+                            <span className="text-gray-600">SKU:</span>
+                            <span className="ml-2 font-mono text-xs bg-gray-200 px-2 py-1 rounded">
+                              {watch("sku")}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-gray-600">Stock:</span>
+                          <span className="ml-2 font-medium">{watch("stock")}</span>
+                        </div>
+                        {watch("warrantyMonths") > 0 && (
+                          <div>
+                            <span className="text-gray-600">Garantía:</span>
+                            <span className="ml-2 font-medium">{watch("warrantyMonths")} meses</span>
+                          </div>
+                        )}
+                        {watch("installationCost") && (
+                          <div>
+                            <span className="text-gray-600">Costo instalación:</span>
+                            <span className="ml-2 font-medium text-green-600">
+                              {formatCurrency(watch("installationCost"))}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {watch("specifications") && (
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-blue-900 mb-2">Especificaciones Técnicas</h4>
+                        <p className="text-sm text-blue-800 whitespace-pre-line">
+                          {watch("specifications")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer del dialog */}
+            <DialogFooter className="flex gap-2">
+              <Button type="button" variant="outline" onClick={closeDialog}>
+                {isReadOnly ? 'Cerrar' : 'Cancelar'}
+              </Button>
+              
+              {!isReadOnly && (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                      {dialogMode === 'create' ? 'Creando...' : 'Actualizando...'}
+                    </>
+                  ) : (
+                    dialogMode === 'create' ? 'Crear Producto' : 'Actualizar Producto'
+                  )}
+                </Button>
+              )}
+
+              {isReadOnly && selectedProduct && (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setDialogMode('edit');
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category: Category) => (
-                      <SelectItem key={category.id} value={category.name}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Columna derecha: Gestión de imágenes */}
-            <div className="space-y-4">
-              <EnhancedImageUpload
-                images={productImages}
-                onImagesChange={handleImagesChange}
-                maxImages={5}
-                maxFileSize={5}
-                allowedTypes={['image/jpeg', 'image/png', 'image/gif', 'image/webp']}
-              />
-
-              {isProcessingImages && (
-                <div className="flex items-center gap-2 text-sm text-blue-600">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Procesando imágenes...
-                </div>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Editar Producto
+                </Button>
               )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsCreateDialogOpen(false);
-                setIsEditDialogOpen(false);
-                setSelectedProduct(null);
-                resetProductForm();
-                resetImageStates();
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleProductSubmit}
-              disabled={
-                createProductMutation.isPending || 
-                updateProductMutation.isPending || 
-                isProcessingImages ||
-                !productForm.name || 
-                !productForm.description || 
-                !productForm.price || 
-                !productForm.category
-              }
-            >
-              {(createProductMutation.isPending || updateProductMutation.isPending) ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {selectedProduct ? "Actualizando..." : "Creando..."}
-                </>
-              ) : (
-                selectedProduct ? "Actualizar Producto" : "Crear Producto"
-              )}
-            </Button>
-          </DialogFooter>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
+
+      {/* Estado vacío */}
+      {filteredProducts.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No se encontraron productos
+            </h3>
+            <p className="text-gray-600 mb-4">
+              {searchTerm || filterCategory !== "all"
+                ? "Intenta ajustar tus filtros de búsqueda"
+                : "Comienza agregando tu primer producto al catálogo"}
+            </p>
+            {(!searchTerm && filterCategory === "all") && (
+              <Button onClick={() => openDialog('create')}>
+                <Plus className="w-4 h-4 mr-2" />
+                Crear Primer Producto
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
-};
+}

@@ -1729,7 +1729,7 @@ apiRouter.post('/products', authenticateToken, async (req, res) => {
 
     console.log('📋 Processed product data:', JSON.stringify(productData, null, 2));
 
-    const product = await tenantStorage.createProduct(productData);
+    const product = await tenantStorage.createProduct(productData, user.storeId);
     
     console.log('✅ Product created successfully:', product);
     res.status(201).json(product);
