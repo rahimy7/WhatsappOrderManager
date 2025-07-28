@@ -375,6 +375,18 @@ apiRouter.get('/reports', authenticateToken, async (req, res) => {
   }
 });
 
+
+app.get('/api/health', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || process.env.RAILWAY_PORT || 5000
+  });
+});
 // ================================
 // FINAL SETUP AND SERVER START
 // ================================
