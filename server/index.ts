@@ -651,7 +651,7 @@ console.log('✅ API Router mounted successfully');
     if (process.env.NODE_ENV === 'development') {
       await setupVite(app, server);
     } else {
-      const staticPath = path.join(__dirname, 'public');
+      const staticPath = path.join(__dirname, '../dist/public');
       app.use(express.static(staticPath));
       
       app.get('*', (req, res) => {
