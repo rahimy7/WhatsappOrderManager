@@ -483,6 +483,203 @@ async createOrUpdateCustomer(customerData: any) {
       }
     },
 
+
+      // Auto Responses
+   
+    async getAllAutoResponses() {
+  try {
+    return await tenantDb.select()
+      .from(schema.autoResponses)
+      .where(eq(schema.autoResponses.storeId, storeId))
+      .orderBy(desc(schema.autoResponses.createdAt));
+  } catch (error) {
+    console.error('Error getting all auto responses:', error);
+    return [];
+  }
+},
+
+async getAutoResponse(id: number) {
+  try {
+    const [response] = await tenantDb.select()
+      .from(schema.autoResponses)
+      .where(
+        and(
+          eq(schema.autoResponses.id, id),
+          eq(schema.autoResponses.storeId, storeId)
+        )
+      )
+      .limit(1);
+    return response || null;
+  } catch (error) {
+    console.error('Error getting auto response:', error);
+    return null;
+  }
+},
+
+async getAutoResponseByTrigger(trigger: string) {
+  try {
+    const [response] = await tenantDb.select()
+      .from(schema.autoResponses)
+      .where(
+        and(
+          eq(schema.autoResponses.trigger, trigger),
+          eq(schema.autoResponses.storeId, storeId),
+          eq(schema.autoResponses.isActive, true)
+        )
+      )
+      .limit(1);
+    return response || null;
+  } catch (error) {
+    console.error('Error getting auto response by trigger:', error);
+    return null;
+  }
+},
+
+async createAutoResponse(responseData: any) {
+  try {
+    const autoResponseToInsert = {
+      name: responseData.name,
+      trigger: responseData.trigger,
+      messageText: responseData.messageText,
+      storeId: storeId,  // ← Usar storeId del tenant
+      isActive: responseData.isActive !== undefined ? responseData.isActive : true,
+      priority: responseData.priority || 1,
+      requiresRegistration: responseData.requiresRegistration || false,
+      menuOptions: responseData.menuOptions || null,
+      nextAction: responseData.nextAction || null,
+      menuType: responseData.menuType || 'buttons',
+      showBackButton: responseData.showBackButton || false,
+      allowFreeText: responseData.allowFreeText !== undefined ? responseData.allowFreeText : true,
+      responseTimeout: responseData.responseTimeout || 300,
+      maxRetries: responseData.maxRetries || 3,
+      fallbackMessage: responseData.fallbackMessage || null,
+      conditionalDisplay: responseData.conditionalDisplay || null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const [autoResponse] = await tenantDb.insert(schema.autoResponses)
+      .values(autoResponseToInsert)
+      .returning();
+    
+    console.log('✅ AUTO RESPONSE CREATED - ID:', autoResponse.id);
+    return autoResponse;
+  } catch (error) {
+    console.error('Error creating auto response:', error);
+    throw error;
+  }
+},
+
+async updateAutoResponse(id: number, updates: any) {
+  try {
+    const filteredData = Object.fromEntries(
+      Object.entries(updates).filter(([_, value]) => value !== undefined)
+    );
+
+    const updateData = {
+      ...filteredData,
+      updatedAt: new Date()
+    };
+
+    const [autoResponse] = await tenantDb.update(schema.autoResponses)
+      .set(updateData)
+      .where(
+        and(
+          eq(schema.autoResponses.id, id),
+          eq(schema.autoResponses.storeId, storeId)
+        )
+      )
+      .returning();
+    
+    return autoResponse;
+  } catch (error) {
+    console.error('Error updating auto response:', error);
+    throw error;
+  }
+},
+
+async deleteAutoResponse(id: number) {
+  try {
+    await tenantDb.delete(schema.autoResponses)
+      .where(
+        and(
+          eq(schema.autoResponses.id, id),
+          eq(schema.autoResponses.storeId, storeId)
+        )
+      );
+    
+    console.log('✅ AUTO RESPONSE DELETED - ID:', id);
+  } catch (error) {
+    console.error('Error deleting auto response:', error);
+    throw error;
+  }
+},
+
+async getAutoResponsesByTrigger(trigger: string) {
+  try {
+    return await tenantDb.select()
+      .from(schema.autoResponses)
+      .where(
+        and(
+          eq(schema.autoResponses.trigger, trigger),
+          eq(schema.autoResponses.storeId, storeId),
+          eq(schema.autoResponses.isActive, true)
+        )
+      )
+      .orderBy(schema.autoResponses.priority);
+  } catch (error) {
+    console.error('Error getting auto responses by trigger:', error);
+    return [];
+  }
+},
+
+async clearAllAutoResponses() {
+  try {
+    await tenantDb.delete(schema.autoResponses)
+      .where(eq(schema.autoResponses.storeId, storeId));
+    
+    console.log('✅ ALL AUTO RESPONSES CLEARED for store:', storeId);
+  } catch (error) {
+    console.error('Error clearing all auto responses:', error);
+    throw error;
+  }
+},
+async createDefaultAutoResponses() {
+  try {
+    const defaultResponses = [
+      {
+        name: "Bienvenida",
+        trigger: "welcome",
+        messageText: "¡Hola! 👋 Bienvenido a nuestro servicio.\n\n¿En qué puedo ayudarte hoy?",
+        isActive: true,
+        priority: 1,
+        menuOptions: JSON.stringify([
+          { label: "Ver Productos", action: "show_products" },
+          { label: "Ver Servicios", action: "show_services" },
+          { label: "Contactar", action: "contact_agent" }
+        ])
+      },
+      {
+        name: "Saludo",
+        trigger: "hola",
+        messageText: "¡Hola! 😊 Me da mucho gusto saludarte.\n\n¿En qué puedo ayudarte hoy?",
+        isActive: true,
+        priority: 2
+      }
+    ];
+
+    for (const response of defaultResponses) {
+      await this.createAutoResponse(response);
+    }
+
+    console.log(`✅ Created ${defaultResponses.length} default auto responses for store ${storeId}`);
+  } catch (error) {
+    console.error('Error creating default auto responses:', error);
+    throw error;
+  }
+},
+
+
     // CONVERSATIONS
     async getAllConversations() {
       try {

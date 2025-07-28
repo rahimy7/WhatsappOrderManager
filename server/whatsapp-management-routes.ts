@@ -12,7 +12,7 @@ import { type AuthUser } from '@shared/auth';
 
 // Importar las nuevas capas de storage después de la migración
 import { StorageFactory } from './storage/storage-factory.js';
-import { UnifiedStorage } from './unified-storage.js';
+import { UnifiedStorage } from './storage/unified-storage.js';
 
 // Instanciar el factory
 const storageFactory = StorageFactory.getInstance();
