@@ -1,6 +1,7 @@
 // Multi-tenant WhatsApp processor with simplified routing
 import { storage } from './storage_bk.js';
 import { createTenantStorage } from './tenant-storage.js';
+import { createTenantStorageForStore } from './tenant-storage.js';
 
 // Smart store lookup with response authorization verification
 
@@ -53,7 +54,7 @@ export async function processWhatsAppMessage(webhookData: any) {
     console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
 
     // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
-    const tenantStorage = await createTenantStorage(storeMapping.storeId);
+    const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
 
     // 👤 PROCESAR CLIENTE
     let customer = await tenantStorage.getCustomerByPhone(customerPhone);
@@ -850,7 +851,7 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
         const { getTenantDb } = await import('./multi-tenant-db.js');
         const tenantDb = await getTenantDb(storeMapping.storeId);
         console.log('🔍 TENANT DB OBJECT:', typeof tenantDb, tenantDb ? 'exists' : 'null');
-        const tenantStorage = createTenantStorage(tenantDb);
+        const tenantStorage = createTenantStorage(tenantDb, storeMapping.storeId);
         console.log('🏪 TENANT STORAGE CREATED - For store:', storeMapping.storeId);
 
         // Log the incoming message in global logs
@@ -864,35 +865,97 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
         });
 
         // Step 4: Get or create customer in tenant schema
-        let customer = await tenantStorage.getCustomerByPhone(from);
+      // 🔧 VERSIÓN MEJORADA - Manejo seguro de clientes con protección contra duplicados
+
+let customer = await tenantStorage.getCustomerByPhone(from);
+
+if (!customer) {
+  console.log('➕ CREATING NEW CUSTOMER - In tenant schema');
+  
+  try {
+    // 🔄 VERIFICACIÓN ADICIONAL ANTES DE CREAR (evita race conditions)
+    customer = await tenantStorage.getCustomerByPhone(from);
+    
+    if (customer) {
+      console.log('✅ CUSTOMER FOUND ON RETRY - Using existing customer:', customer.id);
+    } else {
+      // ✨ CREAR CLIENTE CON MANEJO DE ERRORES ROBUSTO
+      customer = await tenantStorage.createCustomer({
+        name: `Cliente ${from.slice(-4)}`,
+        phone: from, // ⚠️ Asegúrate que sea "phone" y no "phoneNumber" según tu esquema
+        whatsappId: from,
+        address: null,
+        latitude: null,
+        longitude: null,
+        lastContact: new Date(),
+        registrationDate: new Date(),
+        totalOrders: 0,
+        totalSpent: "0.00", // ⚠️ String, no number según tu esquema
+        isVip: false,
+        notes: 'Cliente creado automáticamente desde WhatsApp',
+        mapLink: null
+      });
+      
+      console.log('✅ NEW CUSTOMER CREATED - ID:', customer.id);
+      
+      await storage.addWhatsAppLog({
+        type: 'info',
+        phoneNumber: from,
+        messageContent: `Nuevo cliente creado en tienda ${storeMapping.storeId}`,
+        status: 'customer_created'
+      });
+    }
+    
+  } catch (error: any) {
+    console.error('❌ ERROR CREATING CUSTOMER:', error);
+    
+    // 🚨 MANEJO ESPECÍFICO DE ERRORES DE CLAVE DUPLICADA
+    if (error.message?.includes('duplicate key') || 
+        error.message?.includes('unique constraint') || 
+        error.code === '23505') {
+      
+      console.log('🔄 DUPLICATE KEY ERROR - Attempting to fetch existing customer');
+      
+      // Intentar obtener el cliente existente
+      customer = await tenantStorage.getCustomerByPhone(from);
+      
+      if (customer) {
+        console.log('✅ EXISTING CUSTOMER RETRIEVED - ID:', customer.id);
         
-        if (!customer) {
-          console.log('➕ CREATING NEW CUSTOMER - In tenant schema');
-          customer = await tenantStorage.createCustomer({
-            name: `Cliente ${from.slice(-4)}`,
-            phone: from,
-            whatsappId: from,
-            address: null,
-            latitude: null,
-            longitude: null,
-            lastContact: new Date(),
-            registrationDate: new Date(),
-            totalOrders: 0,
-            totalSpent: 0,
-            isVip: false,
-            notes: 'Cliente creado automáticamente desde WhatsApp',
-            mapLink: null
-          });
-          
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: `Nuevo cliente creado en tienda ${storeMapping.storeId}`,
-            status: 'customer_created'
-          });
-        } else {
-          console.log('✅ EXISTING CUSTOMER FOUND - ID:', customer.id);
-        }
+        // Actualizar lastContact del cliente existente
+        await tenantStorage.updateCustomer(customer.id, {
+          lastContact: new Date()
+        });
+        
+      } else {
+        console.error('❌ FATAL: Could not create or retrieve customer');
+        throw new Error(`Failed to create or retrieve customer for phone: ${from}`);
+      }
+    } else {
+      // Re-lanzar el error si no es de duplicación
+      throw error;
+    }
+  }
+} else {
+  console.log('✅ EXISTING CUSTOMER FOUND - ID:', customer.id);
+  
+  // 🔄 ACTUALIZAR ÚLTIMO CONTACTO DEL CLIENTE EXISTENTE
+  try {
+    await tenantStorage.updateCustomer(customer.id, {
+      lastContact: new Date()
+    });
+  } catch (updateError) {
+    console.error('⚠️ WARNING: Could not update customer lastContact:', updateError);
+    // No es crítico, continúa el procesamiento
+  }
+}
+
+// ✅ VERIFICACIÓN FINAL
+if (!customer) {
+  throw new Error('Customer processing failed - no customer available');
+}
+
+console.log(`👤 CUSTOMER READY - ID: ${customer.id}, Phone: ${customer.phone}`);
 
         // Step 5: Get or create conversation in tenant schema
         let conversation = await tenantStorage.getConversationByCustomerPhone(from);
@@ -912,16 +975,17 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
         }
 
         // Step 6: Create message in tenant schema
-        await tenantStorage.createMessage({
-          conversationId: conversation.id,
-          senderId: customer.id,
-          senderType: 'customer',
-          content: messageText,
-          messageType: messageType as any,
-          whatsappMessageId: messageId,
-          timestamp: new Date(),
-          isRead: false
-        });
+       // ✅ CÓDIGO CORREGIDO para whatsapp-simple.ts
+await tenantStorage.createMessage({
+  conversationId: conversation.id,
+  senderId: customer.id,
+  senderType: 'customer',
+  content: messageText,
+  messageType: messageType || 'text',
+  whatsappMessageId: messageId,
+  isRead: false
+  // Elimina 'timestamp' - se usa 'sentAt' automáticamente
+});
 
         console.log('💌 MESSAGE STORED - In tenant schema');
 

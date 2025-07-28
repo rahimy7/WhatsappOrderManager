@@ -2,6 +2,7 @@ import { Pool } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "../shared/schema.js";
 import { eq, desc, and, or, count, sql, ilike } from "drizzle-orm";
+import { getTenantDb } from "./multi-tenant-db.js";
 
 export function createTenantStorage(tenantDb: any, storeId: number) {
   return {
@@ -148,28 +149,29 @@ export function createTenantStorage(tenantDb: any, storeId: number) {
   }
 },
 
-    async updateProduct(id: number, productData: any) {
-      try {
-        const filteredData = Object.keys(productData).reduce((acc, key) => {
-          if (productData[key] !== undefined) {
-            acc[key] = productData[key];
-          }
-          return acc;
-        }, {});
+   async updateProduct(id: number, productData: any) {
+  try {
+    // Filtrar campos undefined
+    const filteredData = Object.fromEntries(
+      Object.entries(productData).filter(([_, value]) => value !== undefined)
+    );
 
-        filteredData.updatedAt = new Date();
+    const updateData = {
+      ...filteredData,
+      updatedAt: new Date()
+    };
 
-        const [product] = await tenantDb.update(schema.products)
-          .set(filteredData)
-          .where(eq(schema.products.id, id))
-          .returning();
+    const [product] = await tenantDb.update(schema.products)
+      .set(updateData)
+      .where(eq(schema.products.id, id))
+      .returning();
 
-        return product;
-      } catch (error) {
-        console.error('Error updating product:', error);
-        throw error;
-      }
-    },
+    return product;
+  } catch (error) {
+    console.error('Error updating product:', error);
+    throw error;
+  }
+},
 
     // CUSTOMERS
     async getAllCustomers() {
@@ -196,33 +198,101 @@ export function createTenantStorage(tenantDb: any, storeId: number) {
       }
     },
 
-    async getCustomerByPhone(phoneNumber: string) {
-      try {
-        const [customer] = await tenantDb.select()
-          .from(schema.customers)
-          .where(eq(schema.customers.phoneNumber, phoneNumber))
-          .limit(1);
-        return customer || null;
-      } catch (error) {
-        console.error('Error getting customer by phone:', error);
-        return null;
-      }
-    },
+   // 🔧 FUNCIONES CORREGIDAS PARA tenant-storage.ts
 
-    async createCustomer(customerData: any) {
-      try {
-        const [customer] = await tenantDb.insert(schema.customers)
-          .values({
-            ...customerData,
-            createdAt: new Date()
-          })
-          .returning();
-        return customer;
-      } catch (error) {
-        console.error('Error creating customer:', error);
-        throw error;
+// ✅ CORREGIR getCustomerByPhone - usar "phone" en lugar de "phoneNumber"
+async getCustomerByPhone(phoneNumber: string) {
+  try {
+    const [customer] = await tenantDb.select()
+      .from(schema.customers)
+      .where(eq(schema.customers.phone, phoneNumber)) // ⚠️ CAMBIO: "phone" no "phoneNumber"
+      .limit(1);
+    return customer || null;
+  } catch (error) {
+    console.error('Error getting customer by phone:', error);
+    return null;
+  }
+},
+
+// ✅ MEJORAR createCustomer con UPSERT y manejo de errores
+async createCustomer(customerData: any) {
+  try {
+    // 🔍 PRIMERA VERIFICACIÓN: ¿Ya existe el cliente?
+    const existingCustomer = await this.getCustomerByPhone(customerData.phone);
+    if (existingCustomer) {
+      console.log('Customer already exists, returning existing:', existingCustomer.id);
+      return existingCustomer;
+    }
+
+    // 🚀 CREAR NUEVO CLIENTE
+    const customerToInsert = {
+      ...customerData,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const [customer] = await tenantDb.insert(schema.customers)
+      .values(customerToInsert)
+      .returning();
+    
+    console.log('✅ NEW CUSTOMER CREATED:', customer.id);
+    return customer;
+    
+  } catch (error: any) {
+    console.error('Error in createCustomer:', error);
+    
+    // 🚨 MANEJO DE ERROR DE CLAVE DUPLICADA
+    if (error.message?.includes('duplicate key') || 
+        error.message?.includes('unique constraint') ||
+        error.code === '23505') {
+      
+      console.log('🔄 Handling duplicate key error - fetching existing customer');
+      
+      // Buscar el cliente existente
+      const existingCustomer = await this.getCustomerByPhone(customerData.phone);
+      if (existingCustomer) {
+        console.log('✅ Retrieved existing customer:', existingCustomer.id);
+        return existingCustomer;
+      } else {
+        console.error('❌ Could not retrieve existing customer after duplicate error');
+        throw new Error(`Failed to handle duplicate customer: ${customerData.phone}`);
       }
-    },
+    }
+    
+    // Re-lanzar otros tipos de errores
+    throw error;
+  }
+},
+
+// 🔄 ALTERNATIVA: Usar UPSERT para mayor robustez
+async createOrUpdateCustomer(customerData: any) {
+  try {
+    const customerToInsert = {
+      ...customerData,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const [customer] = await tenantDb.insert(schema.customers)
+      .values(customerToInsert)
+      .onConflictDoUpdate({
+        target: schema.customers.phone,
+        set: {
+          lastContact: new Date(),
+          updatedAt: new Date(),
+          // Opcional: actualizar otros campos si es necesario
+          name: customerToInsert.name,
+          whatsappId: customerToInsert.whatsappId
+        }
+      })
+      .returning();
+    
+    return customer;
+  } catch (error) {
+    console.error('Error in createOrUpdateCustomer:', error);
+    throw error;
+  }
+},
 
     async updateCustomer(id: number, customerData: any) {
       try {
@@ -438,18 +508,27 @@ export function createTenantStorage(tenantDb: any, storeId: number) {
       }
     },
 
-    async getConversationByCustomerPhone(phone: string) {
-      try {
-        const [conversation] = await tenantDb.select()
-          .from(schema.conversations)
-          .where(eq(schema.conversations.customerPhone, phone))
-          .limit(1);
-        return conversation || null;
-      } catch (error) {
-        console.error('Error getting conversation by customer phone:', error);
-        return null;
-      }
-    },
+  async getConversationByCustomerPhone(phone: string) {
+  try {
+    // 1. Primero buscar el cliente por teléfono
+    const customer = await this.getCustomerByPhone(phone);
+    if (!customer) {
+      return null;
+    }
+    
+    // 2. Luego buscar la conversación por customerId
+    const [conversation] = await tenantDb.select()
+      .from(schema.conversations)
+      .where(eq(schema.conversations.customerId, customer.id))
+      .orderBy(desc(schema.conversations.lastMessageAt))
+      .limit(1);
+    
+    return conversation || null;
+  } catch (error) {
+    console.error('Error getting conversation by customer phone:', error);
+    return null;
+  }
+},
 
     async createConversation(conversationData: any) {
       try {
@@ -478,6 +557,144 @@ export function createTenantStorage(tenantDb: any, storeId: number) {
         console.error('Error updating conversation:', error);
         throw error;
       }
-    }
+    },
+     async getAllMessages() {
+      try {
+        return await tenantDb.select()
+          .from(schema.messages)
+          .orderBy(desc(schema.messages.sentAt));
+      } catch (error) {
+        console.error('Error getting all messages:', error);
+        return [];
+      }
+    },
+
+    async getMessagesByConversation(conversationId: number) {
+      try {
+        return await tenantDb.select()
+          .from(schema.messages)
+          .where(eq(schema.messages.conversationId, conversationId))
+          .orderBy(schema.messages.sentAt);
+      } catch (error) {
+        console.error('Error getting messages by conversation:', error);
+        return [];
+      }
+    },
+
+    async createMessage(messageData: any) {
+      try {
+        console.log('📝 CREATING MESSAGE - Data:', messageData);
+
+        const messageToInsert = {
+          conversationId: messageData.conversationId,
+          senderId: messageData.senderId || null,
+          senderType: messageData.senderType,
+          content: messageData.content,
+          messageType: messageData.messageType || 'text',
+          whatsappMessageId: messageData.whatsappMessageId || null,
+          isRead: messageData.isRead || false,
+          sentAt: new Date(),
+          createdAt: new Date()
+        };
+
+        const [message] = await tenantDb.insert(schema.messages)
+          .values(messageToInsert)
+          .returning();
+
+        // ✅ Actualizar lastMessageAt de la conversación
+        await tenantDb.update(schema.conversations)
+          .set({ lastMessageAt: new Date() })
+          .where(eq(schema.conversations.id, messageData.conversationId));
+
+        console.log('✅ MESSAGE CREATED - ID:', message.id);
+        return message;
+      } catch (error) {
+        console.error('❌ ERROR CREATING MESSAGE:', error);
+        throw error;
+      }
+    },
+
+    async updateMessage(id: number, updates: any) {
+      try {
+        const filteredData = Object.fromEntries(
+          Object.entries(updates).filter(([_, value]) => value !== undefined)
+        );
+
+        const [message] = await tenantDb.update(schema.messages)
+          .set(filteredData)
+          .where(eq(schema.messages.id, id))
+          .returning();
+        
+        return message;
+      } catch (error) {
+        console.error('Error updating message:', error);
+        throw error;
+      }
+    },
+
+    async markMessagesAsRead(conversationId: number) {
+      try {
+        await tenantDb.update(schema.messages)
+          .set({ isRead: true })
+          .where(
+            and(
+              eq(schema.messages.conversationId, conversationId),
+              eq(schema.messages.senderType, 'customer')
+            )
+          );
+        
+        console.log('✅ MESSAGES MARKED AS READ - Conversation:', conversationId);
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+        throw error;
+      }
+    },
+
+    // ✅ HELPERS
+    async getOrCreateConversationByPhone(phone: string, storeId: number) {
+      try {
+        // 1. Buscar conversación existente
+        let conversation = await this.getConversationByCustomerPhone(phone);
+        
+        if (conversation) {
+          console.log('✅ EXISTING CONVERSATION FOUND - ID:', conversation.id);
+          return conversation;
+        }
+        
+        // 2. Si no existe, buscar o crear cliente
+        let customer = await this.getCustomerByPhone(phone);
+        if (!customer) {
+          console.log('➕ CREATING NEW CUSTOMER FOR CONVERSATION');
+          customer = await this.createCustomer({
+            name: `Cliente ${phone.slice(-4)}`,
+            phone: phone,
+            whatsappId: phone,
+            address: null,
+            storeId: storeId
+          });
+        }
+        
+        // 3. Crear nueva conversación
+        console.log('➕ CREATING NEW CONVERSATION');
+        conversation = await this.createConversation({
+          customerId: customer.id,
+          conversationType: 'initial',
+          status: 'active',
+          storeId: storeId
+        });
+        
+        return conversation;
+      } catch (error) {
+        console.error('Error getting or creating conversation by phone:', error);
+        throw error;
+      }
+    },
+    
   };
+}
+
+// En tenant-storage.ts - agregar al final del archivo
+export async function createTenantStorageForStore(storeId: number) {
+  const tenantDb = await getTenantDb(storeId);
+  return createTenantStorage(tenantDb, storeId);
 }
