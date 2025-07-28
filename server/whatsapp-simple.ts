@@ -995,23 +995,40 @@ await tenantStorage.createMessage({
         // Step 7B: PRIORITY - Check if message is a structured order from web catalog
         const isOrder = await isOrderMessage(messageText);
         
-        if (isOrder) {
-          await storage.addWhatsAppLog({
-            type: 'info',
-            phoneNumber: from,
-            messageContent: 'Mensaje de pedido detectado desde catálogo web - PRIMERA CONVERSACIÓN',
-            status: 'processing',
-            rawData: JSON.stringify({ 
-              customerId: customer.id,
-              messageLength: messageText.length,
-              storeId: storeMapping.storeId
-            })
-          });
-
-          // ✅ CORREGIDO: Pasar phoneNumberId en lugar de storeMapping.phoneNumberId
-          await processWebCatalogOrderSimple(customer, from, messageText, storeMapping.storeId, phoneNumberId, tenantStorage);
-          return; // Stop processing here - order handled
-        }
+        // ✅ CÓDIGO CORREGIDO:
+if (isOrder) {
+  console.log('🛍️ ORDER DETECTED - Processing web catalog order');
+  
+  // 1. Procesar el pedido
+  await processWebCatalogOrderSimple(customer, from, messageText, storeMapping.storeId, phoneNumberId, tenantStorage);
+  
+  // 2. Enviar respuesta automática
+  try {
+    const orderResponse = await tenantStorage.getAutoResponseByTrigger('order_received');
+    
+    if (orderResponse) {
+      console.log('📧 SENDING ORDER CONFIRMATION - Using configured response');
+      await sendAutoResponseMessage(from, 'order_received', storeMapping.storeId, tenantStorage, {
+        customerName: customer.name || 'Cliente'
+      });
+    } else {
+      console.log('📧 SENDING ORDER CONFIRMATION - Using fallback response');
+      await sendWhatsAppMessageDirect(from, 
+        `✅ *Pedido Recibido*\n\n¡Gracias por tu pedido! Lo hemos recibido correctamente y pronto nos pondremos en contacto contigo.\n\n¿Necesitas algo más?`, 
+        storeMapping.storeId
+      );
+    }
+  } catch (responseError) {
+    console.error('❌ ERROR SENDING ORDER CONFIRMATION:', responseError);
+    // Enviar respuesta básica como fallback
+    await sendWhatsAppMessageDirect(from, 
+      `✅ Tu pedido ha sido recibido. Te contactaremos pronto.`, 
+      storeMapping.storeId
+    );
+  }
+  
+  return; // Ahora sí termina después de enviar respuesta
+}
 
         // Step 8: Process message using configured auto-responses - STORE-SPECIFIC VALIDATION
         try {
