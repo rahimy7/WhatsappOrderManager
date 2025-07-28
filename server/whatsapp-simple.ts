@@ -1377,19 +1377,7 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       })
     });
 
-    // INICIAR FLUJO DE RECOLECCIÓN DE DATOS DEL CLIENTE
-    // Temporarily disabled due to SQL syntax errors
-    console.log('⚠️ Registration flow creation temporarily disabled - Sending simple confirmation');
-
-    // Step 2: Send simple confirmation instead
-    await sendAutoResponseMessage(phoneNumber, 'order_received', storeId, tenantStorage, {
-      customerName: customer.name || 'Cliente',
-      subtotal: `$${total.toLocaleString('es-MX')}`,
-      deliveryCost: '$0',
-      totalAmount: `$${total.toLocaleString('es-MX')}`,
-      estimatedTime: '2-3 días hábiles'
-    });
-
+  
   } catch (error: any) {
     console.error('Error processing web catalog order:', error);
     const { storage } = await import('./storage_bk.js');
