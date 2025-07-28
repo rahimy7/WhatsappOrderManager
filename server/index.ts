@@ -61,36 +61,23 @@ const server = createServer(app);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ================================
-// HEALTH CHECKS (PRIORIDAD ALTA)
-// ================================
+// 🏥 HEALTHCHECK RAILWAY - PRIMERA PRIORIDAD
 app.get('/api/health', (req, res) => {
-  console.log('🏥 Railway health check request received');
-  console.log('🌍 Environment:', process.env.NODE_ENV);
+  console.log('🏥 Railway healthcheck hit');
   console.log('🔌 Port:', process.env.PORT);
-  try {
-    const healthResponse = {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      environment: process.env.NODE_ENV || 'development',
-      port: process.env.PORT || '5000',
-      memory: process.memoryUsage(),
-      version: '1.0.0'
-    };
-    console.log('✅ Health check response sent:', healthResponse.status);
-    res.status(200).json(healthResponse);
-  } catch (error) {
-    console.error('❌ Health check error:', error);
-    res.status(500).json({
-      status: 'unhealthy',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    });
-  }
+  console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
+  
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    port: process.env.PORT,
+    uptime: process.uptime()
+  });
 });
+
+// También agregar un backup simple
 app.get('/health', (req, res) => {
-  console.log('🏥 Simple health check');
   res.status(200).send('OK');
 });
 
@@ -415,7 +402,8 @@ apiRouter.get('/reports', authenticateToken, async (req, res) => {
   }
 });
 
-
+app.use('/api', apiRouter);
+console.log('✅ API Router mounted successfully');
 
 // Start the application
 (async () => {
