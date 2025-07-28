@@ -1,4 +1,4 @@
-import { StorageFactory, getTenantStorageForUser } from './storage/storage-factory.js';
+import { StorageFactory } from './storage/storage-factory.js';
 import { MasterStorageService } from './storage/master-storage.js';
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
@@ -23,14 +23,12 @@ import fs from 'fs';
 import { SupabaseStorageManager } from './supabase-storage.js';
 
 // ================================
-// 🔥 IMPORTACIONES DE STORAGE CORREGIDAS
+// 🔥 INSTANCIAS DE STORAGE
 // ================================
-
-// Helper para obtener instancias de storage
 const storageFactory = StorageFactory.getInstance();
 const masterStorage = storageFactory.getMasterStorage();
 
-// Helper function para obtener tenant storage
+// Helper para obtener tenant storage
 async function getTenantStorageForUser(user: { storeId: number }) {
   if (!user.storeId) {
     throw new Error('User does not have a valid store ID');
@@ -42,24 +40,20 @@ async function getTenantStorageForUserFixed(userId: number) {
   try {
     const factory = StorageFactory.getInstance();
     const masterStorage = factory.getMasterStorage();
-    
-    // Obtener usuario y su tienda
     const user = await masterStorage.getUserById(userId);
     if (!user) {
       throw new Error(`User with ID ${userId} not found`);
     }
-
-    // Obtener storage del tenant para esa tienda
     return await factory.getTenantStorage(user.storeId);
   } catch (error) {
     console.error(`Error getting tenant storage for user ${userId}:`, error);
     throw error;
   }
 }
-// ================================
-// RESTO DE LA CONFIGURACIÓN
-// ================================
 
+// ================================
+// CONFIGURACIÓN EXPRESS Y SERVER
+// ================================
 const app = express();
 const server = createServer(app);
 
@@ -67,6 +61,42 @@ const server = createServer(app);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ================================
+// HEALTH CHECKS (PRIORIDAD ALTA)
+// ================================
+app.get('/api/health', (req, res) => {
+  console.log('🏥 Railway health check request received');
+  console.log('🌍 Environment:', process.env.NODE_ENV);
+  console.log('🔌 Port:', process.env.PORT);
+  try {
+    const healthResponse = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      port: process.env.PORT || '5000',
+      memory: process.memoryUsage(),
+      version: '1.0.0'
+    };
+    console.log('✅ Health check response sent:', healthResponse.status);
+    res.status(200).json(healthResponse);
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+app.get('/health', (req, res) => {
+  console.log('🏥 Simple health check');
+  res.status(200).send('OK');
+});
+
+// ================================
+// CONFIGURACIÓN MULTER
+// ================================
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -82,10 +112,19 @@ const upload = multer({
   }
 });
 
-// CORS Configuration
+// ================================
+// MIDDLEWARE DE LOGGING PARA DEBUG
+// ================================
+app.use((req, res, next) => {
+  console.log(`📝 ${req.method} ${req.path} - ${new Date().toISOString()}`);
+  next();
+});
+
+// ================================
+// CORS CONFIGURATION
+// ================================
 app.use((req, res, next) => {
   const origin = req.headers.origin || req.headers.referer || req.get('host') || 'localhost:5000';
-  
   const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5000',
@@ -96,34 +135,35 @@ app.use((req, res, next) => {
     'https://whatsappordermanager-production.up.railway.app',
     process.env.RAILWAY_STATIC_URL
   ].filter(Boolean);
-
-  const isAllowed = process.env.NODE_ENV === 'development' || 
-                   !req.headers.origin || 
-                   allowedOrigins.includes(req.headers.origin);
-
+  const isAllowed = process.env.NODE_ENV === 'development' ||
+    !req.headers.origin ||
+    allowedOrigins.includes(req.headers.origin);
   if (isAllowed) {
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
     res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     res.setHeader('Access-Control-Max-Age', '86400');
-    
     console.log(`✅ CORS: ${req.method} ${req.path} from ${req.headers.origin || 'no-origin'}`);
   } else {
     console.log(`❌ CORS BLOCKED: ${req.method} ${req.path} from ${req.headers.origin}`);
   }
-
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-
   next();
 });
 
+// ================================
+// EXPRESS MIDDLEWARE
+// ================================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ================================
+// API ROUTER SETUP
+// ================================
 const apiRouter = express.Router();
 
 // ================================
@@ -376,23 +416,6 @@ apiRouter.get('/reports', authenticateToken, async (req, res) => {
 });
 
 
-app.get('/api/health', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.status(200).json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development',
-    port: process.env.PORT || process.env.RAILWAY_PORT || 5000
-  });
-});
-// ================================
-// FINAL SETUP AND SERVER START
-// ================================
-
-// Mount API router BEFORE any other middleware
-app.use('/api', apiRouter);
 
 // Start the application
 (async () => {
@@ -1052,7 +1075,6 @@ apiRouter.get('/auth/me', (req, res) => {
     res.status(401).json({ success: false, message: 'Invalid token' });
   }
 });
-
 
 // ================================
 // PUBLIC STORE ENDPOINTS

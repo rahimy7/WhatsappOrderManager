@@ -11,7 +11,7 @@ import ws from "ws";
 // Configurar WebSocket para Neon
 // @ts-ignore
 if (typeof globalThis.WebSocket === 'undefined') {
-  globalThis.WebSocket = ws;
+  globalThis.WebSocket = ws as any;
 }
 
 /**

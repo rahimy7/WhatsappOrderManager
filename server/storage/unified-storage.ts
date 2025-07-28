@@ -554,26 +554,26 @@ export class UnifiedStorage implements UnifiedStorageInterface {
   async refresh(): Promise<void> {
     if (this.storeId) {
       this.tenantStorage = null;
-      await this.storageFactory.refreshTenantStorage(this.storeId);
+      await this.storageFactory.getTenantStorage(this.storeId);
     }
   }
 
   /**
    * Limpia el cache de la tienda actual
    */
-  clearCache(): void {
+ /*  clearCache(): void {
     if (this.storeId) {
       this.storageFactory.clearTenantCache(this.storeId);
       this.tenantStorage = null;
     }
-  }
+  } */
 
   /**
    * Verifica el estado de salud de las conexiones
    */
-  async healthCheck(): Promise<any> {
+/*   async healthCheck(): Promise<any> {
     return this.storageFactory.healthCheck();
-  }
+  } */
 
   // ========================================
   // BATCH OPERATIONS
