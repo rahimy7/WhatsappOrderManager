@@ -4,14 +4,14 @@
     "type": "module",
     "license": "MIT",
     "packageManager": "yarn@4.0.0+sha512.955259c0370ab8c06d013faa7d5e7addb6914251029695675f54e04c917ea6b092c379ba8d3521556d90b3874e5037759467072f01d2295341ead43cc259f14b",
-    "scripts": {
-        "dev": "tsx --watch server/index.ts",
-        "build": "npm run build:client && npm run build:server",
-        "build:client": "vite build",
-        "build:server": "esbuild server/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:postgres --external:bcryptjs --external:drizzle-orm --external:multer --external:ws --external:jsonwebtoken --external:@supabase/supabase-js --external:@neondatabase/serverless --external:lightningcss --format=esm --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
-        "preview": "npm run build && npm run start",
-        "typecheck": "tsc --noEmit",
-        "postinstall": "npm run build"
+     "scripts": {
+    "dev": "tsx --watch server/index.ts",
+    "build": "npm run build:client",
+    "build:client": "vite build",
+    "start": "tsx server/index.ts",
+    "preview": "npm run build && npm run start",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "npm run build"
     },
     "engines": {
         "node": ">=18.0.0",
