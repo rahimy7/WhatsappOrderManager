@@ -755,7 +755,7 @@ apiRouter.get('/reports', authenticateToken, async (req, res) => {
 
     console.log('🔌 Servidor WebSocket configurado con manejo de errores mejorado');
 
-    const PORT = parseInt(process.env.PORT || process.env.RAILWAY_PORT || '5000', 10);
+    const PORT = parseInt(process.env.PORT || '5000', 10);
     const HOST = '0.0.0.0';
 
     server.listen(PORT, HOST, () => {
