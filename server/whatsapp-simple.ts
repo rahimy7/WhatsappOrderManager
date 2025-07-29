@@ -1326,6 +1326,8 @@ ${orderItems.map(item =>
     console.log(`✅ REGISTRATION FLOW COMPLETED`);
 
     // Log del éxito
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
     await masterStorage.addWhatsAppLog({
       type: 'success',
       phoneNumber: phoneNumber,
@@ -1556,35 +1558,8 @@ async function sendAutoResponseMessage(
     console.log(`📋 Auto responses found: ${autoResponses?.length || 0}`);
 
     if (!autoResponses || autoResponses.length === 0) {
-      console.log(`⚠️ NO AUTO RESPONSE FOUND - Trigger: ${trigger}`);
-      
-      // Fallback messages para pasos críticos
-      let fallbackMessage = '';
-      switch (trigger) {
-        case 'collect_name':
-          fallbackMessage = "📝 Para continuar con tu pedido, necesitamos algunos datos.\n\n👤 Por favor, proporciona tu nombre completo:";
-          break;
-        case 'collect_address':
-          fallbackMessage = "📍 Ahora necesitamos tu dirección de entrega.\n\nPor favor escribe tu dirección completa:";
-          break;
-        case 'collect_contact':
-          fallbackMessage = "📞 ¿Cuál es tu número de contacto preferido?\n\n(Puede ser el mismo de WhatsApp o uno diferente):";
-          break;
-        case 'collect_payment':
-          fallbackMessage = "💳 ¿Cómo prefieres pagar?\n\nOpciones: Efectivo, Transferencia, Tarjeta";
-          break;
-        case 'collect_notes':
-          fallbackMessage = "📝 ¿Tienes alguna nota especial o comentario adicional?\n\n(Si no tienes ninguno, escribe 'ninguno')";
-          break;
-        case 'confirm_order':
-          fallbackMessage = "✅ Por favor, confirma los siguientes datos:\n\n¿Todo está correcto? Responde 'confirmar' para finalizar tu pedido.";
-          break;
-        default:
-          fallbackMessage = "¡Hola! ¿En qué podemos ayudarte?";
-      }
-      
-      await sendWhatsAppMessageDirect(phoneNumber, fallbackMessage, storeId);
-      console.log(`✅ AUTO RESPONSE SENT`);
+      // ...tu fallback actual...
+      await sendWhatsAppMessageDirect(phoneNumber, "¡Hola! ¿En qué podemos ayudarte?", storeId);
       return;
     }
     
@@ -1598,15 +1573,34 @@ async function sendAutoResponseMessage(
       }
     }
     
-    // Enviar mensaje
-    await sendWhatsAppMessageDirect(phoneNumber, messageText, storeId);
-    
+    // Obtener config global
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    const config = await masterStorage.getWhatsAppConfig(storeId);
+
+    // Procesar botones si existen
+    let menuOptions = null;
+    try {
+      if (autoResponse.menuOptions && typeof autoResponse.menuOptions === 'string') {
+        menuOptions = JSON.parse(autoResponse.menuOptions);
+      } else if (autoResponse.menuOptions) {
+        menuOptions = autoResponse.menuOptions;
+      }
+    } catch (parseError) {
+      console.log(`⚠️ INVALID MENU OPTIONS JSON:`, parseError);
+    }
+
+    if (menuOptions && Array.isArray(menuOptions) && menuOptions.length > 0) {
+      // Enviar mensaje interactivo con botones
+      await sendInteractiveMessage(phoneNumber, messageText, menuOptions, config);
+    } else {
+      // Enviar mensaje de texto normal
+      await sendWhatsAppMessageDirect(phoneNumber, messageText, storeId);
+    }
     console.log(`✅ AUTO RESPONSE SENT - Trigger: ${trigger}, Message length: ${messageText.length}`);
     
   } catch (error: any) {
     console.error('Error sending auto response message:', error);
-    
-    // Enviar mensaje básico como último recurso
     await sendWhatsAppMessageDirect(
       phoneNumber,
       "Ha ocurrido un error. ¿Podrías intentar nuevamente?",
