@@ -3,6 +3,30 @@ import { storage } from './storage_bk.js';
 import { createTenantStorage } from './tenant-storage.js';
 import { createTenantStorageForStore } from './tenant-storage.js';
 
+
+interface CollectedData {
+  customerName?: string;
+  address?: string;
+  contactNumber?: string;
+  paymentMethod?: string;
+  notes?: string;
+}
+
+interface Customer {
+  id: number;
+  name: string;
+  phone: string;
+  [key: string]: any;
+}
+
+interface RegistrationFlow {
+  currentStep: string;
+  collectedData?: string | object;
+  orderId?: number;
+  phoneNumber: string;
+  [key: string]: any;
+}
+
 // Smart store lookup with response authorization verification
 
 
@@ -61,11 +85,22 @@ export async function processWhatsAppMessage(webhookData: any) {
     
     if (!customer) {
       console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
+      
+      // ✅ CORRECCIÓN: Usar los campos correctos
       customer = await tenantStorage.createCustomer({
         name: `Cliente ${customerPhone.slice(-4)}`,
-        phone: customerPhone,
-        email: '',
-        address: ''
+        phone: customerPhone,           // ✅ CORRECTO: "phone" no "phoneNumber"
+        storeId: storeMapping.storeId,  // ✅ AGREGAR: storeId requerido
+        whatsappId: customerPhone,
+        address: null,
+        latitude: null,
+        longitude: null,
+        lastContact: new Date(),
+        registrationDate: new Date(),
+        totalOrders: 0,
+        totalSpent: "0.00",
+        isVip: false,
+        notes: 'Cliente creado automáticamente desde WhatsApp'
       });
     }
 
@@ -718,190 +753,288 @@ async function sendWhatsAppMessageDirect(
 }
 
 
-
-
-
-// Function to handle registration flow for data collection
 async function handleRegistrationFlow(
-  customer: any,
+  customer: Customer,
   messageText: string,
-  registrationFlow: any,
+  registrationFlow: RegistrationFlow,
   storeId: number,
   tenantStorage: any
 ): Promise<void> {
   try {
     const currentStep = registrationFlow.currentStep;
-    const collectedData = JSON.parse(registrationFlow.collectedData || '{}');
+    
+    // ✅ CORRECCIÓN: Manejo seguro de collectedData con tipos
+    let collectedData: CollectedData = {};
+    try {
+      if (registrationFlow.collectedData && typeof registrationFlow.collectedData === 'string') {
+        collectedData = JSON.parse(registrationFlow.collectedData) as CollectedData;
+      } else if (registrationFlow.collectedData && typeof registrationFlow.collectedData === 'object') {
+        collectedData = registrationFlow.collectedData as CollectedData;
+      }
+    } catch (parseError) {
+      console.log(`⚠️ INVALID JSON in collectedData, starting fresh:`, parseError);
+      collectedData = {};
+    }
     
     console.log(`🔄 PROCESSING REGISTRATION STEP: ${currentStep} for Customer: ${customer.id}`);
+    console.log(`📝 CURRENT COLLECTED DATA:`, collectedData);
 
     switch (currentStep) {
       case 'collect_name':
-        // Validate name (minimum 3 characters)
-        if (messageText.trim().length < 3) {
-          await sendAutoResponseMessage(customer.phoneNumber, 'collect_name', storeId, tenantStorage);
+        // Validar nombre (mínimo 2 caracteres, solo letras y espacios)
+        const namePattern = /^[a-zA-ZáéíóúñÁÉÍÓÚÑ\s]{2,50}$/;
+        if (!namePattern.test(messageText.trim())) {
+          await sendWhatsAppMessageDirect(
+            customer.phone,
+            "❌ Por favor ingresa un nombre válido (solo letras, mínimo 2 caracteres):",
+            storeId
+          );
           return;
         }
         
-        // Update customer name
+        // Actualizar datos del cliente y flujo
         await tenantStorage.updateCustomer(customer.id, { name: messageText.trim() });
         collectedData.customerName = messageText.trim();
         
-        // Advance to address collection
-        await tenantStorage.createOrUpdateRegistrationFlow({
-          customerId: customer.id,
-          flowType: registrationFlow.flowType,
+        // Avanzar al siguiente paso
+        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
           currentStep: 'collect_address',
-          orderId: registrationFlow.orderId,
           collectedData: JSON.stringify(collectedData),
-          expiresAt: registrationFlow.expiresAt
+          updatedAt: new Date()
         });
         
-        await sendAutoResponseMessage(customer.phoneNumber, 'collect_address', storeId, tenantStorage);
+        await sendAutoResponseMessage(customer.phone, 'collect_address', storeId, tenantStorage);
         break;
 
       case 'collect_address':
-        // Save address
+        // Validar dirección (mínimo 10 caracteres)
+        if (messageText.trim().length < 10) {
+          await sendWhatsAppMessageDirect(
+            customer.phone,
+            "❌ Por favor proporciona una dirección más detallada (mínimo 10 caracteres):",
+            storeId
+          );
+          return;
+        }
+        
         collectedData.address = messageText.trim();
         
-        // Advance to contact collection
-        await tenantStorage.createOrUpdateRegistrationFlow({
-          customerId: customer.id,
-          flowType: registrationFlow.flowType,
+        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
           currentStep: 'collect_contact',
-          orderId: registrationFlow.orderId,
           collectedData: JSON.stringify(collectedData),
-          expiresAt: registrationFlow.expiresAt
+          updatedAt: new Date()
         });
         
-        await sendAutoResponseMessage(customer.phoneNumber, 'collect_contact', storeId, tenantStorage);
+        await sendAutoResponseMessage(customer.phone, 'collect_contact', storeId, tenantStorage);
         break;
 
       case 'collect_contact':
-        // Handle contact selection (button or text)
-        if (messageText === 'use_current') {
-          collectedData.contactNumber = customer.phoneNumber;
-        } else if (messageText === 'use_other') {
-          // Change step to get custom number
-          await tenantStorage.createOrUpdateRegistrationFlow({
-            customerId: customer.id,
-            flowType: registrationFlow.flowType,
-            currentStep: 'collect_custom_contact',
-            orderId: registrationFlow.orderId,
+        // Manejar botones o entrada de texto
+        const msgLower = messageText.toLowerCase();
+        
+        if (msgLower.includes('usar este') || msgLower.includes('use_whatsapp') || msgLower === 'usar este número') {
+          collectedData.contactNumber = customer.phone;
+        } else if (msgLower.includes('otro') || msgLower.includes('other_number') || msgLower === 'otro número') {
+          await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+            currentStep: 'collect_other_number',
             collectedData: JSON.stringify(collectedData),
-            expiresAt: registrationFlow.expiresAt
+            updatedAt: new Date()
           });
           
-          await sendWhatsAppMessageDirect(customer.phoneNumber, 
-            "📞 Por favor escribe tu número de contacto (10 dígitos):", storeId);
+          await sendAutoResponseMessage(customer.phone, 'collect_other_number', storeId, tenantStorage);
           return;
         } else {
-          // Direct phone number input
-          const phoneRegex = /^\d{10}$/;
-          if (!phoneRegex.test(messageText.replace(/\D/g, ''))) {
-            await sendWhatsAppMessageDirect(customer.phoneNumber, 
-              "❌ Número inválido. Debe tener 10 dígitos. Intenta de nuevo:", storeId);
+          // Entrada directa de número
+          const phoneRegex = /^\+?[\d\s\-\(\)]{10,15}$/;
+          if (!phoneRegex.test(messageText.trim())) {
+            await sendWhatsAppMessageDirect(
+              customer.phone,
+              "❌ Número inválido. Formato ejemplo: 809-123-4567",
+              storeId
+            );
             return;
           }
           collectedData.contactNumber = messageText.trim();
         }
         
-        // Advance to payment method
-        await tenantStorage.createOrUpdateRegistrationFlow({
-          customerId: customer.id,
-          flowType: registrationFlow.flowType,
+        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
           currentStep: 'collect_payment',
-          orderId: registrationFlow.orderId,
           collectedData: JSON.stringify(collectedData),
-          expiresAt: registrationFlow.expiresAt
+          updatedAt: new Date()
         });
         
-        await sendAutoResponseMessage(customer.phoneNumber, 'collect_payment', storeId, tenantStorage);
+        await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
         break;
 
-      case 'collect_custom_contact':
-        // Validate and save custom contact number
-        const phoneRegex = /^\d{10}$/;
-        if (!phoneRegex.test(messageText.replace(/\D/g, ''))) {
-          await sendWhatsAppMessageDirect(customer.phoneNumber, 
-            "❌ Número inválido. Debe tener 10 dígitos. Intenta de nuevo:", storeId);
+      case 'collect_other_number':
+        const phoneRegex = /^\+?[\d\s\-\(\)]{10,15}$/;
+        if (!phoneRegex.test(messageText.trim())) {
+          await sendWhatsAppMessageDirect(
+            customer.phone,
+            "❌ Número inválido. Formato ejemplo: 809-123-4567",
+            storeId
+          );
           return;
         }
         
         collectedData.contactNumber = messageText.trim();
         
-        // Advance to payment method
-        await tenantStorage.createOrUpdateRegistrationFlow({
-          customerId: customer.id,
-          flowType: registrationFlow.flowType,
+        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
           currentStep: 'collect_payment',
-          orderId: registrationFlow.orderId,
           collectedData: JSON.stringify(collectedData),
-          expiresAt: registrationFlow.expiresAt
+          updatedAt: new Date()
         });
         
-        await sendAutoResponseMessage(customer.phoneNumber, 'collect_payment', storeId, tenantStorage);
+        await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
         break;
 
       case 'collect_payment':
-        // Handle payment method selection
+        // Manejar selección de método de pago
         let paymentMethod = '';
-        if (messageText === 'payment_card') {
+        const msgPaymentLower = messageText.toLowerCase();
+        
+        if (msgPaymentLower.includes('tarjeta') || msgPaymentLower.includes('card') || msgPaymentLower.includes('crédito') || msgPaymentLower.includes('débito')) {
           paymentMethod = 'Tarjeta de Crédito/Débito';
-        } else if (messageText === 'payment_transfer') {
+        } else if (msgPaymentLower.includes('transferencia') || msgPaymentLower.includes('transfer') || msgPaymentLower.includes('bancaria')) {
           paymentMethod = 'Transferencia Bancaria';
-        } else if (messageText === 'payment_cash') {
-          paymentMethod = 'Efectivo';
+        } else if (msgPaymentLower.includes('efectivo') || msgPaymentLower.includes('cash') || msgPaymentLower.includes('contra entrega')) {
+          paymentMethod = 'Efectivo (Contra Entrega)';
         } else {
-          await sendAutoResponseMessage(customer.phoneNumber, 'collect_payment', storeId, tenantStorage);
+          await sendAutoResponseMessage(customer.phone, 'collect_payment', storeId, tenantStorage);
           return;
         }
         
         collectedData.paymentMethod = paymentMethod;
         
-        // Advance to notes collection
-        await tenantStorage.createOrUpdateRegistrationFlow({
-          customerId: customer.id,
-          flowType: registrationFlow.flowType,
+        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
           currentStep: 'collect_notes',
-          orderId: registrationFlow.orderId,
           collectedData: JSON.stringify(collectedData),
-          expiresAt: registrationFlow.expiresAt
+          updatedAt: new Date()
         });
         
-        await sendAutoResponseMessage(customer.phoneNumber, 'collect_notes', storeId, tenantStorage);
+        await sendAutoResponseMessage(customer.phone, 'collect_notes', storeId, tenantStorage);
         break;
 
       case 'collect_notes':
-        // Save notes (optional)
-        if (messageText.toLowerCase() !== 'continuar' && messageText.trim().length > 0) {
+        // Guardar notas (opcional)
+        if (messageText.toLowerCase() !== 'no_notes' && 
+            messageText.toLowerCase() !== 'continuar' && 
+            messageText.toLowerCase() !== 'continuar sin notas' &&
+            messageText.trim().length > 0) {
           collectedData.notes = messageText.trim();
+        } else {
+          collectedData.notes = 'Sin notas adicionales';
         }
         
-        // Finalize order with collected data
-        await finalizeOrderWithData(registrationFlow.orderId, collectedData, customer, storeId, tenantStorage);
+        // Mostrar confirmación final
+        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+          currentStep: 'confirm_order',
+          collectedData: JSON.stringify(collectedData),
+          updatedAt: new Date()
+        });
         
-        // Clear registration flow
-        await tenantStorage.deleteRegistrationFlow(customer.id);
+        // Preparar mensaje de confirmación con variables
+        try {
+          const confirmResponse = await tenantStorage.getAutoResponsesByTrigger('confirm_order');
+          if (confirmResponse && confirmResponse.length > 0) {
+            let confirmMessage = confirmResponse[0].messageText;
+            
+            // Reemplazar variables en el mensaje
+            confirmMessage = confirmMessage
+              .replace(/{customerName}/g, collectedData.customerName || customer.name)
+              .replace(/{contactNumber}/g, collectedData.contactNumber || customer.phone)
+              .replace(/{address}/g, collectedData.address || 'No proporcionada')
+              .replace(/{paymentMethod}/g, collectedData.paymentMethod || 'No especificado')
+              .replace(/{notes}/g, collectedData.notes || 'Ninguna')
+              .replace(/{orderSummary}/g, 'Resumen del pedido')
+              .replace(/{totalAmount}/g, '0.00');
+            
+            await sendWhatsAppMessageDirect(customer.phone, confirmMessage, storeId);
+          }
+        } catch (confirmError) {
+          console.error('Error sending confirmation message:', confirmError);
+          // Enviar mensaje básico como fallback
+          await sendWhatsAppMessageDirect(
+            customer.phone,
+            "✅ Datos recopilados correctamente. ¿Confirmas tu pedido? Responde 'confirmar' para continuar.",
+            storeId
+          );
+        }
+        break;
+
+      case 'confirm_order':
+        if (messageText.toLowerCase().includes('confirmar') || 
+            messageText.toLowerCase().includes('final_confirm') ||
+            messageText.toLowerCase().includes('✅')) {
+          
+          // Finalizar pedido
+          if (registrationFlow.orderId) {
+            await finalizeOrderWithData(
+              registrationFlow.orderId,
+              collectedData,
+              customer,
+              storeId,
+              tenantStorage
+            );
+          }
+          
+          // Marcar flujo como completado y eliminarlo
+          await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
+          
+        } else if (messageText.toLowerCase().includes('modificar') || 
+                   messageText.toLowerCase().includes('edit_data')) {
+          
+          // Volver al inicio del flujo
+          await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+            currentStep: 'collect_name',
+            collectedData: JSON.stringify({}),
+            updatedAt: new Date()
+          });
+          
+          await sendAutoResponseMessage(customer.phone, 'collect_name', storeId, tenantStorage);
+          
+        } else if (messageText.toLowerCase().includes('cancelar') || 
+                   messageText.toLowerCase().includes('cancel')) {
+          
+          // Cancelar flujo
+          await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
+          await sendAutoResponseMessage(customer.phone, 'welcome', storeId, tenantStorage);
+        }
         break;
 
       default:
         console.log(`⚠️ UNKNOWN REGISTRATION STEP: ${currentStep}`);
-        await tenantStorage.deleteRegistrationFlow(customer.id);
+        await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
+        await sendAutoResponseMessage(customer.phone, 'welcome', storeId, tenantStorage);
         break;
     }
 
   } catch (error: any) {
     console.error('Error in handleRegistrationFlow:', error);
-    await tenantStorage.deleteRegistrationFlow(customer.id);
+    
+    // ✅ CORRECCIÓN: Usar método correcto para eliminar flujo
+    try {
+      await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
+    } catch (deleteError) {
+      console.error('Error deleting registration flow:', deleteError);
+    }
+    
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      "❌ Ha ocurrido un error. Por favor, inicia el proceso nuevamente escribiendo 'menu'.",
+      storeId
+    );
   }
 }
 
-// Function to finalize order with collected data
+// ========================================
+// FUNCIÓN AUXILIAR CORREGIDA CON TIPOS
+// ========================================
+
 async function finalizeOrderWithData(
   orderId: number,
-  collectedData: any,
-  customer: any,
+  collectedData: CollectedData,
+  customer: Customer,
   storeId: number,
   tenantStorage: any
 ): Promise<void> {
@@ -910,7 +1043,7 @@ async function finalizeOrderWithData(
     const orderNotes = `
 Cliente: ${collectedData.customerName || customer.name}
 Dirección: ${collectedData.address || 'No proporcionada'}
-Contacto: ${collectedData.contactNumber || customer.phoneNumber}
+Contacto: ${collectedData.contactNumber || customer.phone}
 Método de Pago: ${collectedData.paymentMethod || 'No especificado'}
 Notas: ${collectedData.notes || 'Ninguna'}
     `.trim();
@@ -926,7 +1059,7 @@ Notas: ${collectedData.notes || 'Ninguna'}
 📋 *Datos Recopilados:*
 👤 Cliente: ${collectedData.customerName || customer.name}
 📍 Dirección: ${collectedData.address || 'No proporcionada'}
-📞 Contacto: ${collectedData.contactNumber || customer.phoneNumber}
+📞 Contacto: ${collectedData.contactNumber || customer.phone}
 💳 Pago: ${collectedData.paymentMethod || 'No especificado'}
 ${collectedData.notes ? `📝 Notas: ${collectedData.notes}` : ''}
 
@@ -934,7 +1067,7 @@ ${collectedData.notes ? `📝 Notas: ${collectedData.notes}` : ''}
 
 ¡Gracias por tu confianza! 🙏`;
 
-    await sendWhatsAppMessageDirect(customer.phoneNumber, confirmationMessage, storeId);
+    await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
     
     console.log(`✅ ORDER FINALIZED - Order ID: ${orderId}, Customer: ${customer.id}`);
     
@@ -942,6 +1075,7 @@ ${collectedData.notes ? `📝 Notas: ${collectedData.notes}` : ''}
     console.error('Error finalizing order:', error);
   }
 }
+
 
 export async function processWhatsAppMessageSimple(value: any): Promise<void> {
   try {
@@ -1063,14 +1197,25 @@ async function processIncomingMessage(
     console.log(`📥 PROCESSING MESSAGE - From: ${from}, Type: ${messageType}, Content: "${messageText}"`);
 
     // Get or create customer
-    let customer = await tenantStorage.getCustomerByPhone(from);
+   let customer = await tenantStorage.getCustomerByPhone(from);
     if (!customer) {
       console.log(`👤 CREATING NEW CUSTOMER - Phone: ${from}`);
+      
+      // ✅ CORRECCIÓN: Usar los campos correctos según el esquema
       customer = await tenantStorage.createCustomer({
         name: `Cliente ${from.slice(-4)}`,
-        phoneNumber: from,
-        email: '',
-        address: ''
+        phone: from,                    // ✅ CORRECTO: "phone" no "phoneNumber"
+        storeId: storeMapping.storeId,  // ✅ AGREGAR: storeId requerido
+        whatsappId: from,
+        address: null,
+        latitude: null,
+        longitude: null,
+        lastContact: new Date(),
+        registrationDate: new Date(),
+        totalOrders: 0,
+        totalSpent: "0.00",
+        isVip: false,
+        notes: 'Cliente creado automáticamente desde WhatsApp'
       });
     }
 

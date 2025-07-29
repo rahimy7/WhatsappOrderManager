@@ -519,17 +519,8 @@ async getAutoResponse(id: number) {
 
 async getAutoResponseByTrigger(trigger: string) {
   try {
-    const [response] = await tenantDb.select()
-      .from(schema.autoResponses)
-      .where(
-        and(
-          eq(schema.autoResponses.trigger, trigger),
-          eq(schema.autoResponses.storeId, storeId),
-          eq(schema.autoResponses.isActive, true)
-        )
-      )
-      .limit(1);
-    return response || null;
+    const responses = await this.getAutoResponsesByTrigger(trigger);
+    return responses.length > 0 ? responses[0] : null;
   } catch (error) {
     console.error('Error getting auto response by trigger:', error);
     return null;
@@ -861,32 +852,42 @@ async createDefaultAutoResponses() {
         
         // 2. Si no existe, buscar o crear cliente
         let customer = await this.getCustomerByPhone(phone);
-        if (!customer) {
-          console.log('➕ CREATING NEW CUSTOMER FOR CONVERSATION');
-          customer = await this.createCustomer({
-            name: `Cliente ${phone.slice(-4)}`,
-            phone: phone,
-            whatsappId: phone,
-            address: null,
-            storeId: storeId
-          });
-        }
+    if (!customer) {
+      console.log('➕ CREATING NEW CUSTOMER FOR CONVERSATION');
+      
+      // ✅ CORRECCIÓN: Usar los campos correctos
+      customer = await this.createCustomer({
+        name: `Cliente ${phone.slice(-4)}`,
+        phone: phone,                   // ✅ CORRECTO: "phone" no "phoneNumber"  
+        storeId: storeId,              // ✅ AGREGAR: storeId requerido
+        whatsappId: phone,
+        address: null,
+        latitude: null,
+        longitude: null,
+        lastContact: new Date(),
+        registrationDate: new Date(),
+        totalOrders: 0,
+        totalSpent: "0.00",
+        isVip: false,
+        notes: 'Cliente creado automáticamente desde WhatsApp'
+      });
+    }
         
         // 3. Crear nueva conversación
         console.log('➕ CREATING NEW CONVERSATION');
-        conversation = await this.createConversation({
-          customerId: customer.id,
-          conversationType: 'initial',
-          status: 'active',
-          storeId: storeId
-        });
-        
-        return conversation;
-      } catch (error) {
-        console.error('Error getting or creating conversation by phone:', error);
-        throw error;
-      }
-    },
+    conversation = await this.createConversation({
+      customerId: customer.id,
+      conversationType: 'initial',
+      status: 'active',
+      storeId: storeId
+    });
+    
+    return conversation;
+  } catch (error) {
+    console.error('Error getting or creating conversation by phone:', error);
+    throw error;
+  }
+},
 
     async getRegistrationFlowByPhoneNumber(phoneNumber: string): Promise<CustomerRegistrationFlow | null> {
   try {
@@ -900,9 +901,36 @@ async createDefaultAutoResponses() {
     console.error('Error getting registration flow by phone:', error);
     return null;
   }
-}
-    
-  };
+},
+
+async updateRegistrationFlowByPhone(phoneNumber: string, updates: any) {
+  try {
+    const [flow] = await tenantDb.update(schema.customerRegistrationFlows)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber))
+      .returning();
+    return flow || null;
+  } catch (error) {
+    console.error('Error updating registration flow by phone:', error);
+    return null;
+  }
+},
+
+async deleteRegistrationFlowByPhone(phoneNumber: string) {
+  try {
+    await tenantDb.delete(schema.customerRegistrationFlows)
+      .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber));
+    console.log(`✅ REGISTRATION FLOW DELETED - Phone: ${phoneNumber}`);
+  } catch (error) {
+    console.error('Error deleting registration flow by phone:', error);
+    throw error;
+  }
+},
+
+    };
 }
 
 // En tenant-storage.ts - agregar al final del archivo
