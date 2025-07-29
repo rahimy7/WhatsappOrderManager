@@ -1147,7 +1147,6 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
   }
 }
 
-
 // Simplified order processing for tenant storage
 
 async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, orderText: string, storeId: number, phoneNumberId: string, tenantStorage: any) {
@@ -1234,10 +1233,11 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       
       // ✅ PREPARAR ITEM PARA createOrder (no createOrderItem separado)
       processedItems.push({
-        productId: productId,
-        quantity: item.quantity,
-        unitPrice: item.price.toString(),
-        totalPrice: (item.price * item.quantity).toString()
+        product_id: Number(productId),
+        quantity: Number(item.quantity),
+        unit_price: String(item.price), // <-- asegúrate que sea string
+        total_price: String(item.price * item.quantity), // <-- asegúrate que sea string
+        store_id: Number(storeId)
       });
     }
 
