@@ -1154,9 +1154,11 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
   try {
     console.log(`🛍️ PROCESSING WEB CATALOG ORDER - Store: ${storeId}, Customer: ${customer.id}`);
     
-    const { storage } = await import('./storage_bk.js');
+    // ✅ CORRECCIÓN: Usar master storage para logs (no storage_bk)
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
     
-    await storage.addWhatsAppLog({
+    await masterStorage.addWhatsAppLog({
       type: 'info',
       phoneNumber: phoneNumber,
       messageContent: 'Iniciando procesamiento de pedido desde catálogo web (SIMPLE)',
@@ -1177,22 +1179,13 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       return;
     }
 
-    // Create order in tenant system
-    const orderNumber = `ORD-${Date.now()}`;
+    // Calculate total
     const total = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    
-    // Create order in tenant schema
-    const order = await tenantStorage.createOrder({
-      orderNumber: orderNumber,
-      customerId: customer.id,
-      totalAmount: total.toString(),
-      status: 'pending',
-      notes: `Pedido generado automáticamente desde catálogo web.\nTotal: $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
+    const orderNumber = `ORD-${Date.now()}`;
 
-    // Create order items in tenant schema - find or create products first
+    // ✅ SOLUCIÓN: Crear productos primero y preparar items para createOrder
+    const processedItems = [];
+    
     for (const item of orderItems) {
       let productId = item.productId;
       
@@ -1239,15 +1232,28 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
         }
       }
       
-      // Create order item
-      await tenantStorage.createOrderItem({
-        orderId: order.id,
+      // ✅ PREPARAR ITEM PARA createOrder (no createOrderItem separado)
+      processedItems.push({
         productId: productId,
         quantity: item.quantity,
         unitPrice: item.price.toString(),
         totalPrice: (item.price * item.quantity).toString()
       });
     }
+
+    // ✅ CREAR ORDEN CON ITEMS AL MISMO TIEMPO
+    const orderData = {
+      orderNumber: orderNumber,
+      customerId: customer.id,
+      totalAmount: total.toString(),
+      status: 'pending',
+      notes: `Pedido generado automáticamente desde catálogo web.\nTotal: ${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // ✅ USAR createOrder con orden + items juntos
+    const order = await tenantStorage.createOrder(orderData, processedItems);
 
     // Send order confirmation message
     const confirmationMessage = `✅ *PEDIDO RECIBIDO*
@@ -1258,7 +1264,7 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
 ${orderItems.map(item => 
       `• ${item.name} (Cantidad: ${item.quantity})`
     ).join('\n')}
-💰 Total: $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+💰 Total: ${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
 
 🎯 Tu pedido ha sido registrado exitosamente. Ahora necesitamos algunos datos para completar tu pedido.`;
 
@@ -1285,7 +1291,7 @@ ${orderItems.map(item =>
     console.log(`✅ REGISTRATION FLOW STARTED - Customer will be prompted for data collection`);
 
     // Log del éxito
-    await storage.addWhatsAppLog({
+    await masterStorage.addWhatsAppLog({
       type: 'success',
       phoneNumber: phoneNumber,
       messageContent: `Pedido ${orderNumber} creado exitosamente con ${orderItems.length} productos. Flujo de recolección iniciado.`,
@@ -1301,8 +1307,12 @@ ${orderItems.map(item =>
 
   } catch (error: any) {
     console.error('Error processing web catalog order:', error);
-    const { storage } = await import('./storage_bk.js');
-    await storage.addWhatsAppLog({
+    
+    // Log error using master storage
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    
+    await masterStorage.addWhatsAppLog({
       type: 'error',
       phoneNumber: phoneNumber,
       messageContent: 'Error procesando pedido desde catálogo web',
@@ -1314,6 +1324,7 @@ ${orderItems.map(item =>
     // No enviar mensaje de error al cliente - solo logging interno
   }
 }
+
 
 // ========================================
 // FUNCIONES AUXILIARES NECESARIAS
@@ -1380,11 +1391,12 @@ function parseOrderFromMessage(orderText: string): Array<{name: string, quantity
   return items;
 }
 
-// Función para enviar mensaje directo de WhatsApp
 async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, storeId: number): Promise<void> {
   try {
-    const { storage } = await import('./storage_bk.js');
-    const config = await storage.getWhatsAppConfig();
+    // ✅ USAR MASTER STORAGE PARA OBTENER CONFIG
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    const config = await masterStorage.getWhatsAppConfig(storeId);
     
     if (!config || !config.accessToken || !config.phoneNumberId) {
       console.error('❌ WhatsApp config not found or incomplete');
