@@ -1161,31 +1161,9 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
 // Simplified order processing for tenant storage
 
 async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, orderText: string, storeId: number, phoneNumberId: string, tenantStorage: any) {
-   console.log(`\n🛍️ ===== PROCESSING WEB CATALOG ORDER =====`);
-  console.log(`🏪 Store: ${storeId}`);
-  console.log(`👤 Customer: ${customer.id}`);
-  console.log(`📞 Phone: ${phoneNumber}`);
-  console.log(`📝 Order Text Length: ${orderText.length}`);
- 
   try {
     console.log(`🛍️ PROCESSING WEB CATALOG ORDER - Store: ${storeId}, Customer: ${customer.id}`);
     
-    // ✅ CORRECCIÓN: Usar master storage para logs (no storage_bk)
-    const storageFactory = await import('./storage/storage-factory.js');
-    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
-    
-    await masterStorage.addWhatsAppLog({
-      type: 'info',
-      phoneNumber: phoneNumber,
-      messageContent: 'Iniciando procesamiento de pedido desde catálogo web (SIMPLE)',
-      status: 'processing',
-      rawData: JSON.stringify({ 
-        customerId: customer.id,
-        messageLength: orderText.length,
-        storeId: storeId
-      })
-    });
-
     // Parse the order message to extract products
     const orderItems = parseOrderFromMessage(orderText);
     
@@ -1199,152 +1177,116 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
     const total = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const orderNumber = `ORD-${Date.now()}`;
 
-    // ✅ SOLUCIÓN: Crear productos primero y preparar items para createOrder
+    // ✅ PROCESAR CADA ITEM Y RESOLVER product_id
     const processedItems = [];
     
     for (const item of orderItems) {
       let productId = item.productId;
       
-      // If no productId, try to find product by name or create new one
+      // Si no tiene productId, buscar por nombre
       if (!productId) {
+        console.log(`🔍 SEARCHING PRODUCT BY NAME: "${item.name}"`);
+        
         const existingProducts = await tenantStorage.getAllProducts();
         
-        // Enhanced product matching logic
+        // Buscar producto por nombre (mejorado)
         const existingProduct = existingProducts.find(p => {
-          const productName = p.name.toLowerCase();
-          const itemName = item.name.toLowerCase();
+          const productName = p.name.toLowerCase().trim();
+          const itemName = item.name.toLowerCase().trim();
           
-          // Direct name matching
-          if (productName.includes(itemName) || itemName.includes(productName)) {
-            return true;
-          }
+          // Coincidencia exacta
+          if (productName === itemName) return true;
           
-          // BTU matching for air conditioners
-          const productBTU = productName.match(/(\d+k?)\s*btu/i);
-          const itemBTU = itemName.match(/(\d+k?)\s*btu/i);
+          // Coincidencia parcial
+          if (productName.includes(itemName) || itemName.includes(productName)) return true;
           
-          if (productBTU && itemBTU) {
-            return productBTU[1].toLowerCase() === itemBTU[1].toLowerCase();
-          }
+          // Coincidencia por palabras clave importantes
+          const productWords = productName.split(' ').filter(w => w.length > 3);
+          const itemWords = itemName.split(' ').filter(w => w.length > 3);
           
-          return false;
+          const commonWords = productWords.filter(word => 
+            itemWords.some(itemWord => itemWord.includes(word) || word.includes(itemWord))
+          );
+          
+          return commonWords.length >= Math.min(productWords.length, itemWords.length) / 2;
         });
         
         if (existingProduct) {
           productId = existingProduct.id;
-          console.log(`✅ PRODUCT MATCHED - "${item.name}" -> "${existingProduct.name}" (ID: ${productId})`);
+          console.log(`✅ PRODUCT FOUND BY NAME: "${item.name}" -> "${existingProduct.name}" (ID: ${productId})`);
         } else {
-          // Create new product if not found
+          // Crear nuevo producto si no se encuentra
+          console.log(`➕ CREATING NEW PRODUCT: "${item.name}"`);
+          
           const newProduct = await tenantStorage.createProduct({
             name: item.name,
             price: item.price.toString(),
             description: `Producto creado automáticamente desde pedido web: ${item.name}`,
+            category: 'product',
+            status: 'active',
+            availability: 'in_stock',
+            stockQuantity: 100,
             isActive: true,
+            storeId: storeId,
             createdAt: new Date(),
             updatedAt: new Date()
           });
+          
           productId = newProduct.id;
-          console.log(`➕ NEW PRODUCT CREATED - "${item.name}" (ID: ${productId})`);
+          console.log(`✅ NEW PRODUCT CREATED: "${item.name}" (ID: ${productId})`);
         }
+      } else {
+        console.log(`✅ PRODUCT ID PROVIDED: ${productId}`);
       }
       
-      // ✅ PREPARAR ITEM PARA createOrder (no createOrderItem separado)
-      processedItems.push({
-        product_id: Number(productId),
-        quantity: Number(item.quantity),
-        unit_price: String(item.price), // <-- asegúrate que sea string
-        total_price: String(item.price * item.quantity), // <-- asegúrate que sea string
-        store_id: Number(storeId)
-      });
+      // ✅ VALIDAR QUE productId existe antes de agregar
+      if (!productId) {
+        console.error(`❌ FAILED TO GET PRODUCT ID for item: "${item.name}"`);
+        continue; // Saltar este item
+      }
+      
+      // Preparar item limpio
+      const cleanedItem = {
+        productId: Number(productId), // ✅ Asegurar que es número
+        quantity: Number(item.quantity) || 1,
+        unitPrice: Number(item.price).toFixed(2),
+        totalPrice: Number(item.price * item.quantity).toFixed(2),
+        storeId: storeId
+      };
+      
+      console.log(`✅ PROCESSED ITEM:`, cleanedItem);
+      processedItems.push(cleanedItem);
+    }
+    
+    if (processedItems.length === 0) {
+      await sendWhatsAppMessageDirect(phoneNumber, 
+        "No pude procesar ningún producto de tu pedido. Por favor verifica el formato.", storeId);
+      return;
     }
 
-    // ✅ CREAR ORDEN CON ITEMS AL MISMO TIEMPO
+    // ✅ CREAR ORDEN CON ITEMS VALIDADOS
     const orderData = {
       orderNumber: orderNumber,
       customerId: customer.id,
       totalAmount: total.toString(),
       status: 'pending',
-      notes: `Pedido generado automáticamente desde catálogo web.\nTotal: ${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+      notes: `Pedido generado automáticamente desde catálogo web.\nTotal: $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+      storeId: storeId,
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
-    // ✅ USAR createOrder con orden + items juntos
+    console.log(`🏗️ CREATING ORDER:`, orderData);
+    console.log(`📦 WITH ITEMS:`, processedItems);
+
     const order = await tenantStorage.createOrder(orderData, processedItems);
 
-    // Send order confirmation message
-    const confirmationMessage = `✅ *PEDIDO RECIBIDO*
+    console.log(`✅ ORDER CREATED SUCCESSFULLY - ID: ${order.id}, Number: ${orderNumber}`);
 
-📦 *Resumen de tu pedido:*
-📋 Número: ${orderNumber}
-🛍️ Productos: ${orderItems.length} artículo(s)
-${orderItems.map(item => 
-      `• ${item.name} (Cantidad: ${item.quantity})`
-    ).join('\n')}
-💰 Total: ${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-
-🎯 Tu pedido ha sido registrado exitosamente. Ahora necesitamos algunos datos para completar tu pedido.`;
-
-    await sendWhatsAppMessageDirect(phoneNumber, confirmationMessage, storeId);
-
-    // 🔥 INICIAR FLUJO DE RECOLECCIÓN DE DATOS AUTOMÁTICAMENTE
-    console.log(`🚀 STARTING REGISTRATION FLOW - Order: ${order.id}, Customer: ${customer.id}`);
-    console.log(`🚀 ===== STARTING REGISTRATION FLOW =====`);
-    console.log(`👤 Customer ID: ${customer.id}`);
-    console.log(`📞 Phone Number: ${phoneNumber}`);
-    console.log(`📦 Order ID: ${order.id}`);
+    // Continuar con el flujo normal...
     
-    // Crear flujo de registro para recopilar datos del cliente
-    await tenantStorage.createOrUpdateRegistrationFlow({
-      customerId: customer.id,
-      phoneNumber: phoneNumber,
-      currentStep: 'collect_name',
-      flowType: 'order_data_collection',
-      orderId: order.id,
-      collectedData: JSON.stringify({}),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
-      isCompleted: false
-    });
-     console.log(`✅ REGISTRATION FLOW CREATED`);
-    // Enviar primer mensaje del flujo (solicitar nombre)
-   console.log(`📤 SENDING COLLECT_NAME MESSAGE...`);
-    await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
-    console.log(`✅ COLLECT_NAME MESSAGE SENT`);
-    
-    console.log(`✅ REGISTRATION FLOW COMPLETED`);
-
-    // Log del éxito
-    await masterStorage.addWhatsAppLog({
-      type: 'success',
-      phoneNumber: phoneNumber,
-      messageContent: `Pedido ${orderNumber} creado exitosamente con ${orderItems.length} productos. Flujo de recolección iniciado.`,
-      status: 'completed',
-      rawData: JSON.stringify({ 
-        orderId: order.id,
-        orderNumber: orderNumber,
-        total: total,
-        itemsCount: orderItems.length,
-        registrationFlowStarted: true
-      })
-    });
-
   } catch (error: any) {
-    console.error(`❌ ERROR IN processWebCatalogOrderSimple:`, error);
-    
-    // Log error using master storage
-    const storageFactory = await import('./storage/storage-factory.js');
-    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
-    
-    await masterStorage.addWhatsAppLog({
-      type: 'error',
-      phoneNumber: phoneNumber,
-      messageContent: 'Error procesando pedido desde catálogo web',
-      status: 'error',
-      errorMessage: error.message,
-      timestamp: new Date()
-    });
-    
-    // No enviar mensaje de error al cliente - solo logging interno
+    console.error('❌ ERROR IN processWebCatalogOrderSimple:', error);
   }
 }
 
@@ -1367,57 +1309,114 @@ async function isOrderMessage(text: string): Promise<boolean> {
   return isOrder;
 }
 
-// Function to parse order items from catalog message
 function parseOrderFromMessage(orderText: string): Array<{name: string, quantity: number, price: number, productId?: number}> {
+  console.log(`\n🔍 ===== PARSING ORDER MESSAGE =====`);
+  console.log(`📝 Original Message:`, orderText);
+  
   const items: Array<{name: string, quantity: number, price: number, productId?: number}> = [];
   
   try {
     const lines = orderText.split('\n');
+    console.log(`📋 Split into ${lines.length} lines:`, lines);
+    
     let currentItem: any = null;
     
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const trimmedLine = line.trim();
+      console.log(`📄 Line ${i + 1}: "${trimmedLine}"`);
       
-      // Check if this line starts a new product (number followed by period)
-      if (/^\d+\.\s/.test(trimmedLine)) {
-        // Save previous item if exists
+      // ✅ NUEVO: Detectar línea de producto con ID
+      // Formato: "1. Nombre del Producto [ID:123]"
+      const productLineMatch = trimmedLine.match(/^\d+\.\s*(.+?)\s*\[ID:(\d+)\]/);
+      
+      if (productLineMatch) {
+        // Guardar item anterior si existe
         if (currentItem && currentItem.name && currentItem.quantity && currentItem.price) {
+          console.log(`✅ Completed item:`, currentItem);
           items.push(currentItem);
         }
         
-        // Start new item
+        const productName = productLineMatch[1].trim();
+        const productId = parseInt(productLineMatch[2]);
+        
+        // Iniciar nuevo item con ID
         currentItem = {
-          name: trimmedLine.replace(/^\d+\.\s/, ''),
+          name: productName,
+          productId: productId,
           quantity: 0,
           price: 0
         };
+        
+        console.log(`🆕 Started new item with ID:`, currentItem);
+        continue;
       }
-      // Check for quantity line
-      else if (trimmedLine.startsWith('Cantidad:') && currentItem) {
-        const quantity = parseInt(trimmedLine.replace('Cantidad:', '').trim());
-        if (!isNaN(quantity)) {
-          currentItem.quantity = quantity;
+      
+      // ✅ FALLBACK: Detectar línea de producto sin ID (formato anterior)
+      // Formato: "1. Nombre del Producto"
+      if (/^\d+\.\s/.test(trimmedLine) && !trimmedLine.includes('[ID:')) {
+        // Guardar item anterior si existe
+        if (currentItem && currentItem.name && currentItem.quantity && currentItem.price) {
+          console.log(`✅ Completed item (no ID):`, currentItem);
+          items.push(currentItem);
         }
+        
+        // Iniciar nuevo item sin ID (se buscará por nombre)
+        currentItem = {
+          name: trimmedLine.replace(/^\d+\.\s/, '').trim(),
+          quantity: 0,
+          price: 0
+          // productId se agregará después al buscar por nombre
+        };
+        
+        console.log(`🆕 Started new item without ID:`, currentItem);
+        continue;
       }
-      // Check for unit price line
-      else if (trimmedLine.startsWith('Precio unitario:') && currentItem) {
-        const priceMatch = trimmedLine.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+      
+      // Detectar cantidad
+      if (trimmedLine.toLowerCase().includes('cantidad:') && currentItem) {
+        const quantityMatch = trimmedLine.match(/cantidad:\s*(\d+)/i);
+        if (quantityMatch) {
+          currentItem.quantity = parseInt(quantityMatch[1]);
+          console.log(`📊 Set quantity: ${currentItem.quantity}`);
+        }
+        continue;
+      }
+      
+      // Detectar precio unitario
+      if (trimmedLine.toLowerCase().includes('precio unitario:') && currentItem) {
+        const priceMatch = trimmedLine.match(/\$?([\d,]+\.?\d*)/);
         if (priceMatch) {
           const price = parseFloat(priceMatch[1].replace(/,/g, ''));
           if (!isNaN(price)) {
             currentItem.price = price;
+            console.log(`💰 Set price: ${currentItem.price}`);
           }
         }
+        continue;
       }
     }
     
-    // Don't forget the last item
+    // No olvidar el último item
     if (currentItem && currentItem.name && currentItem.quantity && currentItem.price) {
+      console.log(`✅ Final item:`, currentItem);
       items.push(currentItem);
     }
     
+    console.log(`🔍 ===== PARSE RESULT =====`);
+    console.log(`📦 Total items parsed: ${items.length}`);
+    items.forEach((item, index) => {
+      console.log(`📋 Item ${index + 1}:`, {
+        name: item.name,
+        productId: item.productId || 'WILL BE FOUND BY NAME',
+        quantity: item.quantity,
+        price: item.price
+      });
+    });
+    console.log(`🔍 ===== END PARSING =====\n`);
+    
   } catch (error) {
-    console.error('Error parsing order message:', error);
+    console.error('❌ Error parsing order message:', error);
   }
   
   return items;
