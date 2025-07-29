@@ -1354,17 +1354,17 @@ ${orderItems.map(item =>
 // ========================================
 
 // ✅ FUNCIÓN AUXILIAR PARA DETECTAR ÓRDENES
+// ✅ VERSIÓN MEJORADA (funciona con cualquier formato)
 async function isOrderMessage(text: string): Promise<boolean> {
-  console.log(`🔍 CHECKING IF ORDER MESSAGE:`);
-  console.log(`📝 Text: "${text}"`);
-  console.log(`📝 Starts with "🛍️ *NUEVO PEDIDO*": ${text.startsWith('🛍️ *NUEVO PEDIDO*')}`);
-  console.log(`📝 Includes "NUEVO PEDIDO": ${text.includes('NUEVO PEDIDO')}`);
-  console.log(`📝 Includes "🛍️": ${text.includes('🛍️')}`);
+  const cleanText = text.toLowerCase();
   
-  const result = text.startsWith('🛍️ *NUEVO PEDIDO*');
-  console.log(`🎯 FINAL RESULT: ${result}`);
+  const isOrder = 
+    (cleanText.includes('cantidad:') && cleanText.includes('precio')) ||
+    (cleanText.includes('nuevo pedido')) ||
+    (cleanText.includes('pedido') && cleanText.includes('total'));
   
-  return result;
+  console.log(`🛍️ Order detection: ${isOrder ? 'YES' : 'NO'}`);
+  return isOrder;
 }
 
 // Function to parse order items from catalog message
