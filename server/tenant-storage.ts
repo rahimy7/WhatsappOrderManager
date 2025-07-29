@@ -930,6 +930,61 @@ async deleteRegistrationFlowByPhone(phoneNumber: string) {
   }
 },
 
+async createOrUpdateRegistrationFlow(flowData: {
+  customerId: number;
+  phoneNumber: string;
+  currentStep: string;
+  flowType: string;
+  orderId?: number;
+  collectedData: string;
+  expiresAt: Date;
+  isCompleted: boolean;
+}): Promise<CustomerRegistrationFlow> {
+  try {
+    // Verificar si ya existe un flujo para este cliente
+    const existingFlow = await this.getRegistrationFlowByPhoneNumber(flowData.phoneNumber);
+    
+    if (existingFlow) {
+      // Actualizar flujo existente
+      const [updatedFlow] = await tenantDb.update(schema.customerRegistrationFlows)
+        .set({
+          currentStep: flowData.currentStep,
+          flowType: flowData.flowType,
+          orderId: flowData.orderId,
+          collectedData: flowData.collectedData,
+          expiresAt: flowData.expiresAt,
+          isCompleted: flowData.isCompleted,
+          updatedAt: new Date()
+        })
+        .where(eq(schema.customerRegistrationFlows.phoneNumber, flowData.phoneNumber))
+        .returning();
+      
+      return updatedFlow;
+    } else {
+      // Crear nuevo flujo
+      const [newFlow] = await tenantDb.insert(schema.customerRegistrationFlows)
+        .values({
+          customerId: flowData.customerId,
+          phoneNumber: flowData.phoneNumber,
+          currentStep: flowData.currentStep,
+          flowType: flowData.flowType,
+          orderId: flowData.orderId,
+          collectedData: flowData.collectedData,
+          expiresAt: flowData.expiresAt,
+          isCompleted: flowData.isCompleted,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+      
+      return newFlow;
+    }
+  } catch (error) {
+    console.error('Error creating/updating registration flow:', error);
+    throw error;
+  }
+}
+
     };
 }
 

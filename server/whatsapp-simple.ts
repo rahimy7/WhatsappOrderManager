@@ -598,112 +598,70 @@ async function sendAutoResponseMessage(
   trigger: string,
   storeId: number,
   tenantStorage: any,
-  variables?: any
+  variables?: Record<string, string>
 ): Promise<void> {
   try {
-    // Buscar la auto-respuesta por trigger
+    console.log(`📤 SENDING AUTO RESPONSE - Trigger: ${trigger}, Phone: ${phoneNumber}`);
+    
+    // Obtener respuesta automática por trigger
     const autoResponses = await tenantStorage.getAutoResponsesByTrigger(trigger);
     
     if (!autoResponses || autoResponses.length === 0) {
-      console.log(`⚠️ NO AUTO-RESPONSE FOUND for trigger: ${trigger}`);
+      console.log(`⚠️ NO AUTO RESPONSE FOUND - Trigger: ${trigger}`);
+      
+      // Fallback messages para pasos críticos
+      let fallbackMessage = '';
+      switch (trigger) {
+        case 'collect_name':
+          fallbackMessage = "📝 Para continuar con tu pedido, necesitamos algunos datos.\n\n👤 Por favor, proporciona tu nombre completo:";
+          break;
+        case 'collect_address':
+          fallbackMessage = "📍 Ahora necesitamos tu dirección de entrega.\n\nPor favor escribe tu dirección completa:";
+          break;
+        case 'collect_contact':
+          fallbackMessage = "📞 ¿Cuál es tu número de contacto preferido?\n\n(Puede ser el mismo de WhatsApp o uno diferente):";
+          break;
+        case 'collect_payment':
+          fallbackMessage = "💳 ¿Cómo prefieres pagar?\n\nOpciones: Efectivo, Transferencia, Tarjeta";
+          break;
+        case 'collect_notes':
+          fallbackMessage = "📝 ¿Tienes alguna nota especial o comentario adicional?\n\n(Si no tienes ninguno, escribe 'ninguno')";
+          break;
+        case 'confirm_order':
+          fallbackMessage = "✅ Por favor, confirma los siguientes datos:\n\n¿Todo está correcto? Responde 'confirmar' para finalizar tu pedido.";
+          break;
+        default:
+          fallbackMessage = "¡Hola! ¿En qué podemos ayudarte?";
+      }
+      
+      await sendWhatsAppMessageDirect(phoneNumber, fallbackMessage, storeId);
       return;
     }
-
+    
     const autoResponse = autoResponses[0];
-    console.log(`📤 SENDING AUTO-RESPONSE: ${autoResponse.name} to ${phoneNumber}`);
-
-    // Obtener configuración de WhatsApp
-    const { storage } = await import('./storage_bk.js');
-    const globalWhatsAppConfig = await storage.getWhatsAppConfig(storeId);
-    
-    if (!globalWhatsAppConfig) {
-      throw new Error('WhatsApp configuration not found');
-    }
-
-    // Reemplazar variables en el mensaje si se proporcionan
     let messageText = autoResponse.messageText;
-    if (variables) {
-      console.log(`🔄 REPLACING VARIABLES in message:`, variables);
-      Object.keys(variables).forEach(key => {
-        const placeholder = `{${key}}`;
-        messageText = messageText.replace(new RegExp(placeholder, 'g'), variables[key]);
-      });
-      console.log(`✅ MESSAGE AFTER VARIABLE REPLACEMENT: ${messageText.substring(0, 100)}...`);
-    }
-
-    // Preparar mensaje
-    let messagePayload;
-    const menuOptionsData = autoResponse?.menuOptions;
-    const menuTypeData = autoResponse?.menuType;
     
-    if (menuOptionsData && menuTypeData === 'buttons') {
-      try {
-        const menuOptions = JSON.parse(menuOptionsData);
-        
-        messagePayload = {
-          messaging_product: 'whatsapp',
-          to: phoneNumber,
-          type: 'interactive',
-          interactive: {
-            type: 'button',
-            body: {
-              text: messageText
-            },
-            action: {
-              buttons: menuOptions.slice(0, 3).map((option: any, index: number) => ({
-                type: 'reply',
-                reply: {
-                  id: option.action || option.value || `btn_${index}`,
-                  title: option.label.substring(0, 20)
-                }
-              }))
-            }
-          }
-        };
-      } catch (error) {
-        messagePayload = {
-          messaging_product: 'whatsapp',
-          to: phoneNumber,
-          type: 'text',
-          text: { body: messageText }
-        };
+    // Reemplazar variables si se proporcionan
+    if (variables) {
+      for (const [key, value] of Object.entries(variables)) {
+        messageText = messageText.replace(new RegExp(`{${key}}`, 'g'), value);
       }
-    } else {
-      messagePayload = {
-        messaging_product: 'whatsapp',
-        to: phoneNumber,
-        type: 'text',
-        text: { body: messageText }
-      };
     }
-
+    
     // Enviar mensaje
-    const response = await fetch(`https://graph.facebook.com/v21.0/${globalWhatsAppConfig.phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${globalWhatsAppConfig.accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(messagePayload)
-    });
-
-    const result = await response.json();
-    console.log(`📤 AUTO-RESPONSE "${trigger}" SENT - Store ${storeId}:`, result);
-
-    if (!response.ok) {
-      throw new Error(`WhatsApp API Error: ${JSON.stringify(result)}`);
-    }
-
+    await sendWhatsAppMessageDirect(phoneNumber, messageText, storeId);
+    
+    console.log(`✅ AUTO RESPONSE SENT - Trigger: ${trigger}, Message length: ${messageText.length}`);
+    
   } catch (error: any) {
-    console.error(`Error sending auto-response "${trigger}":`, error);
-    const { storage } = await import('./storage_bk.js');
-    await storage.addWhatsAppLog({
-      type: 'error',
-      phoneNumber: phoneNumber,
-      messageContent: `Error enviando respuesta automática "${trigger}"`,
-      status: 'error',
-      errorMessage: error.message
-    });
+    console.error('Error sending auto response message:', error);
+    
+    // Enviar mensaje básico como último recurso
+    await sendWhatsAppMessageDirect(
+      phoneNumber,
+      "Ha ocurrido un error. ¿Podrías intentar nuevamente?",
+      storeId
+    );
   }
 }
 
@@ -1618,16 +1576,37 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
       totalAmount: total.toLocaleString('es-MX', { minimumFractionDigits: 2 })
     });
 
+   console.log(`🚀 STARTING REGISTRATION FLOW - Order: ${order.id}, Customer: ${customer.id}`);
+    
+    // Crear flujo de registro para recopilar datos del cliente
+    await tenantStorage.createOrUpdateRegistrationFlow({
+      customerId: customer.id,
+      phoneNumber: phoneNumber,
+      currentStep: 'collect_name',
+      flowType: 'order_data_collection',
+      orderId: order.id,
+      collectedData: JSON.stringify({}),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
+      isCompleted: false
+    });
+    
+    // Enviar primer mensaje del flujo (solicitar nombre)
+    await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
+    
+    console.log(`✅ REGISTRATION FLOW STARTED - Customer will be prompted for data collection`);
+
+    // Log del éxito
     await storage.addWhatsAppLog({
       type: 'success',
       phoneNumber: phoneNumber,
-      messageContent: `Pedido ${orderNumber} creado exitosamente con ${orderItems.length} productos`,
+      messageContent: `Pedido ${orderNumber} creado exitosamente con ${orderItems.length} productos. Flujo de recolección iniciado.`,
       status: 'completed',
       rawData: JSON.stringify({ 
         orderId: order.id,
         orderNumber: orderNumber,
         total: total,
-        itemsCount: orderItems.length
+        itemsCount: orderItems.length,
+        registrationFlowStarted: true
       })
     });
 
