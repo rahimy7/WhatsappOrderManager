@@ -1283,10 +1283,80 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
 
     console.log(`✅ ORDER CREATED SUCCESSFULLY - ID: ${order.id}, Number: ${orderNumber}`);
 
-    // Continuar con el flujo normal...
+
+    // Send order confirmation message
+    const confirmationMessage = `✅ *PEDIDO RECIBIDO*
+
+📦 *Resumen de tu pedido:*
+📋 Número: ${orderNumber}
+🛍️ Productos: ${orderItems.length} artículo(s)
+${orderItems.map(item => 
+      `• ${item.name} (Cantidad: ${item.quantity})`
+    ).join('\n')}
+💰 Total: ${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+
+🎯 Tu pedido ha sido registrado exitosamente. Ahora necesitamos algunos datos para completar tu pedido.`;
+
+    await sendWhatsAppMessageDirect(phoneNumber, confirmationMessage, storeId);
+
+    // 🔥 INICIAR FLUJO DE RECOLECCIÓN DE DATOS AUTOMÁTICAMENTE
+    console.log(`🚀 STARTING REGISTRATION FLOW - Order: ${order.id}, Customer: ${customer.id}`);
+    console.log(`🚀 ===== STARTING REGISTRATION FLOW =====`);
+    console.log(`👤 Customer ID: ${customer.id}`);
+    console.log(`📞 Phone Number: ${phoneNumber}`);
+    console.log(`📦 Order ID: ${order.id}`);
     
+    // Crear flujo de registro para recopilar datos del cliente
+    await tenantStorage.createOrUpdateRegistrationFlow({
+      customerId: customer.id,
+      phoneNumber: phoneNumber,
+      currentStep: 'collect_name',
+      flowType: 'order_data_collection',
+      orderId: order.id,
+      collectedData: JSON.stringify({}),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
+      isCompleted: false
+    });
+     console.log(`✅ REGISTRATION FLOW CREATED`);
+    // Enviar primer mensaje del flujo (solicitar nombre)
+   console.log(`📤 SENDING COLLECT_NAME MESSAGE...`);
+    await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
+    console.log(`✅ COLLECT_NAME MESSAGE SENT`);
+    
+    console.log(`✅ REGISTRATION FLOW COMPLETED`);
+
+    // Log del éxito
+    await masterStorage.addWhatsAppLog({
+      type: 'success',
+      phoneNumber: phoneNumber,
+      messageContent: `Pedido ${orderNumber} creado exitosamente con ${orderItems.length} productos. Flujo de recolección iniciado.`,
+      status: 'completed',
+      rawData: JSON.stringify({ 
+        orderId: order.id,
+        orderNumber: orderNumber,
+        total: total,
+        itemsCount: orderItems.length,
+        registrationFlowStarted: true
+      })
+    });
+
   } catch (error: any) {
-    console.error('❌ ERROR IN processWebCatalogOrderSimple:', error);
+    console.error(`❌ ERROR IN processWebCatalogOrderSimple:`, error);
+    
+    // Log error using master storage
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    
+    await masterStorage.addWhatsAppLog({
+      type: 'error',
+      phoneNumber: phoneNumber,
+      messageContent: 'Error procesando pedido desde catálogo web',
+      status: 'error',
+      errorMessage: error.message,
+      timestamp: new Date()
+    });
+    
+    // No enviar mensaje de error al cliente - solo logging interno
   }
 }
 
