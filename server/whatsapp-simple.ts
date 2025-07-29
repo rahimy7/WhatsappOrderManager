@@ -389,23 +389,20 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
   console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id})`);
 
   try {
-    // Get WhatsApp configuration for this store
-    const whatsappConfig = await tenantStorage.getWhatsAppSettings();
+    // ✅ CORRECCIÓN: Obtener configuración de WhatsApp desde MASTER STORAGE
+    const { storage } = await import('./storage_bk.js');
+    const globalConfig = await storage.getWhatsAppConfig();
     
-    if (!whatsappConfig || !whatsappConfig.accessToken || !whatsappConfig.phoneNumberId) {
+    if (!globalConfig || !globalConfig.accessToken || !globalConfig.phoneNumberId) {
       console.log(`❌ WHATSAPP CONFIG INCOMPLETE - Store ${storeMapping.storeId}: Missing access token or phone number ID`);
       return;
     }
 
-    console.log(`✅ WHATSAPP CONFIG FOUND - Store ${storeMapping.storeId}: phoneNumberId ${whatsappConfig.phoneNumberId}`);
+    console.log(`✅ WHATSAPP CONFIG FOUND - Store ${storeMapping.storeId}: phoneNumberId ${globalConfig.phoneNumberId}`);
 
-    // Check if there's a global config override
-    const { storage } = await import('./storage_bk.js');
-    const globalConfig = await storage.getWhatsAppConfig();
-    
     const finalConfig = {
-      accessToken: globalConfig?.accessToken || whatsappConfig.accessToken,
-      phoneNumberId: globalConfig?.phoneNumberId || whatsappConfig.phoneNumberId
+      accessToken: globalConfig.accessToken,
+      phoneNumberId: globalConfig.phoneNumberId
     };
 
     console.log(`✅ GLOBAL WHATSAPP CONFIG LOADED - Store ${storeMapping.storeId}: phoneNumberId ${finalConfig.phoneNumberId}`);
@@ -468,9 +465,6 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
     throw error;
   }
 }
-
-
-
 
 
 // ======================================
