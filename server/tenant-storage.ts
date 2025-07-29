@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "../shared/schema.js";
 import { eq, desc, and, or, count, sql, ilike } from "drizzle-orm";
 import { getTenantDb } from "./multi-tenant-db.js";
+import { CustomerRegistrationFlow } from "../shared/schema.js";
 
 export function createTenantStorage(tenantDb: any, storeId: number) {
   return {
@@ -886,6 +887,20 @@ async createDefaultAutoResponses() {
         throw error;
       }
     },
+
+    async getRegistrationFlowByPhoneNumber(phoneNumber: string): Promise<CustomerRegistrationFlow | null> {
+  try {
+    const [flow] = await tenantDb.select()
+      .from(schema.customerRegistrationFlows)
+      .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber))
+      .limit(1);
+    
+    return flow || null;
+  } catch (error) {
+    console.error('Error getting registration flow by phone:', error);
+    return null;
+  }
+}
     
   };
 }

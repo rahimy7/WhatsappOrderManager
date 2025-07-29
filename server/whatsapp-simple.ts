@@ -948,344 +948,295 @@ export async function processWhatsAppMessageSimple(value: any): Promise<void> {
     console.log('🎯 MULTI-TENANT PROCESSOR - Processing webhook');
     console.log('📦 WEBHOOK PAYLOAD:', JSON.stringify(value, null, 2));
     
-    // Step 1: Extract phoneNumberId from webhook metadata (correct structure)
+    // Step 1: Extract phoneNumberId from webhook metadata
     const phoneNumberId = value.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
     console.log('📱 EXTRACTED PHONE NUMBER ID:', phoneNumberId);
     
     if (!phoneNumberId) {
       console.log('❌ NO PHONE NUMBER ID - Skipping processing');
-      console.log('🔍 DEBUGGING - Available data structure:');
-      console.log('Entry length:', value.entry?.length);
-      console.log('Changes length:', value.entry?.[0]?.changes?.length);
-      console.log('Value exists:', !!value.entry?.[0]?.changes?.[0]?.value);
-      console.log('Metadata exists:', !!value.entry?.[0]?.changes?.[0]?.value?.metadata);
-      console.log('Full metadata:', JSON.stringify(value.entry?.[0]?.changes?.[0]?.value?.metadata));
       return;
     }
-    
-    // Step 2: Find which store owns this phoneNumberId - USANDO FUNCIÓN DINÁMICA
+
+    // Step 2: Find store by phoneNumberId
     const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
-    
     if (!storeMapping) {
-      console.log('❌ STORE NOT FOUND - No store configured for phoneNumberId:', phoneNumberId);
-      await storage.addWhatsAppLog({
-        type: 'warning',
-        phoneNumber: 'system',
-        messageContent: `No se encontró tienda para el número ${phoneNumberId}`,
-        status: 'failed'
-      });
+      console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
       return;
     }
-    
-    console.log('✅ STORE FOUND - Store ID:', storeMapping.storeId, 'Store Name:', storeMapping.storeName);
-    
-    // Step 3: Extract messages from the correct webhook structure
-    const messages = value.entry?.[0]?.changes?.[0]?.value?.messages;
-    
-    if (messages && messages.length > 0) {
+
+    console.log(`✅ STORE FOUND - Store ID: ${storeMapping.storeId} Store Name: ${storeMapping.storeName}`);
+
+    // Step 3: Get webhook data
+    const webhookValue = value.entry?.[0]?.changes?.[0]?.value;
+    if (!webhookValue) {
+      console.log('❌ NO WEBHOOK VALUE FOUND');
+      return;
+    }
+
+    // Step 4: Create tenant storage for this store
+    const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+
+    // ========================================
+    // HANDLE DIFFERENT WEBHOOK TYPES
+    // ========================================
+
+    // 📩 PROCESS NEW MESSAGES
+    const messages = webhookValue.messages;
+    if (messages?.length > 0) {
+      console.log(`📩 PROCESSING ${messages.length} MESSAGE(S)`);
+      
       for (const message of messages) {
-        const from = message.from;
-        const messageId = message.id;
-        const messageType = message.type;
-        
-        let messageText = '';
-        if (messageType === 'text') {
-          messageText = message.text.body;
-        } else if (messageType === 'location') {
-          const location = message.location;
-          messageText = location.name || location.address || 
-            `Ubicación GPS: ${location.latitude}, ${location.longitude}`;
-        } else if (messageType === 'interactive') {
-          if (message.interactive.type === 'button_reply') {
-            messageText = message.interactive.button_reply.id;
-          }
-        } else {
-          messageText = `[${messageType}] Mensaje no soportado`;
-        }
-
-        console.log(`Message from ${from}: ${messageText}`);
-
-        // Step 3: Create tenant storage for the identified store  
-        const { getTenantDb } = await import('./multi-tenant-db.js');
-        const tenantDb = await getTenantDb(storeMapping.storeId);
-        console.log('🔍 TENANT DB OBJECT:', typeof tenantDb, tenantDb ? 'exists' : 'null');
-        const tenantStorage = createTenantStorage(tenantDb, storeMapping.storeId);
-        console.log('🏪 TENANT STORAGE CREATED - For store:', storeMapping.storeId);
-
-        // Log the incoming message in global logs
-        await storage.addWhatsAppLog({
-          type: 'info',
-          phoneNumber: from,
-          messageContent: `Mensaje recibido en tienda ${storeMapping.storeName}: ${messageText}`,
-          messageId: messageId,
-          status: 'received',
-          rawData: JSON.stringify(message)
-        });
-
-        // Step 4: Get or create customer in tenant schema
-      // 🔧 VERSIÓN MEJORADA - Manejo seguro de clientes con protección contra duplicados
-
-let customer = await tenantStorage.getCustomerByPhone(from);
-
-if (!customer) {
-  console.log('➕ CREATING NEW CUSTOMER - In tenant schema');
-  
-  try {
-    // 🔄 VERIFICACIÓN ADICIONAL ANTES DE CREAR (evita race conditions)
-    customer = await tenantStorage.getCustomerByPhone(from);
-    
-    if (customer) {
-      console.log('✅ CUSTOMER FOUND ON RETRY - Using existing customer:', customer.id);
+        await processIncomingMessage(message, storeMapping, tenantStorage);
+      }
     } else {
-      // ✨ CREAR CLIENTE CON MANEJO DE ERRORES ROBUSTO
+      console.log('ℹ️ NO MESSAGES IN WEBHOOK');
+    }
+
+    // 📊 PROCESS MESSAGE STATUSES (read, delivered, sent, failed)
+    const statuses = webhookValue.statuses;
+    if (statuses?.length > 0) {
+      console.log(`📊 PROCESSING ${statuses.length} STATUS UPDATE(S)`);
+      
+      for (const status of statuses) {
+        await processMessageStatus(status, storeMapping, tenantStorage);
+      }
+    } else {
+      console.log('ℹ️ NO STATUSES IN WEBHOOK');
+    }
+
+    // 🔔 PROCESS ERRORS (if any)
+    const errors = webhookValue.errors;
+    if (errors?.length > 0) {
+      console.log(`❌ PROCESSING ${errors.length} ERROR(S)`);
+      
+      for (const error of errors) {
+        await processWebhookError(error, storeMapping, tenantStorage);
+      }
+    }
+
+    console.log(`✅ WEBHOOK PROCESSED SUCCESSFULLY - Store: ${storeMapping.storeName}`);
+
+  } catch (error: any) {
+    console.error('❌ ERROR PROCESSING WHATSAPP WEBHOOK:', error);
+  }
+}
+
+async function processIncomingMessage(
+  message: any,
+  storeMapping: any,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    const from = message.from;
+    const messageId = message.id;
+    const messageType = message.type;
+    const timestamp = message.timestamp;
+    
+    let messageText = '';
+    let buttonId = '';
+
+    // Extract message content based on type
+    switch (messageType) {
+      case 'text':
+        messageText = message.text?.body || '';
+        break;
+      case 'interactive':
+        if (message.interactive?.type === 'button_reply') {
+          buttonId = message.interactive.button_reply.id;
+          messageText = buttonId; // Use button ID as message text for processing
+        }
+        break;
+      case 'image':
+        messageText = message.image?.caption || '[Imagen]';
+        break;
+      case 'document':
+        messageText = message.document?.caption || '[Documento]';
+        break;
+      case 'audio':
+        messageText = '[Mensaje de voz]';
+        break;
+      default:
+        messageText = `[${messageType}]`;
+        break;
+    }
+
+    console.log(`📥 PROCESSING MESSAGE - From: ${from}, Type: ${messageType}, Content: "${messageText}"`);
+
+    // Get or create customer
+    let customer = await tenantStorage.getCustomerByPhone(from);
+    if (!customer) {
+      console.log(`👤 CREATING NEW CUSTOMER - Phone: ${from}`);
       customer = await tenantStorage.createCustomer({
         name: `Cliente ${from.slice(-4)}`,
-        phone: from, // ⚠️ Asegúrate que sea "phone" y no "phoneNumber" según tu esquema
-        whatsappId: from,
-        address: null,
-        latitude: null,
-        longitude: null,
-        lastContact: new Date(),
-        registrationDate: new Date(),
-        totalOrders: 0,
-        totalSpent: "0.00", // ⚠️ String, no number según tu esquema
-        isVip: false,
-        notes: 'Cliente creado automáticamente desde WhatsApp',
-        mapLink: null
-      });
-      
-      console.log('✅ NEW CUSTOMER CREATED - ID:', customer.id);
-      
-      await storage.addWhatsAppLog({
-        type: 'info',
         phoneNumber: from,
-        messageContent: `Nuevo cliente creado en tienda ${storeMapping.storeId}`,
-        status: 'customer_created'
+        email: '',
+        address: ''
       });
     }
-    
-  } catch (error: any) {
-    console.error('❌ ERROR CREATING CUSTOMER:', error);
-    
-    // 🚨 MANEJO ESPECÍFICO DE ERRORES DE CLAVE DUPLICADA
-    if (error.message?.includes('duplicate key') || 
-        error.message?.includes('unique constraint') || 
-        error.code === '23505') {
-      
-      console.log('🔄 DUPLICATE KEY ERROR - Attempting to fetch existing customer');
-      
-      // Intentar obtener el cliente existente
-      customer = await tenantStorage.getCustomerByPhone(from);
-      
-      if (customer) {
-        console.log('✅ EXISTING CUSTOMER RETRIEVED - ID:', customer.id);
-        
-        // Actualizar lastContact del cliente existente
-        await tenantStorage.updateCustomer(customer.id, {
-          lastContact: new Date()
-        });
-        
-      } else {
-        console.error('❌ FATAL: Could not create or retrieve customer');
-        throw new Error(`Failed to create or retrieve customer for phone: ${from}`);
-      }
-    } else {
-      // Re-lanzar el error si no es de duplicación
-      throw error;
-    }
-  }
-} else {
-  console.log('✅ EXISTING CUSTOMER FOUND - ID:', customer.id);
-  
-  // 🔄 ACTUALIZAR ÚLTIMO CONTACTO DEL CLIENTE EXISTENTE
-  try {
-    await tenantStorage.updateCustomer(customer.id, {
-      lastContact: new Date()
+
+    // Log incoming message
+    const { storage } = await import('./storage_bk.js');
+    await storage.addWhatsAppLog({
+      type: 'incoming',
+      phoneNumber: from,
+      messageContent: messageText,
+      messageId: messageId,
+      status: 'received',
+      rawData: JSON.stringify(message),
+      storeId: storeMapping.storeId
     });
-  } catch (updateError) {
-    console.error('⚠️ WARNING: Could not update customer lastContact:', updateError);
-    // No es crítico, continúa el procesamiento
-  }
-}
 
-// ✅ VERIFICACIÓN FINAL
-if (!customer) {
-  throw new Error('Customer processing failed - no customer available');
-}
-
-console.log(`👤 CUSTOMER READY - ID: ${customer.id}, Phone: ${customer.phone}`);
-
-        // Step 5: Get or create conversation in tenant schema
-        let conversation = await tenantStorage.getConversationByCustomerPhone(from);
-        
-        if (!conversation) {
-          conversation = await tenantStorage.createConversation({
-            customerId: customer.id,
-            orderId: null,
-            status: 'active',
-            lastMessageAt: new Date(),
-            conversationType: 'initial'
-          });
-          
-          console.log('📞 NEW CONVERSATION CREATED - ID:', conversation.id);
-        } else {
-          console.log('📞 EXISTING CONVERSATION - ID:', conversation.id);
-        }
-
-        // Step 6: Create message in tenant schema
-       // ✅ CÓDIGO CORREGIDO para whatsapp-simple.ts
-await tenantStorage.createMessage({
-  conversationId: conversation.id,
-  senderId: customer.id,
-  senderType: 'customer',
-  content: messageText,
-  messageType: messageType || 'text',
-  whatsappMessageId: messageId,
-  isRead: false
-  // Elimina 'timestamp' - se usa 'sentAt' automáticamente
-});
-
-        console.log('💌 MESSAGE STORED - In tenant schema');
-
-        // Step 7A: PRIORITY - Check for active registration flows
-        console.log('⚠️ Registration flow checks temporarily disabled - Processing as normal auto-response');
-
-        // Step 7B: PRIORITY - Check if message is a structured order from web catalog
-        const isOrder = await isOrderMessage(messageText);
-        
-        // ✅ CÓDIGO CORREGIDO:
-if (isOrder) {
-  console.log('🛍️ ORDER DETECTED - Processing web catalog order');
-  
-  // 1. Procesar el pedido
-  await processWebCatalogOrderSimple(customer, from, messageText, storeMapping.storeId, phoneNumberId, tenantStorage);
-  
-  // 2. Enviar respuesta automática
-  try {
-    const orderResponse = await tenantStorage.getAutoResponseByTrigger('order_received');
+    // ✅ CHECK FOR ACTIVE REGISTRATION FLOW FIRST
+    const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(from);
     
-    if (orderResponse) {
-      console.log('📧 SENDING ORDER CONFIRMATION - Using configured response');
-      await sendAutoResponseMessage(from, 'order_received', storeMapping.storeId, tenantStorage, {
-        customerName: customer.name || 'Cliente'
-      });
-    } else {
-      console.log('📧 SENDING ORDER CONFIRMATION - Using fallback response');
-      await sendWhatsAppMessageDirect(from, 
-        `✅ *Pedido Recibido*\n\n¡Gracias por tu pedido! Lo hemos recibido correctamente y pronto nos pondremos en contacto contigo.\n\n¿Necesitas algo más?`, 
-        storeMapping.storeId
+    if (registrationFlow && !registrationFlow.isCompleted) {
+      console.log(`🔄 ACTIVE REGISTRATION FLOW DETECTED - Step: ${registrationFlow.currentStep}`);
+      
+      // Process the registration flow
+      await handleRegistrationFlow(
+        customer,
+        messageText,
+        registrationFlow,
+        storeMapping.storeId,
+        tenantStorage
       );
+      
+      return; // Don't process auto-responses if in registration flow
     }
-  } catch (responseError) {
-    console.error('❌ ERROR SENDING ORDER CONFIRMATION:', responseError);
-    // Enviar respuesta básica como fallback
-    await sendWhatsAppMessageDirect(from, 
-      `✅ Tu pedido ha sido recibido. Te contactaremos pronto.`, 
-      storeMapping.storeId
-    );
+
+    // Process configured auto-responses
+    await processConfiguredAutoResponse(messageText, from, customer, tenantStorage, storeMapping);
+
+    console.log(`✅ MESSAGE PROCESSED - From: ${from}`);
+
+  } catch (error: any) {
+    console.error('❌ ERROR PROCESSING INCOMING MESSAGE:', error);
   }
-  
-  return; // Ahora sí termina después de enviar respuesta
 }
 
-        // Step 8: Process message using configured auto-responses - STORE-SPECIFIC VALIDATION
-        try {
-          await processConfiguredAutoResponse(messageText, from, customer, tenantStorage, storeMapping);
-        } catch (error) {
-          console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
-          
-          // ✅ CORREGIDO: Obtener configuración desde base de datos en lugar de storeMapping.whatsappConfig
-          console.log('🔧 GETTING WHATSAPP CONFIG FROM DATABASE - Store ID:', storeMapping.storeId);
-          
-          try {
-            const whatsappConfig = await storage.getWhatsAppConfig(storeMapping.storeId);
-            
-            if (!whatsappConfig) {
-              console.error('❌ NO WHATSAPP CONFIG FOUND - Store ID:', storeMapping.storeId);
-              await storage.addWhatsAppLog({
-                type: 'error',
-                phoneNumber: from,
-                messageContent: `No se encontró configuración de WhatsApp para la tienda ${storeMapping.storeId}`,
-                status: 'failed',
-                errorMessage: 'Missing WhatsApp configuration'
-              });
-              return;
-            }
+// ========================================
+// PROCESS MESSAGE STATUSES
+// ========================================
+async function processMessageStatus(
+  status: any,
+  storeMapping: any,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    const messageId = status.id;
+    const statusType = status.status; // 'sent', 'delivered', 'read', 'failed'
+    const recipientId = status.recipient_id;
+    const timestamp = status.timestamp;
 
-            console.log('✅ WHATSAPP CONFIG FOUND - Sending fallback message');
-            
-            const fallbackPayload = {
-              messaging_product: 'whatsapp',
-              to: from,
-              type: 'text',
-              text: {
-                body: `¡Hola! Recibimos tu mensaje: "${messageText}". El sistema está funcionando correctamente.`
-              }
-            };
+    console.log(`📊 STATUS UPDATE - MessageID: ${messageId}, Status: ${statusType}, Recipient: ${recipientId}`);
 
-            const response = await fetch(`https://graph.facebook.com/v21.0/${whatsappConfig.phoneNumberId}/messages`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${whatsappConfig.accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(fallbackPayload),
-            });
-            
-            if (!response.ok) {
-              const errorText = await response.text();
-              console.error('❌ FALLBACK MESSAGE FAILED:', errorText);
-              
-              await storage.addWhatsAppLog({
-                type: 'error',
-                phoneNumber: from,
-                messageContent: 'Error enviando mensaje de fallback',
-                status: 'failed',
-                errorMessage: errorText
-              });
-            } else {
-              console.log('✅ FALLBACK MESSAGE SENT SUCCESSFULLY');
-              
-              await storage.addWhatsAppLog({
-                type: 'outgoing',
-                phoneNumber: from,
-                messageContent: fallbackPayload.text.body,
-                status: 'sent',
-                rawData: JSON.stringify(fallbackPayload)
-              });
-            }
-            
-          } catch (configError) {
-            console.error('❌ ERROR GETTING WHATSAPP CONFIG:', configError);
-            
-            await storage.addWhatsAppLog({
-              type: 'error',
-              phoneNumber: from,
-              messageContent: 'Error crítico obteniendo configuración de WhatsApp',
-              status: 'failed',
-              errorMessage: configError instanceof Error ? configError.message : 'Unknown config error'
-            });
-          }
-        }
-      }
+    // Update message status in database
+    const { storage } = await import('./storage_bk.js');
+    await storage.addWhatsAppLog({
+      type: 'status',
+      phoneNumber: recipientId,
+      messageContent: `Estado actualizado: ${statusType}`,
+      messageId: messageId,
+      status: statusType,
+      rawData: JSON.stringify(status),
+      storeId: storeMapping.storeId
+    });
+
+    // Handle specific status types
+    switch (statusType) {
+      case 'read':
+        console.log(`✅ MESSAGE READ - MessageID: ${messageId} by ${recipientId}`);
+        // Mark message as read in conversation
+        await markMessageAsReadInConversation(messageId, recipientId, tenantStorage);
+        break;
+      
+      case 'delivered':
+        console.log(`📬 MESSAGE DELIVERED - MessageID: ${messageId} to ${recipientId}`);
+        break;
+      
+      case 'failed':
+        console.log(`❌ MESSAGE FAILED - MessageID: ${messageId} to ${recipientId}`);
+        const errorCode = status.errors?.[0]?.code;
+        const errorTitle = status.errors?.[0]?.title;
+        console.log(`💥 DELIVERY ERROR - Code: ${errorCode}, Title: ${errorTitle}`);
+        break;
+      
+      case 'sent':
+        console.log(`📤 MESSAGE SENT - MessageID: ${messageId} to ${recipientId}`);
+        break;
     }
-  } catch (error) {
-    console.error('🚨 CRITICAL ERROR IN WHATSAPP PROCESSOR:', error);
-    
-    // Log error crítico
+
+  } catch (error: any) {
+    console.error('❌ ERROR PROCESSING MESSAGE STATUS:', error);
+  }
+}
+
+// ========================================
+// PROCESS WEBHOOK ERRORS
+// ========================================
+async function processWebhookError(
+  error: any,
+  storeMapping: any,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    const errorCode = error.code;
+    const errorTitle = error.title;
+    const errorMessage = error.message;
+
+    console.log(`💥 WEBHOOK ERROR - Code: ${errorCode}, Title: ${errorTitle}, Message: ${errorMessage}`);
+
+    // Log error to database
+    const { storage } = await import('./storage_bk.js');
     await storage.addWhatsAppLog({
       type: 'error',
-      phoneNumber: 'system',
-      messageContent: 'Error crítico en el procesador de WhatsApp',
-      status: 'failed',
-      errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      rawData: JSON.stringify({ 
-        error: error instanceof Error ? error.stack : error,
-        webhookPayload: value 
-      })
+      phoneNumber: 'WEBHOOK_ERROR',
+      messageContent: `Error: ${errorTitle} - ${errorMessage}`,
+      status: 'error',
+      errorMessage: `Code: ${errorCode}`,
+      rawData: JSON.stringify(error),
+      storeId: storeMapping.storeId
     });
+
+  } catch (processingError: any) {
+    console.error('❌ ERROR PROCESSING WEBHOOK ERROR:', processingError);
   }
 }
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+async function markMessageAsReadInConversation(
+  messageId: string,
+  phoneNumber: string,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    // Find customer by phone
+    const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+    if (!customer) {
+      console.log(`⚠️ CUSTOMER NOT FOUND for read receipt - Phone: ${phoneNumber}`);
+      return;
+    }
+
+    // Mark messages as read in conversation
+    const conversation = await tenantStorage.getOrCreateConversationByPhone(
+      phoneNumber,
+      customer.storeId || 0
+    );
+    
+    if (conversation) {
+      await tenantStorage.markMessagesAsRead(conversation.id);
+      console.log(`✅ MESSAGES MARKED AS READ - Conversation: ${conversation.id}`);
+    }
+
+  } catch (error: any) {
+    console.error('Error marking message as read:', error);
+  }
+}
+
+
 
 async function findStoreByPhoneNumberId(phoneNumberId: string) {
   try {
