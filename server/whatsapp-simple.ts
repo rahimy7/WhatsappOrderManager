@@ -1596,6 +1596,26 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
     console.log(`✅ REGISTRATION FLOW STARTED - Customer will be prompted for data collection`);
 
     // Log del éxito
+    console.log(`🚀 STARTING REGISTRATION FLOW - Order: ${order.id}, Customer: ${customer.id}`);
+    
+    // Crear flujo de registro para recopilar datos del cliente
+    await tenantStorage.createOrUpdateRegistrationFlow({
+      customerId: customer.id,
+      phoneNumber: phoneNumber,
+      currentStep: 'collect_name',
+      flowType: 'order_data_collection',
+      orderId: order.id,
+      collectedData: JSON.stringify({}),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
+      isCompleted: false
+    });
+    
+    // Enviar primer mensaje del flujo (solicitar nombre)
+    await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
+    
+    console.log(`✅ REGISTRATION FLOW STARTED - Customer will be prompted for data collection`);
+
+    // Log del éxito
     await storage.addWhatsAppLog({
       type: 'success',
       phoneNumber: phoneNumber,

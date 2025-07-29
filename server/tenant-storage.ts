@@ -929,7 +929,6 @@ async deleteRegistrationFlowByPhone(phoneNumber: string) {
     throw error;
   }
 },
-
 async createOrUpdateRegistrationFlow(flowData: {
   customerId: number;
   phoneNumber: string;
