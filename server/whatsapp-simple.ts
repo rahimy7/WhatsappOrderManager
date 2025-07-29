@@ -329,13 +329,18 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string, config:
 // ======================================
 
 async function processConfiguredAutoResponse(messageText: string, from: string, customer: any, tenantStorage: any, storeMapping: any) {
-  console.log(`🎯 PROCESSING CONFIGURED AUTO-RESPONSE - Store ${storeMapping.storeId}`);
+ console.log(`🎯 PROCESSING CONFIGURED AUTO-RESPONSE - Store ${storeMapping.storeId}`);
+  console.log(`📝 MESSAGE TEXT: "${messageText}"`);
+  console.log(`📝 MESSAGE LENGTH: ${messageText.length}`);
+  console.log(`📝 FIRST 100 CHARS: "${messageText.substring(0, 100)}"`);
   
   // ✅ NUEVO: VERIFICAR SI ES UN PEDIDO PRIMERO
   const isOrder = await isOrderMessage(messageText);
-  
+  console.log(`🛍️ IS ORDER MESSAGE: ${isOrder}`);
   if (isOrder) {
     console.log(`🛍️ ORDER DETECTED - Processing catalog order`);
+    console.log(`📋 CALLING processWebCatalogOrderSimple...`);
+    try {
     await processWebCatalogOrderSimple(
       customer, 
       from, 
@@ -344,8 +349,14 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
       storeMapping.phoneNumberId, 
       tenantStorage
     );
+    console.log(`✅ processWebCatalogOrderSimple COMPLETED`);
+     } catch (orderError) {
+      console.error(`❌ ERROR IN processWebCatalogOrderSimple:`, orderError);
+    }
     return; // ✅ IMPORTANTE: Salir aquí para no procesar auto-respuestas
-  }
+     } else {
+    console.log(`❌ NOT AN ORDER - Processing as regular message`);
+    }
 
   // CRITICAL: Use only tenant schema for store-specific auto-responses
   let autoResponse = null;
@@ -1150,6 +1161,12 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
 // Simplified order processing for tenant storage
 
 async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, orderText: string, storeId: number, phoneNumberId: string, tenantStorage: any) {
+   console.log(`\n🛍️ ===== PROCESSING WEB CATALOG ORDER =====`);
+  console.log(`🏪 Store: ${storeId}`);
+  console.log(`👤 Customer: ${customer.id}`);
+  console.log(`📞 Phone: ${phoneNumber}`);
+  console.log(`📝 Order Text Length: ${orderText.length}`);
+ 
   try {
     console.log(`🛍️ PROCESSING WEB CATALOG ORDER - Store: ${storeId}, Customer: ${customer.id}`);
     
@@ -1272,6 +1289,10 @@ ${orderItems.map(item =>
 
     // 🔥 INICIAR FLUJO DE RECOLECCIÓN DE DATOS AUTOMÁTICAMENTE
     console.log(`🚀 STARTING REGISTRATION FLOW - Order: ${order.id}, Customer: ${customer.id}`);
+    console.log(`🚀 ===== STARTING REGISTRATION FLOW =====`);
+    console.log(`👤 Customer ID: ${customer.id}`);
+    console.log(`📞 Phone Number: ${phoneNumber}`);
+    console.log(`📦 Order ID: ${order.id}`);
     
     // Crear flujo de registro para recopilar datos del cliente
     await tenantStorage.createOrUpdateRegistrationFlow({
@@ -1284,11 +1305,13 @@ ${orderItems.map(item =>
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
       isCompleted: false
     });
-    
+     console.log(`✅ REGISTRATION FLOW CREATED`);
     // Enviar primer mensaje del flujo (solicitar nombre)
+   console.log(`📤 SENDING COLLECT_NAME MESSAGE...`);
     await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
+    console.log(`✅ COLLECT_NAME MESSAGE SENT`);
     
-    console.log(`✅ REGISTRATION FLOW STARTED - Customer will be prompted for data collection`);
+    console.log(`✅ REGISTRATION FLOW COMPLETED`);
 
     // Log del éxito
     await masterStorage.addWhatsAppLog({
@@ -1306,7 +1329,7 @@ ${orderItems.map(item =>
     });
 
   } catch (error: any) {
-    console.error('Error processing web catalog order:', error);
+    console.error(`❌ ERROR IN processWebCatalogOrderSimple:`, error);
     
     // Log error using master storage
     const storageFactory = await import('./storage/storage-factory.js');
@@ -1332,7 +1355,16 @@ ${orderItems.map(item =>
 
 // ✅ FUNCIÓN AUXILIAR PARA DETECTAR ÓRDENES
 async function isOrderMessage(text: string): Promise<boolean> {
-  return text.startsWith('🛍️ *NUEVO PEDIDO*');
+  console.log(`🔍 CHECKING IF ORDER MESSAGE:`);
+  console.log(`📝 Text: "${text}"`);
+  console.log(`📝 Starts with "🛍️ *NUEVO PEDIDO*": ${text.startsWith('🛍️ *NUEVO PEDIDO*')}`);
+  console.log(`📝 Includes "NUEVO PEDIDO": ${text.includes('NUEVO PEDIDO')}`);
+  console.log(`📝 Includes "🛍️": ${text.includes('🛍️')}`);
+  
+  const result = text.startsWith('🛍️ *NUEVO PEDIDO*');
+  console.log(`🎯 FINAL RESULT: ${result}`);
+  
+  return result;
 }
 
 // Function to parse order items from catalog message
@@ -1442,12 +1474,18 @@ async function sendAutoResponseMessage(
   tenantStorage: any,
   variables?: Record<string, string>
 ): Promise<void> {
+  console.log(`\n📤 ===== SENDING AUTO RESPONSE =====`);
+  console.log(`📞 Phone: ${phoneNumber}`);
+  console.log(`🎯 Trigger: ${trigger}`);
+  console.log(`🏪 Store: ${storeId}`);
   try {
     console.log(`📤 SENDING AUTO RESPONSE - Trigger: ${trigger}, Phone: ${phoneNumber}`);
+    console.log(`🔍 Getting auto responses for trigger: ${trigger}`);
     
     // Obtener respuesta automática por trigger
     const autoResponses = await tenantStorage.getAutoResponsesByTrigger(trigger);
-    
+    console.log(`📋 Auto responses found: ${autoResponses?.length || 0}`);
+
     if (!autoResponses || autoResponses.length === 0) {
       console.log(`⚠️ NO AUTO RESPONSE FOUND - Trigger: ${trigger}`);
       
@@ -1477,6 +1515,7 @@ async function sendAutoResponseMessage(
       }
       
       await sendWhatsAppMessageDirect(phoneNumber, fallbackMessage, storeId);
+      console.log(`✅ AUTO RESPONSE SENT`);
       return;
     }
     

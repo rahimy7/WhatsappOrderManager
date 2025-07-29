@@ -608,17 +608,19 @@ async deleteAutoResponse(id: number) {
 },
 
 async getAutoResponsesByTrigger(trigger: string) {
+  console.log(`🔍 SEARCHING AUTO RESPONSES - Trigger: ${trigger}`);
+  
   try {
-    return await tenantDb.select()
+    const responses = await tenantDb.select()
       .from(schema.autoResponses)
-      .where(
-        and(
-          eq(schema.autoResponses.trigger, trigger),
-          eq(schema.autoResponses.storeId, storeId),
-          eq(schema.autoResponses.isActive, true)
-        )
-      )
-      .orderBy(schema.autoResponses.priority);
+      .where(eq(schema.autoResponses.trigger, trigger));
+    
+    console.log(`📋 RESPONSES FOUND: ${responses.length}`);
+    responses.forEach((resp, index) => {
+      console.log(`  ${index + 1}. ${resp.name} (Active: ${resp.isActive})`);
+    });
+    
+    return responses;
   } catch (error) {
     console.error('Error getting auto responses by trigger:', error);
     return [];
@@ -929,21 +931,20 @@ async deleteRegistrationFlowByPhone(phoneNumber: string) {
     throw error;
   }
 },
-async createOrUpdateRegistrationFlow(flowData: {
-  customerId: number;
-  phoneNumber: string;
-  currentStep: string;
-  flowType: string;
-  orderId?: number;
-  collectedData: string;
-  expiresAt: Date;
-  isCompleted: boolean;
-}): Promise<CustomerRegistrationFlow> {
+async createOrUpdateRegistrationFlow(flowData: any): Promise<any> {
+  console.log(`\n🔄 ===== CREATING/UPDATING REGISTRATION FLOW =====`);
+  console.log(`👤 Customer ID: ${flowData.customerId}`);
+  console.log(`📞 Phone: ${flowData.phoneNumber}`);
+  console.log(`📋 Step: ${flowData.currentStep}`);
+  console.log(`📦 Order ID: ${flowData.orderId}`);
+  
   try {
-    // Verificar si ya existe un flujo para este cliente
+    // Verificar si ya existe un flujo para este teléfono
     const existingFlow = await this.getRegistrationFlowByPhoneNumber(flowData.phoneNumber);
+    console.log(`🔍 Existing flow: ${existingFlow ? 'FOUND' : 'NOT FOUND'}`);
     
     if (existingFlow) {
+      console.log(`🔄 UPDATING existing flow`);
       // Actualizar flujo existente
       const [updatedFlow] = await tenantDb.update(schema.customerRegistrationFlows)
         .set({
@@ -958,8 +959,10 @@ async createOrUpdateRegistrationFlow(flowData: {
         .where(eq(schema.customerRegistrationFlows.phoneNumber, flowData.phoneNumber))
         .returning();
       
+      console.log(`✅ FLOW UPDATED: ${updatedFlow.id}`);
       return updatedFlow;
     } else {
+      console.log(`➕ CREATING new flow`);
       // Crear nuevo flujo
       const [newFlow] = await tenantDb.insert(schema.customerRegistrationFlows)
         .values({
@@ -976,10 +979,11 @@ async createOrUpdateRegistrationFlow(flowData: {
         })
         .returning();
       
+      console.log(`✅ FLOW CREATED: ${newFlow.id}`);
       return newFlow;
     }
   } catch (error) {
-    console.error('Error creating/updating registration flow:', error);
+    console.error('❌ ERROR IN createOrUpdateRegistrationFlow:', error);
     throw error;
   }
 }
