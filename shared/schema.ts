@@ -388,9 +388,11 @@ export const autoResponses = pgTable("auto_responses", {
 
 export const customerRegistrationFlows = pgTable("customer_registration_flows", {
   id: serial("id").primaryKey(),
-  customerId: integer("customer_id").references(() => customers.id), // ✅ Agregar
+  customerId: integer("customer_id").references(() => customers.id),
   phoneNumber: text("phone_number").notNull(),
   currentStep: text("current_step").notNull(),
+  flowType: text("flow_type"), // ✅ Agregar si no existe
+  orderId: integer("order_id").references(() => orders.id), // ✅ AGREGAR ESTA LÍNEA
   collectedData: text("collected_data"),
   requestedService: text("requested_service"),
   isCompleted: boolean("is_completed").default(false),
@@ -398,6 +400,7 @@ export const customerRegistrationFlows = pgTable("customer_registration_flows", 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
 
 // Employee management for different roles
 export const employeeProfiles = pgTable("employee_profiles", {
