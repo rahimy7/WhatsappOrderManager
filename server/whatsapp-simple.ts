@@ -647,6 +647,13 @@ async function handleRegistrationFlow(
         break;
 
      case 'collect_notes':
+
+     // ✅ LOGS DE DEBUG - Agregar al inicio
+  console.log(`\n🔍 ===== DEBUG COLLECT_NOTES =====`);
+  console.log(`📝 Registration Flow:`, JSON.stringify(registrationFlow, null, 2));
+  console.log(`📦 Order ID from flow:`, registrationFlow.orderId);
+  console.log(`👤 Customer:`, JSON.stringify(customer, null, 2));
+  console.log(`📋 Collected Data:`, JSON.stringify(collectedData, null, 2));
   // Guardar notas (opcional)
   if (messageText.toLowerCase() !== 'no_notes' && 
       messageText.toLowerCase() !== 'continuar' && 
@@ -666,38 +673,72 @@ async function handleRegistrationFlow(
     updatedAt: new Date()
   });
   
+
   // ✅ MEJORA: Obtener datos completos del pedido para la confirmación
   let orderDetails = '';
   let totalAmount = '0.00';
+  let orderNumber = '';
   
   if (registrationFlow.orderId) {
     try {
-      // Obtener el pedido completo con sus items
+      // Obtener el pedido completo
       const order = await tenantStorage.getOrderById(registrationFlow.orderId);
+      console.log(`🔍 ORDER RETRIEVED:`, order);
+      
       if (order) {
+        totalAmount = order.totalAmount || '0.00';
+        orderNumber = order.orderNumber || `ORD-${order.id}`;
+        
         // Obtener items del pedido
         const orderItems = await tenantStorage.getOrderItemsByOrderId(order.id);
-        totalAmount = order.totalAmount || '0.00';
+        console.log(`📦 ORDER ITEMS:`, orderItems);
         
         if (orderItems && orderItems.length > 0) {
-          orderDetails = `📋 *Número:* ORD-${order.id}\n🛍️ *Productos:* ${orderItems.length} artículo(s)\n`;
+          orderDetails = `📦 *Pedido:* ${orderNumber}\n🛍️ *Productos:* ${orderItems.length} artículo(s)\n`;
           
-          // Agregar cada item del pedido
+          // Agregar cada item del pedido con más detalles
           orderItems.forEach(item => {
-            orderDetails += `• ${item.productName || item.name || 'Producto'} (Cantidad: ${item.quantity})\n`;
+            const itemName = item.productName || item.name || 'Producto';
+            const quantity = item.quantity || 1;
+            const unitPrice = item.unitPrice || item.price || '0.00';
+            
+            orderDetails += `• ${itemName} (Cantidad: ${quantity})\n`;
+            if (unitPrice !== '0.00') {
+              orderDetails += `  💰 Precio: $${parseFloat(unitPrice).toLocaleString('es-DO', { minimumFractionDigits: 2 })}\n`;
+            }
           });
         } else {
-          orderDetails = `📋 *Número:* ORD-${order.id}\n🛍️ *Productos:* Sin items específicos\n`;
+          // Si no hay items, intentar obtenerlos de las notas del pedido original
+          if (order.notes && order.notes.includes('Productos:')) {
+            // Extraer información de productos de las notas
+            const notesLines = order.notes.split('\n');
+            const productsSection = notesLines.find(line => line.includes('Productos:'));
+            
+            if (productsSection) {
+              orderDetails = `📦 *Pedido:* ${orderNumber}\n${productsSection}\n`;
+            } else {
+              orderDetails = `📦 *Pedido:* ${orderNumber}\n🛍️ *Productos:* Ver detalles en el sistema\n`;
+            }
+          } else {
+            orderDetails = `📦 *Pedido:* ${orderNumber}\n🛍️ *Productos:* Detalles del pedido confirmado\n`;
+          }
         }
+      } else {
+        console.log(`⚠️ ORDER NOT FOUND - ID: ${registrationFlow.orderId}`);
+        orderDetails = `📦 *Pedido:* #${registrationFlow.orderId}\n🛍️ *Productos:* Detalles no disponibles\n`;
       }
     } catch (orderError) {
-      console.error('Error obteniendo detalles del pedido:', orderError);
-      orderDetails = `📦 *Pedido:* Detalles no disponibles\n`;
+      console.error('❌ Error obteniendo detalles del pedido:', orderError);
+      orderDetails = `📦 *Pedido:* Error al cargar detalles\n`;
     }
   } else {
+    console.log(`⚠️ NO ORDER ID FOUND IN REGISTRATION FLOW`);
     orderDetails = `📦 *Pedido:* ID no disponible\n`;
   }
   
+  console.log(`📋 FINAL ORDER DETAILS: ${orderDetails}`);
+  console.log(`💰 FINAL TOTAL AMOUNT: ${totalAmount}`);
+
   // ✅ MEJORA: Crear mensaje de confirmación completo
   const confirmationMessage = `✅ *Confirmación de Pedido*
 
@@ -710,7 +751,7 @@ async function handleRegistrationFlow(
 📝 *Notas:* ${collectedData.notes || 'Sin notas adicionales'}
 
 ${orderDetails}
-💰 *Total Final: ${parseFloat(totalAmount || '0').toLocaleString('es-DO', { minimumFractionDigits: 2 })}*
+💰 *Total Final: $${parseFloat(totalAmount || '0').toLocaleString('es-DO', { minimumFractionDigits: 2 })}*
 
 ¿Confirmas tu pedido?`;
 
