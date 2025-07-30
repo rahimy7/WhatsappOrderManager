@@ -789,9 +789,9 @@ ${orderDetails}
   break;
       case 'confirm_order':
   if (messageText.toLowerCase().includes('confirmar') || 
-      messageText.toLowerCase().includes('final_confirm') ||
+      messageText.toLowerCase().includes('order_confirmed') ||
       messageText.toLowerCase().includes('✅') ||
-      messageText === 'final_confirm') {  // ✅ ID exacto del botón
+      messageText === 'confirm_order') {  // ✅ ID exacto del botón
     
     // Finalizar pedido con todos los datos recolectados
     if (registrationFlow.orderId) {
@@ -1436,7 +1436,6 @@ async function processWebCatalogOrderSimple(customer: any, phoneNumber: string, 
 
     console.log(`✅ ORDER CREATED SUCCESSFULLY - ID: ${order.id}, Number: ${orderNumber}`);
 
-
     // Send order confirmation message
     const confirmationMessage = `✅ *PEDIDO RECIBIDO*
 
@@ -1459,20 +1458,82 @@ ${orderItems.map(item =>
     console.log(`📞 Phone Number: ${phoneNumber}`);
     console.log(`📦 Order ID: ${order.id}`);
     
-    // Crear flujo de registro para recopilar datos del cliente
-    await tenantStorage.createOrUpdateRegistrationFlow({
-      customerId: customer.id,
-      phoneNumber: phoneNumber,
-      currentStep: 'collect_name',
-      flowType: 'order_data_collection',
-      orderId: order.id,
-      collectedData: JSON.stringify({}),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
-      isCompleted: false
+    // ✅ CORRECCIÓN CRÍTICA: Verificar si ya existe un flujo activo
+    const existingFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
+    
+    if (existingFlow && !existingFlow.isCompleted) {
+      console.log(`⚠️ ACTIVE REGISTRATION FLOW EXISTS - Updating with new order ID`);
+      
+      // Actualizar el flujo existente con el nuevo orderId
+      await tenantStorage.updateRegistrationFlowByPhone(phoneNumber, {
+        orderId: order.id,  // ✅ ASEGURAR que se guarde el orderId
+        currentStep: 'collect_name',
+        collectedData: JSON.stringify({}),
+        updatedAt: new Date()
+      });
+    } else {
+      console.log(`➕ CREATING NEW REGISTRATION FLOW`);
+      
+      // Crear flujo de registro para recopilar datos del cliente
+      const flowData = {
+        customerId: customer.id,
+        phoneNumber: phoneNumber,
+        currentStep: 'collect_name',
+        flowType: 'order_data_collection',
+        orderId: order.id,  // ✅ CRÍTICO: Asegurar que se pasa el orderId
+        collectedData: JSON.stringify({}),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
+        isCompleted: false
+      };
+      
+      console.log(`📋 FLOW DATA TO CREATE:`, flowData);
+      
+      await tenantStorage.createOrUpdateRegistrationFlow(flowData);
+    }
+    
+    console.log(`✅ REGISTRATION FLOW CREATED/UPDATED`);
+    
+    // ✅ VERIFICAR QUE EL FLUJO SE CREÓ CORRECTAMENTE
+    const createdFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
+    console.log(`🔍 VERIFICATION - Created flow:`, {
+      exists: !!createdFlow,
+      orderId: createdFlow?.orderId,
+      step: createdFlow?.currentStep,
+      completed: createdFlow?.isCompleted
     });
-     console.log(`✅ REGISTRATION FLOW CREATED`);
+    
+    if (!createdFlow || createdFlow.orderId !== order.id) {
+      console.error(`❌ REGISTRATION FLOW CREATION FAILED`);
+      console.error(`Expected orderId: ${order.id}, Got: ${createdFlow?.orderId}`);
+      
+      // Intentar crear nuevamente con logging adicional
+      console.log(`🔄 RETRY CREATING REGISTRATION FLOW`);
+      try {
+        await tenantStorage.createOrUpdateRegistrationFlow({
+          customerId: customer.id,
+          phoneNumber: phoneNumber,
+          currentStep: 'collect_name',
+          flowType: 'order_data_collection',
+          orderId: order.id,
+          collectedData: JSON.stringify({}),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          isCompleted: false
+        });
+        
+        // Verificar nuevamente
+        const retryFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
+        console.log(`🔍 RETRY VERIFICATION:`, {
+          exists: !!retryFlow,
+          orderId: retryFlow?.orderId,
+          step: retryFlow?.currentStep
+        });
+      } catch (retryError) {
+        console.error(`❌ RETRY ALSO FAILED:`, retryError);
+      }
+    }
+    
     // Enviar primer mensaje del flujo (solicitar nombre)
-   console.log(`📤 SENDING COLLECT_NAME MESSAGE...`);
+    console.log(`📤 SENDING COLLECT_NAME MESSAGE...`);
     await sendAutoResponseMessage(phoneNumber, 'collect_name', storeId, tenantStorage);
     console.log(`✅ COLLECT_NAME MESSAGE SENT`);
     
@@ -1486,12 +1547,18 @@ ${orderItems.map(item =>
       phoneNumber: phoneNumber,
       messageContent: `Pedido ${orderNumber} creado exitosamente con ${orderItems.length} productos. Flujo de recolección iniciado.`,
       status: 'completed',
+      storeId: storeId,
       rawData: JSON.stringify({ 
         orderId: order.id,
         orderNumber: orderNumber,
         total: total,
         itemsCount: orderItems.length,
-        registrationFlowStarted: true
+        registrationFlowStarted: true,
+        flowVerification: {
+          exists: !!createdFlow,
+          orderId: createdFlow?.orderId,
+          step: createdFlow?.currentStep
+        }
       })
     });
 
