@@ -646,20 +646,23 @@ async function handleRegistrationFlow(
         await sendAutoResponseMessage(customer.phone, 'collect_notes', storeId, tenantStorage);
         break;
 
-     case 'collect_notes':
+     // ✅ ACTUALIZAR el case 'collect_notes' en handleRegistrationFlow
 
-     // ✅ LOGS DE DEBUG - Agregar al inicio
+case 'collect_notes':
+  // ✅ LOGS DE DEBUG - Agregar al inicio
   console.log(`\n🔍 ===== DEBUG COLLECT_NOTES =====`);
   console.log(`📝 Registration Flow:`, JSON.stringify(registrationFlow, null, 2));
   console.log(`📦 Order ID from flow:`, registrationFlow.orderId);
+  console.log(`📋 Order Number from flow:`, registrationFlow.orderNumber); // ✅ AGREGAR
   console.log(`👤 Customer:`, JSON.stringify(customer, null, 2));
   console.log(`📋 Collected Data:`, JSON.stringify(collectedData, null, 2));
+
   // Guardar notas (opcional)
   if (messageText.toLowerCase() !== 'no_notes' && 
       messageText.toLowerCase() !== 'continuar' && 
       messageText.toLowerCase() !== 'continuar sin notas' &&
       messageText !== 'continue_no_notes' &&
-      messageText !== 'no_notes' &&  // ID exacto del botón
+      messageText !== 'no_notes' &&
       messageText.trim().length > 0) {
     collectedData.notes = messageText.trim();
   } else {
@@ -672,31 +675,41 @@ async function handleRegistrationFlow(
     collectedData: JSON.stringify(collectedData),
     updatedAt: new Date()
   });
-  
 
   // ✅ MEJORA: Obtener datos completos del pedido para la confirmación
   let orderDetails = '';
   let totalAmount = '0.00';
-  let orderNumber = '';
+  let displayOrderNumber = '';
   
-  if (registrationFlow.orderId) {
+  // ✅ USAR orderNumber si está disponible, sino usar orderId
+  const orderReference = registrationFlow.orderNumber || registrationFlow.orderId;
+  
+  if (orderReference) {
     try {
-      // Obtener el pedido completo
-      const order = await tenantStorage.getOrderById(registrationFlow.orderId);
+      let order = null;
+      
+      if (registrationFlow.orderId) {
+        // Buscar por ID
+        order = await tenantStorage.getOrderById(registrationFlow.orderId);
+      } else if (registrationFlow.orderNumber) {
+        // Buscar por número de orden
+        const allOrders = await tenantStorage.getAllOrders();
+        order = allOrders.find(o => o.orderNumber === registrationFlow.orderNumber);
+      }
+      
       console.log(`🔍 ORDER RETRIEVED:`, order);
       
       if (order) {
         totalAmount = order.totalAmount || '0.00';
-        orderNumber = order.orderNumber || `ORD-${order.id}`;
+        displayOrderNumber = order.orderNumber || `ORD-${order.id}`;
         
         // Obtener items del pedido
         const orderItems = await tenantStorage.getOrderItemsByOrderId(order.id);
         console.log(`📦 ORDER ITEMS:`, orderItems);
         
         if (orderItems && orderItems.length > 0) {
-          orderDetails = `📦 *Pedido:* ${orderNumber}\n🛍️ *Productos:* ${orderItems.length} artículo(s)\n`;
+          orderDetails = `📦 *Pedido:* ${displayOrderNumber}\n🛍️ *Productos:* ${orderItems.length} artículo(s)\n`;
           
-          // Agregar cada item del pedido con más detalles
           orderItems.forEach(item => {
             const itemName = item.productName || item.name || 'Producto';
             const quantity = item.quantity || 1;
@@ -708,36 +721,24 @@ async function handleRegistrationFlow(
             }
           });
         } else {
-          // Si no hay items, intentar obtenerlos de las notas del pedido original
-          if (order.notes && order.notes.includes('Productos:')) {
-            // Extraer información de productos de las notas
-            const notesLines = order.notes.split('\n');
-            const productsSection = notesLines.find(line => line.includes('Productos:'));
-            
-            if (productsSection) {
-              orderDetails = `📦 *Pedido:* ${orderNumber}\n${productsSection}\n`;
-            } else {
-              orderDetails = `📦 *Pedido:* ${orderNumber}\n🛍️ *Productos:* Ver detalles en el sistema\n`;
-            }
-          } else {
-            orderDetails = `📦 *Pedido:* ${orderNumber}\n🛍️ *Productos:* Detalles del pedido confirmado\n`;
-          }
+          orderDetails = `📦 *Pedido:* ${displayOrderNumber}\n🛍️ *Productos:* Ver detalles en el sistema\n`;
         }
       } else {
-        console.log(`⚠️ ORDER NOT FOUND - ID: ${registrationFlow.orderId}`);
-        orderDetails = `📦 *Pedido:* #${registrationFlow.orderId}\n🛍️ *Productos:* Detalles no disponibles\n`;
+        console.log(`⚠️ ORDER NOT FOUND - Reference: ${orderReference}`);
+        orderDetails = `📦 *Pedido:* ${orderReference}\n🛍️ *Productos:* Detalles no disponibles\n`;
       }
     } catch (orderError) {
       console.error('❌ Error obteniendo detalles del pedido:', orderError);
       orderDetails = `📦 *Pedido:* Error al cargar detalles\n`;
     }
   } else {
-    console.log(`⚠️ NO ORDER ID FOUND IN REGISTRATION FLOW`);
-    orderDetails = `📦 *Pedido:* ID no disponible\n`;
+    console.log(`⚠️ NO ORDER REFERENCE FOUND IN REGISTRATION FLOW`);
+    orderDetails = `📦 *Pedido:* Referencia no disponible\n`;
   }
   
   console.log(`📋 FINAL ORDER DETAILS: ${orderDetails}`);
   console.log(`💰 FINAL TOTAL AMOUNT: ${totalAmount}`);
+  console.log(`📋 DISPLAY ORDER NUMBER: ${displayOrderNumber}`);
 
   // ✅ MEJORA: Crear mensaje de confirmación completo
   const confirmationMessage = `✅ *Confirmación de Pedido*
@@ -772,7 +773,7 @@ ${orderDetails}
 
     // Obtener configuración global
     const storageFactory = await import('./storage/storage-factory.js');
-    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();  
     const config = await masterStorage.getWhatsAppConfig(storeId);
 
     if (menuOptions && Array.isArray(menuOptions) && menuOptions.length > 0) {
@@ -787,26 +788,37 @@ ${orderDetails}
     await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
   }
   break;
-      case 'confirm_order':
+     // ✅ ACTUALIZAR el case 'confirm_order' en handleRegistrationFlow
+
+case 'confirm_order':
   if (messageText.toLowerCase().includes('confirmar') || 
       messageText.toLowerCase().includes('order_confirmed') ||
       messageText.toLowerCase().includes('✅') ||
       messageText === 'confirm_order') {  // ✅ ID exacto del botón
     
+    // ✅ MEJORADO: Usar orderId del registrationFlow (más confiable)
+    const orderIdToFinalize = registrationFlow.orderId;
+    const orderNumberForLogs = registrationFlow.orderNumber || `ID-${orderIdToFinalize}`;
+    
+    console.log(`🎯 CONFIRMING ORDER - ID: ${orderIdToFinalize}, Number: ${orderNumberForLogs}`);
+    
     // Finalizar pedido con todos los datos recolectados
-    if (registrationFlow.orderId) {
+    if (orderIdToFinalize) {
       await finalizeOrderWithData(
-        registrationFlow.orderId,
+        orderIdToFinalize,  // ✅ Usar orderId para la función (necesario para BD)
         collectedData,
         customer,
         storeId,
         tenantStorage
       );
     } else {
-      // Si no hay orderId, crear un mensaje básico
+      console.log(`⚠️ NO ORDER ID FOUND IN REGISTRATION FLOW`);
+      
+      // ✅ FALLBACK: Si no hay orderId, crear un mensaje básico con orderNumber si existe
+      const displayReference = registrationFlow.orderNumber || 'tu pedido';
       await sendWhatsAppMessageDirect(
         customer.phone,
-        "✅ Datos registrados correctamente. Nuestro equipo te contactará pronto.",
+        `✅ Datos de ${displayReference} registrados correctamente. Nuestro equipo te contactará pronto.`,
         storeId
       );
     }
@@ -818,10 +830,11 @@ ${orderDetails}
              messageText.toLowerCase().includes('edit_data') ||
              messageText === 'edit_data') {  // ✅ ID exacto del botón
     
-    // Volver al inicio del flujo
+    // Volver al inicio del flujo (preservar orderId y orderNumber)
     await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
       currentStep: 'collect_name',
       collectedData: JSON.stringify({}),
+      // ✅ IMPORTANTE: No resetear orderId ni orderNumber
       updatedAt: new Date()
     });
     
@@ -830,6 +843,26 @@ ${orderDetails}
   } else if (messageText.toLowerCase().includes('cancelar') || 
              messageText.toLowerCase().includes('cancel') ||
              messageText === 'cancel') {  // ✅ ID exacto del botón
+    
+    // ✅ MEJORADO: Log de cancelación con referencia de pedido
+    const orderReference = registrationFlow.orderNumber || registrationFlow.orderId || 'desconocido';
+    console.log(`❌ ORDER CANCELLED BY USER - Reference: ${orderReference}`);
+    
+    // Log de cancelación
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    await masterStorage.addWhatsAppLog({
+      type: 'info',
+      phoneNumber: customer.phone,
+      messageContent: `Pedido ${orderReference} cancelado por el usuario durante confirmación`,
+      status: 'cancelled',
+      storeId: storeId,
+      rawData: JSON.stringify({ 
+        orderId: registrationFlow.orderId,
+        orderNumber: registrationFlow.orderNumber,
+        collectedData 
+      })
+    });
     
     // Cancelar flujo y volver al menú
     await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
@@ -867,6 +900,8 @@ ${orderDetails}
 // ========================================
 // FUNCIÓN AUXILIAR CORREGIDA CON TIPOS
 // ========================================
+// ✅ FUNCIÓN ACTUALIZADA: finalizeOrderWithData - Usando orderNumber
+
 async function finalizeOrderWithData(
   orderId: number,
   collectedData: any,
@@ -876,6 +911,12 @@ async function finalizeOrderWithData(
 ): Promise<void> {
   try {
     console.log(`🎯 FINALIZING ORDER ${orderId} WITH COLLECTED DATA`);
+    
+    // 1. Obtener la orden antes de actualizar para tener el orderNumber
+    const currentOrder = await tenantStorage.getOrderById(orderId);
+    const orderNumber = currentOrder?.orderNumber || `ORD-${orderId}`;
+    
+    console.log(`📋 Order details: ID ${orderId}, Number: ${orderNumber}`);
     
     const orderUpdates = {
       status: 'confirmed',
@@ -907,9 +948,12 @@ async function finalizeOrderWithData(
       ).join('\n');
     }
     
+    // ✅ MEJORADO: Usar orderNumber en lugar de orderId en el mensaje
+    const displayOrderNumber = finalOrder?.orderNumber || orderNumber;
+    
     const finalMessage = `🎉 *¡PEDIDO CONFIRMADO!*
 
-✅ Tu pedido #ORD-${orderId} ha sido registrado exitosamente.
+✅ Tu pedido **${displayOrderNumber}** ha sido registrado exitosamente.
 
 📋 *Detalles Finales:*
 • Cliente: ${collectedData.customerName || customer.name}
@@ -935,29 +979,63 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
 
     await sendWhatsAppMessageDirect(customer.phone, finalMessage, storeId);
     
-    // 5. Log del éxito
+    // 5. Log del éxito - ✅ MEJORADO: Usar orderNumber en logs también
     const storageFactory = await import('./storage/storage-factory.js');
     const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
     await masterStorage.addWhatsAppLog({
       type: 'success',
       phoneNumber: customer.phone,
-      messageContent: `Pedido ORD-${orderId} finalizado exitosamente con datos completos.`,
+      messageContent: `Pedido ${displayOrderNumber} (ID: ${orderId}) finalizado exitosamente con datos completos.`,
       status: 'completed',
       storeId: storeId,
-      rawData: JSON.stringify({ orderId, collectedData, finalOrder })
+      rawData: JSON.stringify({ 
+        orderId, 
+        orderNumber: displayOrderNumber,
+        collectedData, 
+        finalOrder 
+      })
     });
     
-    console.log(`✅ ORDER ${orderId} FINALIZED SUCCESSFULLY WITH COMPLETE DATA`);
+    console.log(`✅ ORDER ${displayOrderNumber} (ID: ${orderId}) FINALIZED SUCCESSFULLY WITH COMPLETE DATA`);
     
   } catch (error) {
     console.error(`❌ ERROR FINALIZING ORDER ${orderId}:`, error);
     
+    // ✅ MEJORADO: Obtener orderNumber para mensaje de error también
+    let orderReference = `ID ${orderId}`;
+    try {
+      const errorOrder = await tenantStorage.getOrderById(orderId);
+      if (errorOrder?.orderNumber) {
+        orderReference = errorOrder.orderNumber;
+      }
+    } catch (getOrderError) {
+      console.log(`⚠️ Could not get order number for error message`);
+    }
+    
     // Enviar mensaje de error al cliente
     await sendWhatsAppMessageDirect(
       customer.phone,
-      "❌ Ha ocurrido un error al procesar tu pedido. Nuestro equipo te contactará pronto para resolverlo. 📞 +1 809-357-6939",
+      `❌ Ha ocurrido un error al procesar tu pedido ${orderReference}. Nuestro equipo te contactará pronto para resolverlo. 📞 +1 809-357-6939`,
       storeId
     );
+    
+    // Log del error con más detalles
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    await masterStorage.addWhatsAppLog({
+      type: 'error',
+      phoneNumber: customer.phone,
+      messageContent: `Error finalizando pedido ${orderReference} (ID: ${orderId})`,
+      status: 'error',
+      storeId: storeId,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      rawData: JSON.stringify({ 
+        orderId, 
+        orderReference,
+        collectedData,
+        error: error instanceof Error ? error.stack : error 
+      })
+    });
   }
 }
 
@@ -1481,6 +1559,7 @@ ${orderItems.map(item =>
         currentStep: 'collect_name',
         flowType: 'order_data_collection',
         orderId: order.id,  // ✅ CRÍTICO: Asegurar que se pasa el orderId
+        orderNumber: orderNumber,
         collectedData: JSON.stringify({}),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 horas
         isCompleted: false
@@ -1498,16 +1577,15 @@ ${orderItems.map(item =>
     console.log(`🔍 VERIFICATION - Created flow:`, {
       exists: !!createdFlow,
       orderId: createdFlow?.orderId,
+      orderNumber: createdFlow?.orderNumber,
       step: createdFlow?.currentStep,
       completed: createdFlow?.isCompleted
     });
     
-    if (!createdFlow || createdFlow.orderId !== order.id) {
-      console.error(`❌ REGISTRATION FLOW CREATION FAILED`);
-      console.error(`Expected orderId: ${order.id}, Got: ${createdFlow?.orderId}`);
-      
-      // Intentar crear nuevamente con logging adicional
-      console.log(`🔄 RETRY CREATING REGISTRATION FLOW`);
+    if (!createdFlow || (createdFlow.orderId !== order.id && createdFlow.orderNumber !== orderNumber)) {
+  console.error(`❌ REGISTRATION FLOW CREATION FAILED`);
+  console.error(`Expected orderId: ${order.id}, Got: ${createdFlow?.orderId}`);
+  console.error(`Expected orderNumber: ${orderNumber}, Got: ${createdFlow?.orderNumber}`);
       try {
         await tenantStorage.createOrUpdateRegistrationFlow({
           customerId: customer.id,

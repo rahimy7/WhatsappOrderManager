@@ -393,6 +393,7 @@ export const customerRegistrationFlows = pgTable("customer_registration_flows", 
   currentStep: text("current_step").notNull(),
   flowType: text("flow_type"), // ✅ Agregar si no existe
   orderId: integer("order_id").references(() => orders.id), // ✅ AGREGAR ESTA LÍNEA
+  orderNumber: text("order_number"),
   collectedData: text("collected_data"),
   requestedService: text("requested_service"),
   isCompleted: boolean("is_completed").default(false),
