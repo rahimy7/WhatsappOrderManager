@@ -79,6 +79,56 @@ export function createTenantStorage(tenantDb: any, storeId: number) {
       }
     },
 
+    async getOrderItemsByOrderId(orderId: number) {
+  try {
+    return await tenantDb.select()
+      .from(schema.orderItems)
+      .where(eq(schema.orderItems.orderId, orderId))
+      .orderBy(desc(schema.orderItems.id));
+  } catch (error) {
+    console.error('Error getting order items by order ID:', error);
+    return [];
+  }
+},
+
+async createOrderItem(itemData: any) {
+  try {
+    const [item] = await tenantDb.insert(schema.orderItems)
+      .values({
+        ...itemData,
+        createdAt: new Date()
+      })
+      .returning();
+    return item;
+  } catch (error) {
+    console.error('Error creating order item:', error);
+    throw error;
+  }
+},
+
+async updateOrderItem(id: number, itemData: any) {
+  try {
+    const [item] = await tenantDb.update(schema.orderItems)
+      .set({ ...itemData, updatedAt: new Date() })
+      .where(eq(schema.orderItems.id, id))
+      .returning();
+    return item;
+  } catch (error) {
+    console.error('Error updating order item:', error);
+    throw error;
+  }
+},
+
+async deleteOrderItem(id: number) {
+  try {
+    await tenantDb.delete(schema.orderItems)
+      .where(eq(schema.orderItems.id, id));
+  } catch (error) {
+    console.error('Error deleting order item:', error);
+    throw error;
+  }
+},
+
     // PRODUCTS
     async getAllProducts() {
       try {

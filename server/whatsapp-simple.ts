@@ -646,92 +646,155 @@ async function handleRegistrationFlow(
         await sendAutoResponseMessage(customer.phone, 'collect_notes', storeId, tenantStorage);
         break;
 
-      case 'collect_notes':
-        // Guardar notas (opcional)
-        if (messageText.toLowerCase() !== 'no_notes' && 
-            messageText.toLowerCase() !== 'continuar' && 
-            messageText.toLowerCase() !== 'continuar sin notas' &&
-            messageText.trim().length > 0) {
-          collectedData.notes = messageText.trim();
-        } else {
-          collectedData.notes = 'Sin notas adicionales';
-        }
+     case 'collect_notes':
+  // Guardar notas (opcional)
+  if (messageText.toLowerCase() !== 'no_notes' && 
+      messageText.toLowerCase() !== 'continuar' && 
+      messageText.toLowerCase() !== 'continuar sin notas' &&
+      messageText !== 'continue_no_notes' &&
+      messageText !== 'no_notes' &&  // ID exacto del botón
+      messageText.trim().length > 0) {
+    collectedData.notes = messageText.trim();
+  } else {
+    collectedData.notes = 'Sin notas adicionales';
+  }
+  
+  // Actualizar datos antes de mostrar confirmación
+  await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+    currentStep: 'confirm_order',
+    collectedData: JSON.stringify(collectedData),
+    updatedAt: new Date()
+  });
+  
+  // ✅ MEJORA: Obtener datos completos del pedido para la confirmación
+  let orderDetails = '';
+  let totalAmount = '0.00';
+  
+  if (registrationFlow.orderId) {
+    try {
+      // Obtener el pedido completo con sus items
+      const order = await tenantStorage.getOrderById(registrationFlow.orderId);
+      if (order) {
+        // Obtener items del pedido
+        const orderItems = await tenantStorage.getOrderItemsByOrderId(order.id);
+        totalAmount = order.totalAmount || '0.00';
         
-        // Mostrar confirmación final
-        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
-          currentStep: 'confirm_order',
-          collectedData: JSON.stringify(collectedData),
-          updatedAt: new Date()
-        });
-        
-        // Preparar mensaje de confirmación con variables
-        try {
-          const confirmResponse = await tenantStorage.getAutoResponsesByTrigger('confirm_order');
-          if (confirmResponse && confirmResponse.length > 0) {
-            let confirmMessage = confirmResponse[0].messageText;
-            
-            // Reemplazar variables en el mensaje
-            confirmMessage = confirmMessage
-              .replace(/{customerName}/g, collectedData.customerName || customer.name)
-              .replace(/{contactNumber}/g, collectedData.contactNumber || customer.phone)
-              .replace(/{address}/g, collectedData.address || 'No proporcionada')
-              .replace(/{paymentMethod}/g, collectedData.paymentMethod || 'No especificado')
-              .replace(/{notes}/g, collectedData.notes || 'Ninguna')
-              .replace(/{orderSummary}/g, 'Resumen del pedido')
-              .replace(/{totalAmount}/g, '0.00');
-            
-            await sendWhatsAppMessageDirect(customer.phone, confirmMessage, storeId);
-          }
-        } catch (confirmError) {
-          console.error('Error sending confirmation message:', confirmError);
-          // Enviar mensaje básico como fallback
-          await sendWhatsAppMessageDirect(
-            customer.phone,
-            "✅ Datos recopilados correctamente. ¿Confirmas tu pedido? Responde 'confirmar' para continuar.",
-            storeId
-          );
-        }
-        break;
-
-      case 'confirm_order':
-        if (messageText.toLowerCase().includes('confirmar') || 
-            messageText.toLowerCase().includes('final_confirm') ||
-            messageText.toLowerCase().includes('✅')) {
+        if (orderItems && orderItems.length > 0) {
+          orderDetails = `📋 *Número:* ORD-${order.id}\n🛍️ *Productos:* ${orderItems.length} artículo(s)\n`;
           
-          // Finalizar pedido
-          if (registrationFlow.orderId) {
-            await finalizeOrderWithData(
-              registrationFlow.orderId,
-              collectedData,
-              customer,
-              storeId,
-              tenantStorage
-            );
-          }
-          
-          // Marcar flujo como completado y eliminarlo
-          await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
-          
-        } else if (messageText.toLowerCase().includes('modificar') || 
-                   messageText.toLowerCase().includes('edit_data')) {
-          
-          // Volver al inicio del flujo
-          await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
-            currentStep: 'collect_name',
-            collectedData: JSON.stringify({}),
-            updatedAt: new Date()
+          // Agregar cada item del pedido
+          orderItems.forEach(item => {
+            orderDetails += `• ${item.productName || item.name || 'Producto'} (Cantidad: ${item.quantity})\n`;
           });
-          
-          await sendAutoResponseMessage(customer.phone, 'collect_name', storeId, tenantStorage);
-          
-        } else if (messageText.toLowerCase().includes('cancelar') || 
-                   messageText.toLowerCase().includes('cancel')) {
-          
-          // Cancelar flujo
-          await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
-          await sendAutoResponseMessage(customer.phone, 'welcome', storeId, tenantStorage);
+        } else {
+          orderDetails = `📋 *Número:* ORD-${order.id}\n🛍️ *Productos:* Sin items específicos\n`;
         }
-        break;
+      }
+    } catch (orderError) {
+      console.error('Error obteniendo detalles del pedido:', orderError);
+      orderDetails = `📦 *Pedido:* Detalles no disponibles\n`;
+    }
+  } else {
+    orderDetails = `📦 *Pedido:* ID no disponible\n`;
+  }
+  
+  // ✅ MEJORA: Crear mensaje de confirmación completo
+  const confirmationMessage = `✅ *Confirmación de Pedido*
+
+¡Perfecto! Aquí está el resumen completo de tu pedido:
+
+👤 *Cliente:* ${collectedData.customerName || customer.name}
+📞 *Contacto:* ${collectedData.contactNumber || customer.phone}
+📍 *Dirección:* ${collectedData.address || 'No especificada'}
+💳 *Pago:* ${collectedData.paymentMethod || 'No especificado'}
+📝 *Notas:* ${collectedData.notes || 'Sin notas adicionales'}
+
+${orderDetails}
+💰 *Total Final: ${parseFloat(totalAmount || '0').toLocaleString('es-DO', { minimumFractionDigits: 2 })}*
+
+¿Confirmas tu pedido?`;
+
+  // Enviar mensaje de confirmación personalizado con botones
+  const confirmResponse = await tenantStorage.getAutoResponsesByTrigger('confirm_order');
+  if (confirmResponse && confirmResponse.length > 0) {
+    // Usar los botones configurados pero con el mensaje mejorado
+    let menuOptions = null;
+    try {
+      if (confirmResponse[0].menuOptions && typeof confirmResponse[0].menuOptions === 'string') {
+        menuOptions = JSON.parse(confirmResponse[0].menuOptions);
+      } else if (confirmResponse[0].menuOptions) {
+        menuOptions = confirmResponse[0].menuOptions;
+      }
+    } catch (parseError) {
+      console.log(`⚠️ INVALID MENU OPTIONS JSON:`, parseError);
+    }
+
+    // Obtener configuración global
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    const config = await masterStorage.getWhatsAppConfig(storeId);
+
+    if (menuOptions && Array.isArray(menuOptions) && menuOptions.length > 0) {
+      // Enviar mensaje interactivo con botones
+      await sendInteractiveMessage(customer.phone, confirmationMessage, menuOptions, config);
+    } else {
+      // Enviar mensaje de texto normal
+      await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
+    }
+  } else {
+    // Fallback si no existe configuración
+    await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
+  }
+  break;
+      case 'confirm_order':
+  if (messageText.toLowerCase().includes('confirmar') || 
+      messageText.toLowerCase().includes('final_confirm') ||
+      messageText.toLowerCase().includes('✅') ||
+      messageText === 'final_confirm') {  // ✅ ID exacto del botón
+    
+    // Finalizar pedido con todos los datos recolectados
+    if (registrationFlow.orderId) {
+      await finalizeOrderWithData(
+        registrationFlow.orderId,
+        collectedData,
+        customer,
+        storeId,
+        tenantStorage
+      );
+    } else {
+      // Si no hay orderId, crear un mensaje básico
+      await sendWhatsAppMessageDirect(
+        customer.phone,
+        "✅ Datos registrados correctamente. Nuestro equipo te contactará pronto.",
+        storeId
+      );
+    }
+    
+    // Marcar flujo como completado y eliminarlo
+    await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
+    
+  } else if (messageText.toLowerCase().includes('modificar') || 
+             messageText.toLowerCase().includes('edit_data') ||
+             messageText === 'edit_data') {  // ✅ ID exacto del botón
+    
+    // Volver al inicio del flujo
+    await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+      currentStep: 'collect_name',
+      collectedData: JSON.stringify({}),
+      updatedAt: new Date()
+    });
+    
+    await sendAutoResponseMessage(customer.phone, 'collect_name', storeId, tenantStorage);
+    
+  } else if (messageText.toLowerCase().includes('cancelar') || 
+             messageText.toLowerCase().includes('cancel') ||
+             messageText === 'cancel') {  // ✅ ID exacto del botón
+    
+    // Cancelar flujo y volver al menú
+    await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
+    await sendAutoResponseMessage(customer.phone, 'welcome', storeId, tenantStorage);
+  }
+  break;
 
       default:
         console.log(`⚠️ UNKNOWN REGISTRATION STEP: ${currentStep}`);
@@ -758,55 +821,104 @@ async function handleRegistrationFlow(
   }
 }
 
+
+
 // ========================================
 // FUNCIÓN AUXILIAR CORREGIDA CON TIPOS
 // ========================================
-
 async function finalizeOrderWithData(
   orderId: number,
-  collectedData: CollectedData,
-  customer: Customer,
+  collectedData: any,
+  customer: any,
   storeId: number,
   tenantStorage: any
 ): Promise<void> {
   try {
-    // Update order with collected data
-    const orderNotes = `
-Cliente: ${collectedData.customerName || customer.name}
-Dirección: ${collectedData.address || 'No proporcionada'}
-Contacto: ${collectedData.contactNumber || customer.phone}
-Método de Pago: ${collectedData.paymentMethod || 'No especificado'}
-Notas: ${collectedData.notes || 'Ninguna'}
-    `.trim();
+    console.log(`🎯 FINALIZING ORDER ${orderId} WITH COLLECTED DATA`);
     
-    await tenantStorage.updateOrder(orderId, {
+    const orderUpdates = {
       status: 'confirmed',
-      notes: orderNotes
+      notes: `Datos del cliente:\n• Contacto: ${collectedData.contactNumber}\n• Dirección: ${collectedData.address}\n• Pago: ${collectedData.paymentMethod}\n• Notas adicionales: ${collectedData.notes}`,
+      updatedAt: new Date()
+    };
+    
+    await tenantStorage.updateOrder(orderId, orderUpdates);
+    
+    // 2. Actualizar datos del cliente
+    const customerUpdates = {
+      name: collectedData.customerName || customer.name,
+      address: collectedData.address || customer.address,
+      phone: collectedData.contactNumber || customer.phone,
+      lastContact: new Date()
+    };
+    
+    await tenantStorage.updateCustomer(customer.id, customerUpdates);
+    
+    // 3. Obtener orden actualizada para mensaje final
+    const finalOrder = await tenantStorage.getOrderById(orderId);
+    const orderItems = await tenantStorage.getOrderItemsByOrderId(orderId);
+    
+    // 4. Enviar mensaje de confirmación final
+    let orderItemsText = '';
+    if (orderItems && orderItems.length > 0) {
+      orderItemsText = orderItems.map(item => 
+        `• ${item.productName || item.name || 'Producto'} (Cantidad: ${item.quantity})`
+      ).join('\n');
+    }
+    
+    const finalMessage = `🎉 *¡PEDIDO CONFIRMADO!*
+
+✅ Tu pedido #ORD-${orderId} ha sido registrado exitosamente.
+
+📋 *Detalles Finales:*
+• Cliente: ${collectedData.customerName || customer.name}
+• Contacto: ${collectedData.contactNumber || customer.phone}
+• Dirección: ${collectedData.address || 'No especificada'}
+• Pago: ${collectedData.paymentMethod || 'No especificado'}
+• Total: $${parseFloat(finalOrder?.totalAmount || '0').toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Estado: Confirmado
+• Notas: ${collectedData.notes || 'Sin notas adicionales'}
+
+📦 *Productos:*
+${orderItemsText}
+
+📞 **Próximos pasos:**
+Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
+• Confirmar disponibilidad
+• Coordinar fecha y hora de entrega
+• Procesar el pago
+
+📱 **Contacto directo:** +1 809-357-6939
+
+¡Gracias por confiar en MAS QUE SALUD! 🙏`;
+
+    await sendWhatsAppMessageDirect(customer.phone, finalMessage, storeId);
+    
+    // 5. Log del éxito
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    await masterStorage.addWhatsAppLog({
+      type: 'success',
+      phoneNumber: customer.phone,
+      messageContent: `Pedido ORD-${orderId} finalizado exitosamente con datos completos.`,
+      status: 'completed',
+      storeId: storeId,
+      rawData: JSON.stringify({ orderId, collectedData, finalOrder })
     });
     
-    // Send final confirmation message
-    const confirmationMessage = `✅ *PEDIDO CONFIRMADO*
-
-📋 *Datos Recopilados:*
-👤 Cliente: ${collectedData.customerName || customer.name}
-📍 Dirección: ${collectedData.address || 'No proporcionada'}
-📞 Contacto: ${collectedData.contactNumber || customer.phone}
-💳 Pago: ${collectedData.paymentMethod || 'No especificado'}
-${collectedData.notes ? `📝 Notas: ${collectedData.notes}` : ''}
-
-🎯 Tu pedido ha sido confirmado. Nuestro equipo se pondrá en contacto contigo pronto para coordinar la entrega.
-
-¡Gracias por tu confianza! 🙏`;
-
-    await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
+    console.log(`✅ ORDER ${orderId} FINALIZED SUCCESSFULLY WITH COMPLETE DATA`);
     
-    console.log(`✅ ORDER FINALIZED - Order ID: ${orderId}, Customer: ${customer.id}`);
+  } catch (error) {
+    console.error(`❌ ERROR FINALIZING ORDER ${orderId}:`, error);
     
-  } catch (error: any) {
-    console.error('Error finalizing order:', error);
+    // Enviar mensaje de error al cliente
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      "❌ Ha ocurrido un error al procesar tu pedido. Nuestro equipo te contactará pronto para resolverlo. 📞 +1 809-357-6939",
+      storeId
+    );
   }
 }
-
 
 export async function processWhatsAppMessageSimple(value: any): Promise<void> {
   try {
