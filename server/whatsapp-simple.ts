@@ -27,6 +27,23 @@ interface RegistrationFlow {
   [key: string]: any;
 }
 
+
+// Interfaces para manejo de ubicaciones
+interface WhatsAppLocation {
+  latitude: number;
+  longitude: number;
+  name?: string;
+  address?: string;
+}
+
+interface LocationData {
+  type: 'coordinates' | 'text';
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  formatted_address?: string;
+}
+
 // Smart store lookup with response authorization verification
 
 
@@ -53,13 +70,13 @@ export async function processWhatsAppMessage(webhookData: any) {
     }
 
     const phoneNumberId = value.metadata.phone_number_id;
-    const message = value.messages[0];
+    const message = value.messages[0];  // ✅ OBTENER MENSAJE COMPLETO
     const customerPhone = message.from;
     const messageText = message.text?.body || '';
 
     console.log(`📱 MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
 
-    // 🔍 BUSCAR TIENDA DINÁMICAMENTE (SIN HARDCODING)
+    // 🔍 BUSCAR TIENDA DINÁMICAMENTE
     const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
     
     if (!storeMapping) {
@@ -74,7 +91,6 @@ export async function processWhatsAppMessage(webhookData: any) {
       return;
     }
 
- 
     console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
 
     // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
@@ -86,11 +102,10 @@ export async function processWhatsAppMessage(webhookData: any) {
     if (!customer) {
       console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
       
-      // ✅ CORRECCIÓN: Usar los campos correctos
       customer = await tenantStorage.createCustomer({
         name: `Cliente ${customerPhone.slice(-4)}`,
-        phone: customerPhone,           // ✅ CORRECTO: "phone" no "phoneNumber"
-        storeId: storeMapping.storeId,  // ✅ AGREGAR: storeId requerido
+        phone: customerPhone,
+        storeId: storeMapping.storeId,
         whatsappId: customerPhone,
         address: null,
         latitude: null,
@@ -113,6 +128,25 @@ export async function processWhatsAppMessage(webhookData: any) {
       status: 'received',
       rawData: JSON.stringify(webhookData)
     });
+
+    // ✅ VERIFICAR FLUJO DE REGISTRO ACTIVO PRIMERO
+    const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
+    
+    if (registrationFlow && !registrationFlow.isCompleted) {
+      console.log(`🔄 ACTIVE REGISTRATION FLOW DETECTED - Step: ${registrationFlow.currentStep}`);
+      
+      // ✅ CORRECCIÓN: Pasar datos completos del mensaje
+      await handleRegistrationFlow(
+        customer,
+        messageText,
+        message,                    // ✅ PASAR MENSAJE COMPLETO
+        registrationFlow,
+        storeMapping.storeId,
+        tenantStorage
+      );
+      
+      return; // No procesar auto-respuestas si está en flujo de registro
+    }
 
     // 🔄 PROCESAR AUTO-RESPUESTA
     await processAutoResponse(messageText, customerPhone, storeMapping.storeId, tenantStorage);
@@ -487,6 +521,7 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
 async function handleRegistrationFlow(
   customer: Customer,
   messageText: string,
+  messageData: any,
   registrationFlow: RegistrationFlow,
   storeId: number,
   tenantStorage: any
@@ -495,7 +530,7 @@ async function handleRegistrationFlow(
     const currentStep = registrationFlow.currentStep;
     
     // ✅ CORRECCIÓN: Manejo seguro de collectedData con tipos
-    let collectedData: CollectedData = {};
+       let collectedData: CollectedData = {};
     try {
       if (registrationFlow.collectedData && typeof registrationFlow.collectedData === 'string') {
         collectedData = JSON.parse(registrationFlow.collectedData) as CollectedData;
@@ -508,7 +543,6 @@ async function handleRegistrationFlow(
     }
     
     console.log(`🔄 PROCESSING REGISTRATION STEP: ${currentStep} for Customer: ${customer.id}`);
-    console.log(`📝 CURRENT COLLECTED DATA:`, collectedData);
 
     switch (currentStep) {
       case 'collect_name':
@@ -537,26 +571,17 @@ async function handleRegistrationFlow(
         await sendAutoResponseMessage(customer.phone, 'collect_address', storeId, tenantStorage);
         break;
 
-      case 'collect_address':
-        // Validar dirección (mínimo 10 caracteres)
-        if (messageText.trim().length < 10) {
-          await sendWhatsAppMessageDirect(
-            customer.phone,
-            "❌ Por favor proporciona una dirección más detallada (mínimo 10 caracteres):",
-            storeId
-          );
-          return;
-        }
-        
-        collectedData.address = messageText.trim();
-        
-        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
-          currentStep: 'collect_contact',
-          collectedData: JSON.stringify(collectedData),
-          updatedAt: new Date()
-        });
-        
-        await sendAutoResponseMessage(customer.phone, 'collect_contact', storeId, tenantStorage);
+        case 'collect_address':
+        // 🔥 USAR LA NUEVA FUNCIÓN para manejar ubicaciones
+        await handleCollectAddressStep(
+          customer,
+          messageData, // Datos completos del mensaje
+          messageText,
+          registrationFlow,
+          collectedData,
+          storeId,
+          tenantStorage
+        );
         break;
 
       case 'collect_contact':
@@ -1189,6 +1214,9 @@ async function processIncomingMessage(
           messageText = buttonId; // Use button ID as message text for processing
         }
         break;
+      case 'location':  // ✅ AGREGAR: Manejo de ubicaciones
+        messageText = '[Ubicación compartida]';
+        break;
       case 'image':
         messageText = message.image?.caption || '[Imagen]';
         break;
@@ -1206,15 +1234,14 @@ async function processIncomingMessage(
     console.log(`📥 PROCESSING MESSAGE - From: ${from}, Type: ${messageType}, Content: "${messageText}"`);
 
     // Get or create customer
-   let customer = await tenantStorage.getCustomerByPhone(from);
+    let customer = await tenantStorage.getCustomerByPhone(from);
     if (!customer) {
       console.log(`👤 CREATING NEW CUSTOMER - Phone: ${from}`);
       
-      // ✅ CORRECCIÓN: Usar los campos correctos según el esquema
       customer = await tenantStorage.createCustomer({
         name: `Cliente ${from.slice(-4)}`,
-        phone: from,                    // ✅ CORRECTO: "phone" no "phoneNumber"
-        storeId: storeMapping.storeId,  // ✅ AGREGAR: storeId requerido
+        phone: from,
+        storeId: storeMapping.storeId,
         whatsappId: from,
         address: null,
         latitude: null,
@@ -1246,10 +1273,11 @@ async function processIncomingMessage(
     if (registrationFlow && !registrationFlow.isCompleted) {
       console.log(`🔄 ACTIVE REGISTRATION FLOW DETECTED - Step: ${registrationFlow.currentStep}`);
       
-      // Process the registration flow
+      // ✅ CORRECCIÓN: Pasar el objeto message completo
       await handleRegistrationFlow(
         customer,
         messageText,
+        message,                    // ✅ PASAR MENSAJE COMPLETO AQUÍ
         registrationFlow,
         storeMapping.storeId,
         tenantStorage
@@ -2224,4 +2252,264 @@ async function executeNextAction(
   }
 }
 
+// Función para procesar mensajes de ubicación de WhatsApp
+async function processLocationMessage(messageData: any): Promise<LocationData | null> {
+  try {
+    // Verificar si el mensaje contiene ubicación
+    if (messageData.location) {
+      const location = messageData.location;
+      
+      return {
+        type: 'coordinates',
+        latitude: location.latitude,
+        longitude: location.longitude,
+        address: location.address || null,
+        formatted_address: await formatLocationAddress(location.latitude, location.longitude)
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Error processing location message:', error);
+    return null;
+  }
+}
 
+// Función para formatear dirección desde coordenadas (usando geocoding reverso)
+async function formatLocationAddress(latitude: number, longitude: number): Promise<string> {
+  try {
+    // Aquí puedes usar un servicio como Google Maps API o OpenStreetMap
+    // Ejemplo con OpenStreetMap (gratuito)
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.display_name || `${latitude}, ${longitude}`;
+    }
+    
+    return `${latitude}, ${longitude}`;
+  } catch (error) {
+    console.error('❌ Error formatting location address:', error);
+    return `${latitude}, ${longitude}`;
+  }
+}
+
+// Función mejorada para el manejo del paso collect_address
+async function handleCollectAddressStep(
+ customer: any,
+  messageData: any,
+  messageText: string,
+  registrationFlow: any,
+  collectedData: any,
+  storeId: number,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    // 1. Verificar si es una ubicación de WhatsApp
+    const locationData = await processLocationMessage(messageData);
+    
+    if (locationData && locationData.type === 'coordinates') {
+      // Es una ubicación con coordenadas
+      console.log(`📍 LOCATION RECEIVED: ${locationData.latitude}, ${locationData.longitude}`);
+      
+      collectedData.address = locationData.formatted_address || locationData.address;
+      collectedData.latitude = locationData.latitude;
+      collectedData.longitude = locationData.longitude;
+      collectedData.location_type = 'coordinates';
+      
+      // ✅ NUEVO: Actualizar datos del cliente inmediatamente
+      try {
+        await tenantStorage.updateCustomer(customer.id, {
+          address: collectedData.address,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude
+        });
+        console.log(`✅ Customer location updated in database`);
+      } catch (updateError) {
+        console.log(`⚠️ Could not update customer location:`, updateError);
+        // Continuar sin fallar
+      }
+      
+      await sendWhatsAppMessageDirect(
+        customer.phone,
+        `✅ ¡Ubicación recibida!\n📍 ${collectedData.address}\n\nContinuemos...`,
+        storeId
+      );
+      
+    } else if (messageText && messageText.trim().length >= 10) {
+      // Es texto de dirección
+      console.log(`📝 TEXT ADDRESS RECEIVED: ${messageText.trim()}`);
+      
+      collectedData.address = messageText.trim();
+      collectedData.location_type = 'text';
+      
+      // Opcional: Intentar geocodificar la dirección de texto
+      const geocoded = await geocodeAddress(messageText.trim());
+      if (geocoded) {
+        collectedData.latitude = geocoded.latitude;
+        collectedData.longitude = geocoded.longitude;
+        
+        // ✅ NUEVO: Actualizar cliente con coordenadas geocodificadas
+        try {
+          await tenantStorage.updateCustomer(customer.id, {
+            address: collectedData.address,
+            latitude: geocoded.latitude,
+            longitude: geocoded.longitude
+          });
+          console.log(`✅ Customer location geocoded and updated`);
+        } catch (updateError) {
+          console.log(`⚠️ Could not update geocoded location:`, updateError);
+        }
+      }
+      
+    } else {
+      // Dirección inválida - usar sendLocationRequest
+      await sendLocationRequest(customer.phone, storeId, tenantStorage);
+      return;
+    }
+    
+    // Continuar al siguiente paso
+    await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+      currentStep: 'collect_contact',
+      collectedData: JSON.stringify(collectedData),
+      updatedAt: new Date()
+    });
+    
+    await sendAutoResponseMessage(customer.phone, 'collect_contact', storeId, tenantStorage);
+    
+  } catch (error) {
+    console.error('❌ Error handling address collection:', error);
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      "❌ Error procesando la ubicación. Por favor intenta nuevamente.",
+      storeId
+    );
+  }
+}
+
+// Función para geocodificar direcciones de texto (opcional)
+async function geocodeAddress(address: string): Promise<{latitude: number, longitude: number} | null> {
+  try {
+    // Usando OpenStreetMap Nominatim (gratuito)
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.length > 0) {
+        return {
+          latitude: parseFloat(data[0].lat),
+          longitude: parseFloat(data[0].lon)
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Error geocoding address:', error);
+    return null;
+  }
+}
+
+// Función para calcular distancia entre dos puntos (útil para costos de envío)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radio de la Tierra en kilómetros
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c;
+  
+  return distance;
+}
+
+function toRadians(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}
+
+// Función para calcular costo de envío basado en ubicación
+async function calculateDeliveryCost(
+  customerLat: number, 
+  customerLon: number, 
+  storeId: number, 
+  tenantStorage: any
+): Promise<number> {
+  try {
+    // Obtener ubicación de la tienda (debes tener esto configurado)
+    const storeLocation = await tenantStorage.getStoreLocation(storeId);
+    
+    if (!storeLocation) {
+      return 100; // Costo base si no hay configuración
+    }
+    
+    const distance = calculateDistance(
+      customerLat, 
+      customerLon,
+      storeLocation.latitude,
+      storeLocation.longitude
+    );
+    
+    // Ejemplo de cálculo: $50 base + $20 por km
+    const baseCost = 50;
+    const costPerKm = 20;
+    const totalCost = baseCost + (distance * costPerKm);
+    
+    return Math.round(totalCost);
+    
+  } catch (error) {
+    console.error('❌ Error calculating delivery cost:', error);
+    return 100; // Costo por defecto
+  }
+}
+
+// Función mejorada para enviar solicitud de ubicación
+async function sendLocationRequest(
+  phone: string, 
+  storeId: number, 
+  tenantStorage: any
+): Promise<void> {
+  try {
+    const message = `📍 *Necesitamos tu ubicación*
+
+Para calcular el costo de entrega y coordinar la visita del técnico, por favor:
+
+🗺️ *Opción 1:* Toca el botón 📎 → Ubicación → Enviar ubicación actual
+
+📝 *Opción 2:* Escribe tu dirección completa
+
+Ejemplo: "Calle Principal #123, Sector Los Prados, Santo Domingo"`;
+
+    await sendWhatsAppMessageDirect(phone, message, storeId);
+    
+    // También puedes enviar un mensaje interactivo con botones
+    const menuOptions = [
+      { label: "📍 Compartir ubicación", value: "share_location", action: "request_location" },
+      { label: "📝 Escribir dirección", value: "type_address", action: "type_address" }
+    ];
+    
+    // Si tu sistema soporta botones interactivos:
+    // await sendInteractiveMessage(phone, message, menuOptions, config);
+    
+  } catch (error) {
+    console.error('❌ Error sending location request:', error);
+  }
+}
+
+export {
+  processLocationMessage,
+  handleCollectAddressStep,
+  formatLocationAddress,
+  geocodeAddress,
+  calculateDistance,
+  calculateDeliveryCost,
+  sendLocationRequest,
+  type WhatsAppLocation,
+  type LocationData
+};

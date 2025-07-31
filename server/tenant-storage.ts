@@ -170,6 +170,52 @@ async deleteOrderItem(id: number) {
   }
 },
 
+async updateCustomerLocation(customerId: number, locationData: {
+  address: string;
+  latitude?: number;
+  longitude?: number;
+  locationType: 'coordinates' | 'text';
+  formattedAddress?: string;
+}): Promise<void> {
+  try {
+    const updateData = {
+      address: locationData.address,
+      latitude: locationData.latitude || null,
+      longitude: locationData.longitude || null,
+      location_type: locationData.locationType,
+      formatted_address: locationData.formattedAddress || locationData.address,
+      updated_at: new Date()
+    };
+
+    await this.db
+      .update(this.schema.customers)
+      .set(updateData)
+      .where(eq(this.schema.customers.id, customerId));
+
+  } catch (error) {
+    console.error('❌ Error updating customer location:', error);
+    throw error;
+  }
+},
+
+async getStoreLocation(storeId: number): Promise<any | null> {
+  try {
+    // Si no tienes tabla store_locations, crear ubicación por defecto
+    return {
+      id: 1,
+      storeId: storeId,
+      name: 'Tienda Principal',
+      address: 'Santo Domingo, República Dominicana',
+      latitude: 18.4861,  // Coordenadas de Santo Domingo
+      longitude: -69.9312,
+      isMainLocation: true
+    };
+  } catch (error) {
+    console.error('❌ Error getting store location:', error);
+    return null;
+  }
+},
+
     // PRODUCTS
     async getAllProducts() {
       try {
