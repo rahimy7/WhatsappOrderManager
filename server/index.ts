@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config()
+
 import { StorageFactory } from './storage/storage-factory.js';
 import { MasterStorageService } from './storage/master-storage.js';
 import 'dotenv/config';
@@ -21,6 +24,7 @@ import setupCorsForRailway from './cors-config-railway.js';
 import multer from 'multer';
 import fs from 'fs';
 import { SupabaseStorageManager } from './supabase-storage.js';
+;
 
 // ================================
 // 🔥 INSTANCIAS DE STORAGE
@@ -2488,4 +2492,114 @@ apiRouter.get('/categories/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch category' });
   }
 });
+
+
+// Agrega este endpoint temporal a tu index.ts para probar directamente:
+
+apiRouter.get('/test-whatsapp-token/:storeId', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    console.log(`🧪 TESTING WHATSAPP TOKEN - Store ID: ${storeId}`);
+    
+    // 1. Obtener configuración desde la base de datos
+    const { storage } = await import('./storage_bk.js');
+    const config = await storage.getWhatsAppConfig(storeId);
+    
+    if (!config) {
+      return res.json({ 
+        success: false, 
+        error: 'No config found',
+        storeId 
+      });
+    }
+    
+    console.log('📋 Config found:', {
+      phoneNumberId: config.phoneNumberId,
+      tokenLength: config.accessToken.length,
+      tokenPreview: config.accessToken.substring(0, 20) + '...'
+    });
+    
+    // 2. Limpiar el token
+    const rawToken = config.accessToken;
+    const cleanToken = rawToken.trim().replace(/\s+/g, '');
+    
+    // 3. Test 1: Verificar el phone number
+    const testUrl = `https://graph.facebook.com/v22.0/${config.phoneNumberId}`;
+    console.log('🔍 Testing URL:', testUrl);
+    
+    const testResponse = await fetch(testUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${cleanToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const testResult = await testResponse.json();
+    console.log('📊 Test result:', testResult);
+    
+    // 4. Test 2: Intentar enviar un mensaje de prueba
+    const messageUrl = `https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`;
+    const messagePayload = {
+      messaging_product: "whatsapp",
+      to: "18494553242", // Número del log que enviaste
+      text: { body: "Mensaje de prueba desde Railway debug" }
+    };
+    
+    console.log('📤 Sending test message...');
+    const messageResponse = await fetch(messageUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${cleanToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(messagePayload)
+    });
+    
+    const messageResult = await messageResponse.json();
+    console.log('📱 Message result:', messageResult);
+    
+    // 5. Respuesta completa
+    res.json({
+      success: true,
+      storeId,
+      config: {
+        phoneNumberId: config.phoneNumberId,
+        businessAccountId: config.businessAccountId,
+        appId: config.appId,
+        isActive: config.isActive
+      },
+      tokenAnalysis: {
+        originalLength: rawToken.length,
+        cleanLength: cleanToken.length,
+        hasSpaces: rawToken.includes(' '),
+        hasNewlines: rawToken.includes('\n'),
+        hasCarriageReturn: rawToken.includes('\r'),
+        tokensEqual: rawToken === cleanToken,
+        preview: cleanToken.substring(0, 30) + '...'
+      },
+      tests: {
+        phoneNumberTest: {
+          status: testResponse.status,
+          success: testResponse.ok,
+          result: testResult
+        },
+        messageTest: {
+          status: messageResponse.status,
+          success: messageResponse.ok,
+          result: messageResult
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('🚨 Test error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 

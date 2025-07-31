@@ -327,7 +327,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
     // 6. Enviar mensaje a través de WhatsApp API
     console.log('📤 SENDING MESSAGE WITH GLOBAL CONFIG - Store', storeId, 'phoneNumberId:', globalWhatsAppConfig.phoneNumberId);
     
-    const response = await fetch(`https://graph.facebook.com/v21.0/${globalWhatsAppConfig.phoneNumberId}/messages`, {
+    const response = await fetch(`https://graph.facebook.com/v22.0/${globalWhatsAppConfig.phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${globalWhatsAppConfig.accessToken}`,
@@ -386,7 +386,7 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string, config:
   try {
     console.log(`📤 SENDING WHATSAPP MESSAGE - To: ${phoneNumber}, Using phoneNumberId: ${config.phoneNumberId}`);
 
-    const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`;
     
     const data = {
       messaging_product: "whatsapp",
@@ -2050,7 +2050,6 @@ function parseOrderFromMessage(orderText: string): Array<{name: string, quantity
 
 async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, storeId: number): Promise<void> {
   try {
-    // ✅ USAR MASTER STORAGE PARA OBTENER CONFIG
     const storageFactory = await import('./storage/storage-factory.js');
     const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
     const config = await masterStorage.getWhatsAppConfig(storeId);
@@ -2060,7 +2059,7 @@ async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, s
       return;
     }
 
-    const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`; // ← v22.0
     
     const data = {
       messaging_product: "whatsapp",
@@ -2186,7 +2185,7 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
   try {
     console.log(`📤 SENDING INTERACTIVE MESSAGE - To: ${phoneNumber}, Buttons: ${menuOptions.length}`);
 
-    const url = `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`;
+    const url = `https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`;
     
     // Preparar botones (máximo 3 botones permitidos por WhatsApp)
     const buttons = menuOptions.slice(0, 3).map((option, index) => ({
