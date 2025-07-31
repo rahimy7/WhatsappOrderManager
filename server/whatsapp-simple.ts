@@ -1,10 +1,16 @@
-// Multi-tenant WhatsApp processor with simplified routing
-import { storage } from './storage_bk.js';
+import { StorageFactory } from './storage/storage-factory.js';
+import { getMasterStorage, getTenantStorage } from './storage/index.js';
 import { createTenantStorage } from './tenant-storage.js';
 import { createTenantStorageForStore } from './tenant-storage.js';
 import { IntelligentWelcomeService, OrderTrackingService } from './order-tracking';
 
 
+const storageFactory = StorageFactory.getInstance();
+const masterStorage = storageFactory.getMasterStorage();
+
+async function getStorageHelper() {
+  return masterStorage;
+}
 
 interface CollectedData {
   customerName?: string;
@@ -142,7 +148,7 @@ export async function processWhatsAppMessage(webhookData: any) {
     
     if (!storeMapping) {
       console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
-      await storage.addWhatsAppLog({
+      await masterStorage.addWhatsAppLog({
         type: 'error',
         phoneNumber: customerPhone,
         messageContent: `Mensaje recibido para phoneNumberId no configurado: ${phoneNumberId}`,
@@ -181,7 +187,7 @@ export async function processWhatsAppMessage(webhookData: any) {
     }
 
     // 📝 REGISTRAR LOG EN BASE DE DATOS
-    await storage.addWhatsAppLog({
+    await masterStorage.addWhatsAppLog({
       type: 'incoming',
       phoneNumber: customerPhone,
       messageContent: messageText,
@@ -276,8 +282,9 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
     console.log(`📝 USING CONFIGURED MESSAGE: "${autoResponse.messageText.substring(0, 100)}..."`);
 
     // 4. Obtener configuración de WhatsApp desde la base de datos global
-    const { storage } = await import('./storage_bk.js');
-    const globalWhatsAppConfig = await storage.getWhatsAppConfig(storeId);
+    const { getMasterStorage } = await import('./storage/index.js');
+      const storage = getMasterStorage();
+    const globalWhatsAppConfig = await masterStorage.getWhatsAppConfig(storeId);
     
     if (!globalWhatsAppConfig) {
       console.log(`❌ NO WHATSAPP CONFIG FOUND - Store ${storeId}: Please configure WhatsApp API in global settings`);
@@ -341,7 +348,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
 
     if (response.ok) {
       console.log(`✅ AUTO-RESPONSE SENT SUCCESSFULLY - Store ${storeId}`);
-      await storage.addWhatsAppLog({
+      await masterStorage.addWhatsAppLog({
         type: 'outgoing',
         phoneNumber: phoneNumber,
         messageContent: `Auto-response sent: ${autoResponse.name}`,
@@ -351,7 +358,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
       });
     } else {
       console.error(`❌ WHATSAPP API ERROR - Store ${storeId}:`, result);
-      await storage.addWhatsAppLog({
+      await masterStorage.addWhatsAppLog({
         type: 'error',
         phoneNumber: phoneNumber,
         messageContent: `Failed to send auto-response: ${autoResponse.name}`,
@@ -367,8 +374,8 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
     console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
     
     // Log del error
-    const { storage } = await import('./storage_bk.js');
-    await storage.addWhatsAppLog({
+    const masterStorage = getMasterStorage();
+ await masterStorage.addWhatsAppLog({
       type: 'error',
       phoneNumber: phoneNumber,
       messageContent: `Error processing auto-response: ${messageText}`,
@@ -497,12 +504,13 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
 
   try {
     // ✅ CORRECCIÓN: Obtener configuración de WhatsApp desde MASTER STORAGE
-    const { storage } = await import('./storage_bk.js');
-    const globalConfig = await storage.getWhatsAppConfig();
+    const { getMasterStorage } = await import('./storage/index.js');
+    const storage = getMasterStorage();
+    const globalConfig = await storage.getWhatsAppConfig(storeMapping.storeId); // ✅ Pass storeId parameter
     
     if (!globalConfig || !globalConfig.accessToken || !globalConfig.phoneNumberId) {
-      console.log(`❌ WHATSAPP CONFIG INCOMPLETE - Store ${storeMapping.storeId}: Missing access token or phone number ID`);
-      return;
+        console.log(`❌ WHATSAPP CONFIG INCOMPLETE - Store ${storeMapping.storeId}: Missing access token or phone number ID`);
+        return;
     }
 
     console.log(`✅ WHATSAPP CONFIG FOUND - Store ${storeMapping.storeId}: phoneNumberId ${globalConfig.phoneNumberId}`);
@@ -559,8 +567,8 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
   } catch (error: any) {
     console.error(`❌ ERROR IN AUTO-RESPONSE - Store ${storeMapping.storeId}:`, error);
     
-    const { storage } = await import('./storage_bk.js');
-    await storage.addWhatsAppLog({
+    const masterStorage = getMasterStorage();
+    await masterStorage.addWhatsAppLog({
       type: 'error',
       phoneNumber: from,
       messageContent: `Error procesando auto-respuesta para tienda ${storeMapping.storeId}`,
@@ -1430,8 +1438,8 @@ async function processIncomingMessage(
     }
 
     // ✅ FIX: Log incoming message - messageId está en ámbito aquí
-    const { storage } = await import('./storage_bk.js');
-    await storage.addWhatsAppLog({
+    const masterStorage = getMasterStorage();
+   await masterStorage.addWhatsAppLog({
       type: 'incoming',
       phoneNumber: from,
       messageContent: messageText,
@@ -1495,8 +1503,8 @@ async function processMessageStatus(
     console.log(`📊 STATUS UPDATE - MessageID: ${messageId}, Status: ${statusType}, Recipient: ${recipientId}`);
 
     // Update message status in database
-    const { storage } = await import('./storage_bk.js');
-    await storage.addWhatsAppLog({
+    const masterStorage = getMasterStorage();
+   await masterStorage.addWhatsAppLog({
       type: 'status',
       phoneNumber: recipientId,
       messageContent: `Estado actualizado: ${statusType}`,
@@ -1551,8 +1559,8 @@ async function processWebhookError(
     console.log(`💥 WEBHOOK ERROR - Code: ${errorCode}, Title: ${errorTitle}, Message: ${errorMessage}`);
 
     // Log error to database
-    const { storage } = await import('./storage_bk.js');
-    await storage.addWhatsAppLog({
+    const masterStorage = getMasterStorage();
+   await masterStorage.addWhatsAppLog({
       type: 'error',
       phoneNumber: 'WEBHOOK_ERROR',
       messageContent: `Error: ${errorTitle} - ${errorMessage}`,
@@ -1606,8 +1614,12 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
   try {
     console.log(`🔍 SEARCHING FOR STORE - phoneNumberId: ${phoneNumberId}`);
     
+    // ✅ Import and initialize master storage
+    const { getMasterStorage } = await import('./storage/index.js');
+    const masterStorage = getMasterStorage();
+    
     // Buscar configuración directamente en la base de datos
-    const config = await storage.getWhatsAppConfigByPhoneNumberId(phoneNumberId);
+    const config = await masterStorage.getWhatsAppConfigByPhoneNumberId(phoneNumberId);
     
     if (!config) {
       console.log('❌ NO STORE CONFIGURED - phoneNumberId not found in database:', phoneNumberId);
@@ -1617,7 +1629,7 @@ async function findStoreByPhoneNumberId(phoneNumberId: string) {
     console.log(`🎯 PHONE NUMBER MATCH - Store ID: ${config.storeId}`);
     
     // Obtener información de la tienda
-    const allStores = await storage.getAllVirtualStores();
+    const allStores = await masterStorage.getAllVirtualStores();
     const storeInfo = allStores.find(store => store.id === config.storeId);
     
     if (!storeInfo) {

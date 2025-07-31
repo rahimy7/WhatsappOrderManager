@@ -1,9 +1,16 @@
-// Temporary fix for WhatsApp configuration - will be integrated into routes.ts
-import { storage } from "./storage";
+import { getMasterStorage } from "./storage/index";
 
-export async function testWhatsAppConnection() {
+
+export async function testWhatsAppConnection(storeId?: number) {
   try {
-    const config = await storage.getWhatsAppConfig();
+    const masterStorage = getMasterStorage();
+    
+    // Get WhatsApp config - you need to provide a storeId
+    if (!storeId) {
+      throw new Error('Store ID is required to test WhatsApp connection');
+    }
+    
+    const config = await masterStorage.getWhatsAppConfig(storeId);
     
     if (!config || !config.accessToken || !config.phoneNumberId) {
       return {
@@ -22,11 +29,12 @@ export async function testWhatsAppConnection() {
     });
 
     if (response.ok) {
-      await storage.addWhatsAppLog({
+      await masterStorage.addWhatsAppLog({
         type: 'success',
         phoneNumber: null,
         messageContent: 'Conexión a WhatsApp Business API exitosa',
         status: 'connected',
+        storeId: storeId,
         rawData: JSON.stringify({ status: 'connected', timestamp: new Date() })
       });
 
@@ -37,12 +45,13 @@ export async function testWhatsAppConnection() {
       };
     } else {
       const error = await response.text();
-      await storage.addWhatsAppLog({
+      await masterStorage.addWhatsAppLog({
         type: 'error',
         phoneNumber: null,
         messageContent: 'Error de conexión a WhatsApp Business API',
         status: 'error',
         errorMessage: error,
+        storeId: storeId,
         rawData: JSON.stringify({ error, status: response.status })
       });
 
@@ -53,19 +62,21 @@ export async function testWhatsAppConnection() {
       };
     }
   } catch (error) {
-    await storage.addWhatsAppLog({
+    const masterStorage = getMasterStorage();
+    await masterStorage.addWhatsAppLog({
       type: 'error',
       phoneNumber: null,
       messageContent: 'Error interno al probar conexión WhatsApp',
       status: 'error',
-      errorMessage: error.message,
-      rawData: JSON.stringify({ error: error.message })
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      storeId: storeId || 0,
+      rawData: JSON.stringify({ error: error instanceof Error ? error.message : error })
     });
 
     return {
       connected: false,
       configured: false,
-      message: `Error: ${error.message}`
+      message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 }

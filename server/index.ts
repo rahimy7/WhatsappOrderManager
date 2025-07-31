@@ -2496,14 +2496,16 @@ apiRouter.get('/categories/:id', authenticateToken, async (req, res) => {
 
 // Agrega este endpoint temporal a tu index.ts para probar directamente:
 
+
 apiRouter.get('/test-whatsapp-token/:storeId', async (req, res) => {
   try {
     const storeId = parseInt(req.params.storeId);
     console.log(`🧪 TESTING WHATSAPP TOKEN - Store ID: ${storeId}`);
     
-    // 1. Obtener configuración desde la base de datos
-    const { storage } = await import('./storage_bk.js');
-    const config = await storage.getWhatsAppConfig(storeId);
+    // ✅ CORRECTED: Use getMasterStorage from the new architecture
+    const { getMasterStorage } = await import('./storage/index.js');
+    const masterStorage = getMasterStorage();
+    const config = await masterStorage.getWhatsAppConfig(storeId);
     
     if (!config) {
       return res.json({ 
@@ -2538,68 +2540,56 @@ apiRouter.get('/test-whatsapp-token/:storeId', async (req, res) => {
     const testResult = await testResponse.json();
     console.log('📊 Test result:', testResult);
     
-    // 4. Test 2: Intentar enviar un mensaje de prueba
-    const messageUrl = `https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`;
-    const messagePayload = {
-      messaging_product: "whatsapp",
-      to: "18494553242", // Número del log que enviaste
-      text: { body: "Mensaje de prueba desde Railway debug" }
-    };
-    
-    console.log('📤 Sending test message...');
-    const messageResponse = await fetch(messageUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${cleanToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(messagePayload)
+    // 4. Log the test result
+    await masterStorage.addWhatsAppLog({
+      type: testResponse.ok ? 'success' : 'error',
+      phoneNumber: 'TEST_CONNECTION',
+      messageContent: `Test de token para store ${storeId}`,
+      status: testResponse.ok ? 'connected' : 'failed',
+      storeId: storeId,
+      rawData: JSON.stringify({
+        testUrl,
+        response: testResult,
+        status: testResponse.status
+      })
     });
     
-    const messageResult = await messageResponse.json();
-    console.log('📱 Message result:', messageResult);
-    
-    // 5. Respuesta completa
+    // 5. Return results
     res.json({
-      success: true,
+      success: testResponse.ok,
       storeId,
-      config: {
-        phoneNumberId: config.phoneNumberId,
-        businessAccountId: config.businessAccountId,
-        appId: config.appId,
-        isActive: config.isActive
-      },
-      tokenAnalysis: {
-        originalLength: rawToken.length,
-        cleanLength: cleanToken.length,
-        hasSpaces: rawToken.includes(' '),
-        hasNewlines: rawToken.includes('\n'),
-        hasCarriageReturn: rawToken.includes('\r'),
-        tokensEqual: rawToken === cleanToken,
-        preview: cleanToken.substring(0, 30) + '...'
-      },
-      tests: {
-        phoneNumberTest: {
-          status: testResponse.status,
-          success: testResponse.ok,
-          result: testResult
-        },
-        messageTest: {
-          status: messageResponse.status,
-          success: messageResponse.ok,
-          result: messageResult
-        }
-      }
+      phoneNumberId: config.phoneNumberId,
+      tokenValid: testResponse.ok,
+      response: testResult,
+      message: testResponse.ok ? 'Token válido' : 'Token inválido o expirado'
     });
     
   } catch (error) {
-    console.error('🚨 Test error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      stack: error.stack
+    console.error('Error testing WhatsApp token:', error);
+    
+    // Log error if possible
+    try {
+      const { getMasterStorage } = await import('./storage/index.js');
+      const masterStorage = getMasterStorage();
+      await masterStorage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: 'TEST_ERROR',
+        messageContent: `Error testing token for store ${req.params.storeId}`,
+        status: 'error',
+        storeId: parseInt(req.params.storeId),
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        rawData: JSON.stringify({ error: error instanceof Error ? error.message : error })
+      });
+    } catch (logError) {
+      console.error('Could not log error:', logError);
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Test failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      storeId: parseInt(req.params.storeId)
     });
   }
 });
-
 
