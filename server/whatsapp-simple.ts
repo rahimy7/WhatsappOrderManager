@@ -646,7 +646,6 @@ async function handleRegistrationFlow(
         await sendAutoResponseMessage(customer.phone, 'collect_notes', storeId, tenantStorage);
         break;
 
-     // ✅ ACTUALIZAR el case 'collect_notes' en handleRegistrationFlow
 // ✅ CORRECCIÓN 1: Case 'collect_notes' - Mejorar obtención de nombres de productos
 case 'collect_notes':
   console.log(`\n🔍 ===== DEBUG COLLECT_NOTES =====`);
@@ -802,8 +801,6 @@ ${orderDetails}
   }
   break;
 
-     // ✅ ACTUALIZAR el case 'confirm_order' en handleRegistrationFlow
-
 case 'confirm_order':
   if (messageText.toLowerCase().includes('confirmar') || 
       messageText.toLowerCase().includes('order_confirmed') ||
@@ -954,28 +951,41 @@ async function finalizeOrderWithData(
       const productTexts = [];
       
       for (const item of orderItems) {
-        // ✅ MEJORADO: Obtener nombre completo del producto
-        let itemName = item.productName || item.name;
+        // ✅ CORRECCIÓN MEJORADA: Resolución robusta de nombres de productos
+        let itemName = null;
         
-        // Si no tiene nombre o es genérico, buscar en la tabla de productos
-        if (!itemName || itemName === 'Producto') {
+        console.log(`🔍 RESOLVING PRODUCT NAME FOR FINAL MESSAGE - ITEM:`, JSON.stringify(item, null, 2));
+        
+        // Paso 1: Intentar obtener de los campos del item
+        itemName = item.productName || item.name || item.title;
+        console.log(`📝 Final Step 1 - From item fields: "${itemName}"`);
+        
+        // Paso 2: Si no existe o es genérico, buscar en la tabla de productos
+        if (!itemName || itemName === 'Producto' || itemName === 'Nombre del Producto' || itemName.trim() === '') {
           try {
             if (item.productId) {
+              console.log(`🔍 Final Step 2 - Searching product by ID: ${item.productId}`);
               const product = await tenantStorage.getProductById(item.productId);
+              console.log(`📦 Final Product found:`, JSON.stringify(product, null, 2));
+              
               if (product) {
-                itemName = product.name || product.title || 'Producto sin nombre';
-                console.log(`✅ Product name resolved: ${itemName} for productId: ${item.productId}`);
+                // Probar diferentes campos del producto
+                itemName = product.name || product.title || product.productName || product.displayName;
+                console.log(`✅ Final Step 2 - Resolved from product table: "${itemName}"`);
               }
             }
           } catch (productError) {
-            console.log(`⚠️ Error obteniendo producto ${item.productId}:`, productError);
+            console.log(`⚠️ Final Error obteniendo producto ${item.productId}:`, productError);
           }
         }
         
-        // Fallback si aún no tiene nombre
-        if (!itemName || itemName === 'Producto') {
-          itemName = `Producto #${item.id || 'N/A'}`;
+        // Paso 3: Fallback descriptivo si aún no se resuelve
+        if (!itemName || itemName === 'Producto' || itemName === 'Nombre del Producto' || itemName.trim() === '') {
+          itemName = `Producto ID-${item.productId || item.id || 'N/A'}`;
+          console.log(`🔄 Final Step 3 - Using fallback: "${itemName}"`);
         }
+        
+        console.log(`🎯 FINAL RESOLVED NAME FOR MESSAGE: "${itemName}"`);
         
         const quantity = item.quantity || 1;
         productTexts.push(`• ${itemName} (Cantidad: ${quantity})`);
