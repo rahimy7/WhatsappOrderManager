@@ -624,15 +624,141 @@ async createOrUpdateCustomer(customerData: any) {
 
       // Auto Responses
    
-    async getAllAutoResponses() {
+async getAllAutoResponses() {
   try {
-    return await tenantDb.select()
+    const responses = await tenantDb.select()
       .from(schema.autoResponses)
-      .where(eq(schema.autoResponses.storeId, storeId))
-      .orderBy(desc(schema.autoResponses.createdAt));
+      .orderBy(asc(schema.autoResponses.priority));
+    
+    console.log(`📋 Retrieved ${responses.length} auto-responses for store ${storeId}`);
+    
+    // Si no hay respuestas, crear las por defecto
+    if (responses.length === 0) {
+      console.log(`⚠️ NO AUTO-RESPONSES FOUND - Creating defaults`);
+      await this.createDefaultAutoResponses();
+      
+      // Volver a consultar
+      return await tenantDb.select()
+        .from(schema.autoResponses)
+        .orderBy(asc(schema.autoResponses.priority));
+    }
+    
+    responses.forEach(resp => {
+      console.log(`  - ${resp.name} (Trigger: ${resp.trigger}, Active: ${resp.isActive})`);
+    });
+    
+    return responses;
   } catch (error) {
-    console.error('Error getting all auto responses:', error);
+    console.error('Error getting auto responses:', error);
     return [];
+  }
+},
+
+async verifyRegistrationFlowHealth(phoneNumber: string): Promise<{
+  isHealthy: boolean;
+  issues: string[];
+  flow: any;
+}> {
+  try {
+    const flow = await this.getRegistrationFlowByPhoneNumber(phoneNumber);
+    const issues: string[] = [];
+    
+    if (!flow) {
+      return {
+        isHealthy: false,
+        issues: ['No registration flow found'],
+        flow: null
+      };
+    }
+    
+    // Verificar si expiró
+    if (flow.expiresAt && new Date() > flow.expiresAt) {
+      issues.push('Flow has expired');
+    }
+    
+    // Verificar si tiene orderId cuando debería
+    if (flow.flowType === 'order_data_collection' && !flow.orderId) {
+      issues.push('Missing orderId for order data collection flow');
+    }
+    
+    // Verificar paso válido
+    const validSteps = ['collect_name', 'collect_address', 'collect_contact', 'collect_contact_number', 'collect_payment', 'collect_notes', 'confirm_order', 'completed'];
+    if (!validSteps.includes(flow.currentStep)) {
+      issues.push(`Invalid step: ${flow.currentStep}`);
+    }
+    
+    // Verificar datos recopilados
+    try {
+      if (flow.collectedData && typeof flow.collectedData === 'string') {
+        JSON.parse(flow.collectedData);
+      }
+    } catch (parseError) {
+      issues.push('Invalid JSON in collectedData');
+    }
+    
+    return {
+      isHealthy: issues.length === 0,
+      issues,
+      flow
+    };
+  } catch (error) {
+    return {
+      isHealthy: false,
+      issues: [`Error verifying flow: ${error.message}`],
+      flow: null
+    };
+  }
+},
+
+// 🔧 NUEVA FUNCIÓN: Reparar flujo de registro
+async repairRegistrationFlow(phoneNumber: string): Promise<boolean> {
+  try {
+    console.log(`🔧 REPAIRING REGISTRATION FLOW for ${phoneNumber}`);
+    
+    const health = await this.verifyRegistrationFlowHealth(phoneNumber);
+    
+    if (health.isHealthy) {
+      console.log(`✅ Flow is healthy, no repair needed`);
+      return true;
+    }
+    
+    console.log(`⚠️ Issues found:`, health.issues);
+    
+    if (!health.flow) {
+      console.log(`❌ No flow to repair`);
+      return false;
+    }
+    
+    let repairData: any = {};
+    
+    // Reparar datos según los problemas encontrados
+    if (health.issues.includes('Flow has expired')) {
+      repairData.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    }
+    
+    if (health.issues.includes('Invalid JSON in collectedData')) {
+      repairData.collectedData = JSON.stringify({});
+    }
+    
+    if (health.issues.some(issue => issue.includes('Invalid step'))) {
+      repairData.currentStep = 'collect_name';
+    }
+    
+    // Aplicar reparaciones
+    if (Object.keys(repairData).length > 0) {
+      await this.updateRegistrationFlowByPhone(phoneNumber, {
+        ...repairData,
+        updatedAt: new Date()
+      });
+      
+      console.log(`✅ Flow repaired with:`, repairData);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('❌ Error repairing registration flow:', error);
+    return false;
   }
 },
 
@@ -745,17 +871,41 @@ async deleteAutoResponse(id: number) {
 },
 
 async getAutoResponsesByTrigger(trigger: string) {
-  console.log(`🔍 SEARCHING AUTO RESPONSES - Trigger: ${trigger}`);
-  
   try {
+    console.log(`🔍 SEARCHING AUTO-RESPONSES BY TRIGGER: "${trigger}"`);
+    
     const responses = await tenantDb.select()
       .from(schema.autoResponses)
-      .where(eq(schema.autoResponses.trigger, trigger));
+      .where(
+        and(
+          eq(schema.autoResponses.trigger, trigger),
+          eq(schema.autoResponses.isActive, true)
+        )
+      )
+      .orderBy(asc(schema.autoResponses.priority));
     
-    console.log(`📋 RESPONSES FOUND: ${responses.length}`);
-    responses.forEach((resp, index) => {
-      console.log(`  ${index + 1}. ${resp.name} (Active: ${resp.isActive})`);
-    });
+    console.log(`📋 FOUND ${responses.length} responses for trigger "${trigger}"`);
+    
+    // Si no encuentra respuestas, intentar buscar por nombre
+    if (responses.length === 0) {
+      console.log(`🔍 FALLBACK: Searching by name containing "${trigger}"`);
+      
+      const fallbackResponses = await tenantDb.select()
+        .from(schema.autoResponses)
+        .where(
+          and(
+            or(
+              like(schema.autoResponses.name, `%${trigger}%`),
+              like(schema.autoResponses.trigger, `%${trigger}%`)
+            ),
+            eq(schema.autoResponses.isActive, true)
+          )
+        )
+        .orderBy(asc(schema.autoResponses.priority));
+      
+      console.log(`📋 FALLBACK FOUND ${fallbackResponses.length} responses`);
+      return fallbackResponses;
+    }
     
     return responses;
   } catch (error) {
@@ -777,33 +927,141 @@ async clearAllAutoResponses() {
 },
 async createDefaultAutoResponses() {
   try {
+    console.log(`📝 CREATING DEFAULT AUTO-RESPONSES for store ${storeId}`);
+
     const defaultResponses = [
       {
-        name: "Bienvenida",
+        name: "Bienvenida General",
         trigger: "welcome",
         messageText: "¡Hola! 👋 Bienvenido a nuestro servicio.\n\n¿En qué puedo ayudarte hoy?",
         isActive: true,
         priority: 1,
         menuOptions: JSON.stringify([
-          { label: "Ver Productos", action: "show_products" },
-          { label: "Ver Servicios", action: "show_services" },
-          { label: "Contactar", action: "contact_agent" }
-        ])
+          { label: "Ver Productos 📦", value: "products", action: "show_products" },
+          { label: "Ver Servicios ⚙️", value: "services", action: "show_services" },
+          { label: "Hacer Pedido 🛒", value: "order", action: "start_order" },
+          { label: "Contactar Agente 👨‍💼", value: "contact", action: "contact_agent" }
+        ]),
+        menuType: "buttons",
+        nextAction: "wait_selection"
       },
       {
         name: "Saludo",
         trigger: "hola",
         messageText: "¡Hola! 😊 Me da mucho gusto saludarte.\n\n¿En qué puedo ayudarte hoy?",
         isActive: true,
-        priority: 2
+        priority: 2,
+        nextAction: "show_menu"
+      },
+      {
+        name: "Solicitar Nombre Cliente",
+        trigger: "collect_name",
+        messageText: "📝 *Paso 1/5: Datos Personales*\n\nPara completar tu pedido necesito tu nombre completo.\n\n👤 Por favor escribe tu nombre:",
+        isActive: true,
+        priority: 5,
+        menuType: "text_only",
+        nextAction: "collect_address",
+        allowFreeText: true
+      },
+      {
+        name: "Solicitar Dirección",
+        trigger: "collect_address", 
+        messageText: "📍 *Paso 2/5: Dirección de Entrega*\n\nPor favor proporciona tu dirección completa:\n\n🏠 Puedes escribir la dirección o compartir tu ubicación GPS",
+        isActive: true,
+        priority: 6,
+        menuType: "text_only",
+        nextAction: "collect_contact",
+        allowFreeText: true
+      },
+      {
+        name: "Solicitar Número Contacto",
+        trigger: "collect_contact",
+        messageText: "📞 *Paso 3/5: Número de Contacto*\n\n¿Deseas usar este número de WhatsApp como contacto principal o prefieres proporcionar otro número?",
+        isActive: true,
+        priority: 7,
+        menuOptions: JSON.stringify([
+          { label: "✅ Usar este número", value: "use_whatsapp", action: "collect_payment" },
+          { label: "📱 Otro número", value: "other_number", action: "collect_contact_number" }
+        ]),
+        menuType: "buttons",
+        nextAction: "collect_payment"
+      },
+      {
+        name: "Solicitar Método de Pago",
+        trigger: "collect_payment",
+        messageText: "💳 *Paso 4/5: Método de Pago*\n\n¿Cómo deseas pagar tu pedido?",
+        isActive: true,
+        priority: 8,
+        menuOptions: JSON.stringify([
+          { label: "💳 Tarjeta", value: "card", action: "collect_notes" },
+          { label: "🏦 Transferencia", value: "transfer", action: "collect_notes" },
+          { label: "💵 Efectivo", value: "cash", action: "collect_notes" }
+        ]),
+        menuType: "buttons", 
+        nextAction: "collect_notes"
+      },
+      {
+        name: "Solicitar Notas",
+        trigger: "collect_notes",
+        messageText: "📝 *Paso 5/5: Notas Adicionales*\n\n¿Tienes alguna instrucción especial o comentario para tu pedido?\n\n(Opcional - puedes escribir 'continuar' si no tienes notas)",
+        isActive: true,
+        priority: 9,
+        menuOptions: JSON.stringify([
+          { label: "➡️ Continuar sin notas", value: "no_notes", action: "confirm_order" }
+        ]),
+        menuType: "buttons",
+        nextAction: "confirm_order",
+        allowFreeText: true
+      },
+      {
+        name: "Confirmación de Pedido",
+        trigger: "confirm_order",
+        messageText: "📋 *CONFIRMACIÓN DE PEDIDO*\n\nPor favor revisa los datos y confirma si todo está correcto.",
+        isActive: true,
+        priority: 10,
+        menuOptions: JSON.stringify([
+          { label: "✅ Confirmar Pedido", value: "confirm", action: "complete_order" },
+          { label: "✏️ Modificar", value: "modify", action: "modify_order" }
+        ]),
+        menuType: "buttons",
+        nextAction: "complete_order"
       }
     ];
 
+    let createdCount = 0;
+
     for (const response of defaultResponses) {
-      await this.createAutoResponse(response);
+      try {
+        // Verificar si ya existe
+        const existing = await tenantDb.select()
+          .from(schema.autoResponses)
+          .where(
+            and(
+              eq(schema.autoResponses.trigger, response.trigger),
+              eq(schema.autoResponses.storeId, storeId)
+            )
+          )
+          .limit(1);
+
+        if (existing.length === 0) {
+          await tenantDb.insert(schema.autoResponses).values({
+            ...response,
+            storeId: storeId,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+          createdCount++;
+          console.log(`✅ Created auto-response: ${response.name}`);
+        } else {
+          console.log(`⚠️ Auto-response already exists: ${response.name}`);
+        }
+      } catch (insertError) {
+        console.error(`❌ Error creating auto-response ${response.name}:`, insertError);
+      }
     }
 
-    console.log(`✅ Created ${defaultResponses.length} default auto responses for store ${storeId}`);
+    console.log(`✅ Created ${createdCount} default auto-responses for store ${storeId}`);
+    return createdCount;
   } catch (error) {
     console.error('Error creating default auto responses:', error);
     throw error;
@@ -1078,52 +1336,81 @@ async createOrUpdateRegistrationFlow(flowData: any): Promise<any> {
   try {
     // Verificar si ya existe un flujo para este teléfono
     const existingFlow = await this.getRegistrationFlowByPhoneNumber(flowData.phoneNumber);
-    console.log(`🔍 Existing flow: ${existingFlow ? 'FOUND' : 'NOT FOUND'}`);
+    console.log(`🔍 Existing flow: ${existingFlow ? 'Found' : 'Not found'}`);
     
     if (existingFlow) {
-      console.log(`🔄 UPDATING existing flow`);
+      console.log(`📝 UPDATING EXISTING FLOW - ID: ${existingFlow.id}`);
+      
       // Actualizar flujo existente
       const [updatedFlow] = await tenantDb.update(schema.customerRegistrationFlows)
         .set({
+          customerId: flowData.customerId,
           currentStep: flowData.currentStep,
-          flowType: flowData.flowType,
+          flowType: flowData.flowType || 'order_data_collection',
           orderId: flowData.orderId,
-          collectedData: flowData.collectedData,
-          expiresAt: flowData.expiresAt,
-          isCompleted: flowData.isCompleted,
+          orderNumber: flowData.orderNumber,
+          collectedData: flowData.collectedData || JSON.stringify({}),
+          expiresAt: flowData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+          isCompleted: flowData.isCompleted || false,
           updatedAt: new Date()
         })
         .where(eq(schema.customerRegistrationFlows.phoneNumber, flowData.phoneNumber))
         .returning();
       
-      console.log(`✅ FLOW UPDATED: ${updatedFlow.id}`);
+      console.log(`✅ FLOW UPDATED - ID: ${updatedFlow.id}`);
       return updatedFlow;
     } else {
-      console.log(`➕ CREATING new flow`);
+      console.log(`➕ CREATING NEW FLOW`);
+      
       // Crear nuevo flujo
       const [newFlow] = await tenantDb.insert(schema.customerRegistrationFlows)
         .values({
           customerId: flowData.customerId,
           phoneNumber: flowData.phoneNumber,
           currentStep: flowData.currentStep,
-          flowType: flowData.flowType,
+          flowType: flowData.flowType || 'order_data_collection',
           orderId: flowData.orderId,
-          collectedData: flowData.collectedData,
-          expiresAt: flowData.expiresAt,
-          isCompleted: flowData.isCompleted,
+          orderNumber: flowData.orderNumber,
+          collectedData: flowData.collectedData || JSON.stringify({}),
+          expiresAt: flowData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+          isCompleted: flowData.isCompleted || false,
+          completedAt: null,
           createdAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          storeId: storeId
         })
         .returning();
       
-      console.log(`✅ FLOW CREATED: ${newFlow.id}`);
+      console.log(`✅ NEW FLOW CREATED - ID: ${newFlow.id}`);
       return newFlow;
     }
   } catch (error) {
-    console.error('❌ ERROR IN createOrUpdateRegistrationFlow:', error);
+    console.error('❌ ERROR in createOrUpdateRegistrationFlow:', error);
     throw error;
   }
-}
+},
+
+async cleanupExpiredRegistrationFlows() {
+  try {
+    const expiredFlows = await tenantDb.delete(schema.customerRegistrationFlows)
+      .where(
+        and(
+          lt(schema.customerRegistrationFlows.expiresAt, new Date()),
+          eq(schema.customerRegistrationFlows.isCompleted, false)
+        )
+      )
+      .returning();
+    
+    if (expiredFlows.length > 0) {
+      console.log(`🧹 CLEANED UP ${expiredFlows.length} expired registration flows`);
+    }
+    
+    return expiredFlows.length;
+  } catch (error) {
+    console.error('Error cleaning up expired registration flows:', error);
+    return 0;
+  }
+},
 
     };
 }
