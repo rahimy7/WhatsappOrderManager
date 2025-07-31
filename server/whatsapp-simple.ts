@@ -71,26 +71,40 @@ function getStatusText(status) {
   };
   return statusTexts[status] || 'Desconocido';
 }
-// Smart store lookup with response authorization verification
-// 2. NUEVA FUNCIONALIDAD: Verificar órdenes del cliente
-async function checkCustomerOrders(phoneNumber, tenantStorage) {
-  const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+// 🔧 FIX: Corregir función checkCustomerOrders
+async function checkCustomerOrders(phoneNumber: string, tenantStorage: any, storeId: number) {
   try {
     // Obtener cliente por número de teléfono
     const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
-    if (!customer) return { hasOrders: false };
+    if (!customer) {
+      console.log(`👤 CUSTOMER NOT FOUND - Phone: ${phoneNumber}`);
+      return { hasOrders: false };
+    }
 
-    // Buscar órdenes activas del cliente
-   const activeOrders = await tenantStorage.getCustomerActiveOrders(customer.id);
+    console.log(`👤 CUSTOMER FOUND - ID: ${customer.id}, Name: ${customer.name}`);
+
+    // ✅ CORREGIDO: Crear instancia de OrderTrackingService
+    const { ConversationContextService } = await import('./conversation-context.js');
+    const contextService = new ConversationContextService(tenantStorage, storeId);
+    const orderTrackingService = new OrderTrackingService(tenantStorage, contextService, storeId);
+    
+    // Llamar método de instancia
+    const activeOrders = await orderTrackingService.getCustomerActiveOrders(customer.id);
+
+    console.log(`📦 ACTIVE ORDERS FOUND: ${activeOrders?.length || 0}`);
 
     return {
       hasOrders: activeOrders && activeOrders.length > 0,
       orders: activeOrders || [],
-      customerName: customer.name
+      customerName: customer.name,
+      customerId: customer.id
     };
   } catch (error) {
-    console.error('Error verificando órdenes del cliente:', error);
-    return { hasOrders: false };
+    console.error('❌ Error verificando órdenes del cliente:', error);
+    return { 
+      hasOrders: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
   }
 }
 
@@ -1331,7 +1345,7 @@ async function processIncomingMessage(
 ): Promise<void> {
   try {
     const from = message.from;
-    const messageId = message.id;
+    const messageId = message.id; // ✅ Variable definida correctamente aquí
     const messageType = message.type;
     const timestamp = message.timestamp;
     
@@ -1346,10 +1360,10 @@ async function processIncomingMessage(
       case 'interactive':
         if (message.interactive?.type === 'button_reply') {
           buttonId = message.interactive.button_reply.id;
-          messageText = buttonId; // Use button ID as message text for processing
+          messageText = buttonId;
         }
         break;
-      case 'location':  // ✅ AGREGAR: Manejo de ubicaciones
+      case 'location':
         messageText = '[Ubicación compartida]';
         break;
       case 'image':
@@ -1365,15 +1379,14 @@ async function processIncomingMessage(
         messageText = `[${messageType}]`;
         break;
     }
- // Verificar si es un mensaje de bienvenida
+
+    // Verificar si es un mensaje de bienvenida
     if (isWelcomeMessage(messageText)) {
-            const response = await handleIntelligentWelcome(from, tenantStorage);
+      const response = await handleIntelligentWelcome(from, tenantStorage, storeMapping.storeId);
       
       if (response.messageType === 'welcome_with_orders') {
-        // Cliente con órdenes activas
         await sendInteractiveMessage(from, response.message, JSON.parse(response.menuOptions), storeMapping);
       } else {
-        // Cliente nuevo
         await sendInteractiveMessage(from, response.message, JSON.parse(response.menuOptions), storeMapping);
       }
       return;
@@ -1390,6 +1403,7 @@ async function processIncomingMessage(
       await handleOrderSelection(messageText, from, storeMapping, tenantStorage);
       return;
     }
+
     console.log(`📥 PROCESSING MESSAGE - From: ${from}, Type: ${messageType}, Content: "${messageText}"`);
 
     // Get or create customer
@@ -1414,35 +1428,34 @@ async function processIncomingMessage(
       });
     }
 
-    // Log incoming message
+    // ✅ FIX: Log incoming message - messageId está en ámbito aquí
     const { storage } = await import('./storage_bk.js');
     await storage.addWhatsAppLog({
       type: 'incoming',
       phoneNumber: from,
       messageContent: messageText,
-      messageId: messageId,
+      messageId: messageId, // ✅ messageId está definido y disponible aquí
       status: 'received',
       rawData: JSON.stringify(message),
       storeId: storeMapping.storeId
     });
 
-    // ✅ CHECK FOR ACTIVE REGISTRATION FLOW FIRST
+    // Check for active registration flow
     const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(from);
     
     if (registrationFlow && !registrationFlow.isCompleted) {
       console.log(`🔄 ACTIVE REGISTRATION FLOW DETECTED - Step: ${registrationFlow.currentStep}`);
       
-      // ✅ CORRECCIÓN: Pasar el objeto message completo
       await handleRegistrationFlow(
         customer,
         messageText,
-        message,                    // ✅ PASAR MENSAJE COMPLETO AQUÍ
+        message,
         registrationFlow,
         storeMapping.storeId,
         tenantStorage
       );
       
-      return; // Don't process auto-responses if in registration flow
+      return;
     }
 
     // Process configured auto-responses
@@ -1455,17 +1468,15 @@ async function processIncomingMessage(
   }
 }
 
-// Función auxiliar para detectar mensajes de bienvenida
 function isWelcomeMessage(messageText: string): boolean {
-  const welcomeKeywords = [
-    'hola', 'hello', 'hi', 'inicio', 'start', 'menu', 'bienvenida', 'welcome'
+  const welcomePatterns = [
+    'hola', 'hello', 'hi', 'buenos días', 'buenas tardes', 'buenas noches',
+    'saludos', 'hey', 'start', 'comenzar', 'empezar', 'menu', 'menú'
   ];
   
-  return welcomeKeywords.some(keyword => 
-    messageText.toLowerCase().includes(keyword)
-  ) || messageText.trim() === '';
+  const normalizedText = messageText.toLowerCase().trim();
+  return welcomePatterns.some(pattern => normalizedText.includes(pattern));
 }
-
 // ========================================
 // PROCESS MESSAGE STATUSES
 // ========================================
@@ -2746,9 +2757,8 @@ async function handleOrderSelection(selectedValue: string, phoneNumber: string, 
 }
 
 
-// 11. FUNCIÓN PRINCIPAL: Manejar Bienvenida Inteligente
-async function handleIntelligentWelcome(phoneNumber, tenantStorage) {
-  const orderCheck = await checkCustomerOrders(phoneNumber, tenantStorage);
+async function handleIntelligentWelcome(phoneNumber: string, tenantStorage: any, storeId: number) {
+  const orderCheck = await checkCustomerOrders(phoneNumber, tenantStorage, storeId);
   
   if (orderCheck.hasOrders) {
     // Cliente con órdenes activas
