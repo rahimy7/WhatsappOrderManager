@@ -44,8 +44,53 @@ interface LocationData {
   formatted_address?: string;
 }
 
-// Smart store lookup with response authorization verification
+function getStatusEmoji(status) {
+  const statusEmojis = {
+    'pending': '⏳',
+    'confirmed': '✅',
+    'processing': '🔄',
+    'shipped': '🚚',
+    'delivered': '📦',
+    'cancelled': '❌',
+    'completed': '✅'
+  };
+  return statusEmojis[status] || '📋';
+}
 
+function getStatusText(status) {
+  const statusTexts = {
+    'pending': 'Pendiente',
+    'confirmed': 'Confirmado',
+    'processing': 'En Proceso',
+    'shipped': 'Enviado',
+    'delivered': 'Entregado',
+    'cancelled': 'Cancelado',
+    'completed': 'Completado'
+  };
+  return statusTexts[status] || 'Desconocido';
+}
+// Smart store lookup with response authorization verification
+// 2. NUEVA FUNCIONALIDAD: Verificar órdenes del cliente
+async function checkCustomerOrders(phoneNumber, tenantStorage) {
+  const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+  try {
+    // Obtener cliente por número de teléfono
+    const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+    if (!customer) return { hasOrders: false };
+
+    // Buscar órdenes activas del cliente
+    const activeOrders = await tenantStorage.getActiveOrdersByCustomer(customer.id);
+    
+    return {
+      hasOrders: activeOrders && activeOrders.length > 0,
+      orders: activeOrders || [],
+      customerName: customer.name
+    };
+  } catch (error) {
+    console.error('Error verificando órdenes del cliente:', error);
+    return { hasOrders: false };
+  }
+}
 
 export async function processWhatsAppMessage(webhookData: any) {
   try {
@@ -1318,7 +1363,31 @@ async function processIncomingMessage(
         messageText = `[${messageType}]`;
         break;
     }
-
+ // Verificar si es un mensaje de bienvenida
+    if (isWelcomeMessage(messageText)) {
+            const response = await handleIntelligentWelcome(from, tenantStorage);
+      
+      if (response.messageType === 'welcome_with_orders') {
+        // Cliente con órdenes activas
+        await sendInteractiveMessage(from, response.message, JSON.parse(response.menuOptions), storeMapping);
+      } else {
+        // Cliente nuevo
+        await sendInteractiveMessage(from, response.message, JSON.parse(response.menuOptions), storeMapping);
+      }
+      return;
+    }
+    
+    // Manejar seguimiento de órdenes
+    if (messageText === 'track_orders' || messageText.includes('seguimiento')) {
+      await handleOrderTracking(from, storeMapping, tenantStorage);
+      return;
+    }
+    
+    // Manejar selección de orden específica
+    if (messageText.startsWith('order_')) {
+      await handleOrderSelection(messageText, from, storeMapping, tenantStorage);
+      return;
+    }
     console.log(`📥 PROCESSING MESSAGE - From: ${from}, Type: ${messageType}, Content: "${messageText}"`);
 
     // Get or create customer
@@ -1382,6 +1451,17 @@ async function processIncomingMessage(
   } catch (error: any) {
     console.error('❌ ERROR PROCESSING INCOMING MESSAGE:', error);
   }
+}
+
+// Función auxiliar para detectar mensajes de bienvenida
+function isWelcomeMessage(messageText: string): boolean {
+  const welcomeKeywords = [
+    'hola', 'hello', 'hi', 'inicio', 'start', 'menu', 'bienvenida', 'welcome'
+  ];
+  
+  return welcomeKeywords.some(keyword => 
+    messageText.toLowerCase().includes(keyword)
+  ) || messageText.trim() === '';
 }
 
 // ========================================
@@ -2603,6 +2683,188 @@ Ejemplo: "Calle Principal #123, Sector Los Prados, Santo Domingo"`;
     console.error('❌ Error sending location request:', error);
   }
 }
+
+// ===== AGREGAR AL FINAL DEL ARCHIVO =====
+
+async function handleOrderTracking(phoneNumber: string, storeMapping: any, tenantStorage: any) {
+  try {
+    const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+    if (!customer) {
+      await sendSimpleMessage(phoneNumber, "No encontramos tu información. ¿Podrías proporcionar tu nombre?", storeMapping);
+      return;
+    }
+
+    const activeOrders = await tenantStorage.getActiveOrdersByCustomer(customer.id);
+    
+    if (activeOrders.length === 0) {
+      await sendSimpleMessage(phoneNumber, "No tienes pedidos en proceso en este momento.", storeMapping);
+      return;
+    }
+
+    // Generar menú dinámico de órdenes
+    const menuOptions = await generateOrderTrackingMenu(customer.id);
+    const message = `📦 *Seguimiento de Pedidos*\n\n${customer.name}, aquí están tus pedidos en proceso:`;
+    
+    await sendInteractiveMessage(phoneNumber, message, JSON.parse(menuOptions), storeMapping);
+
+  } catch (error) {
+    console.error('Error en handleOrderTracking:', error);
+    await sendSimpleMessage(phoneNumber, "Error obteniendo tus pedidos. Intenta de nuevo.", storeMapping);
+  }
+}
+
+async function handleOrderSelection(selectedValue: string, phoneNumber: string, storeMapping: any, tenantStorage: any) {
+  try {
+    const orderId = selectedValue.replace('order_', '');
+    const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+    
+    if (!customer) return;
+
+    // ✅ CORRECCIÓN: Agregar tenantStorage como tercer parámetro
+    const orderDetails = await getOrderDetails(orderId, customer.id, tenantStorage);
+    
+    if (!orderDetails) {
+      await sendSimpleMessage(phoneNumber, "No se encontraron detalles del pedido.", storeMapping);
+      return;
+    }
+
+    const formattedMessage = formatOrderDetailsMessage(orderDetails);
+    const menuOptions = [
+      { label: "📝 Agregar Nota", value: "add_note", action: "add_order_note" },
+      { label: "✏️ Modificar Pedido", value: "modify_order", action: "modify_order" },
+      { label: "📦 Ver Otros Pedidos", value: "track_orders", action: "show_order_tracking" },
+      { label: "🏠 Menú Principal", value: "welcome", action: "welcome" }
+    ];
+    
+    await sendInteractiveMessage(phoneNumber, formattedMessage, menuOptions, storeMapping);
+
+  } catch (error) {
+    console.error('Error en handleOrderSelection:', error);
+  }
+}
+
+
+// 11. FUNCIÓN PRINCIPAL: Manejar Bienvenida Inteligente
+async function handleIntelligentWelcome(phoneNumber, tenantStorage) {
+  const orderCheck = await checkCustomerOrders(phoneNumber, tenantStorage);
+  
+  if (orderCheck.hasOrders) {
+    // Cliente con órdenes activas
+    const orderCount = orderCheck.orders.length;
+    const customerDisplayName = orderCheck.customerName || "Cliente";
+    
+    return {
+      messageType: "welcome_with_orders",
+      message: `¡Hola ${customerDisplayName}! 👋 Bienvenido de nuevo a *MAS QUE SALUD*
+
+📦 Veo que tienes ${orderCount} pedido(s) en proceso.
+
+¿Qué deseas hacer hoy?`,
+      menuOptions: JSON.stringify([
+        { label: "📦 Seguimiento de Pedidos", value: "track_orders", action: "show_order_tracking" },
+        { label: "🛍️ Hacer Pedido Nuevo", value: "new_order", action: "show_products" },
+        { label: "❓ Obtener Ayuda", value: "show_help", action: "show_help" }
+      ])
+    };
+  } else {
+    // Cliente nuevo o sin órdenes activas
+    return {
+      messageType: "welcome_new",
+      message: `¡Hola! 👋 Bienvenido a *MAS QUE SALUD*
+
+¿En qué podemos ayudarte hoy?`,
+      menuOptions: JSON.stringify([
+        { label: "🛍️ Ver Productos", value: "show_products", action: "show_products" },
+        { label: "⚙️ Ver Servicios", value: "show_services", action: "show_services" },
+        { label: "❓ Obtener Ayuda", value: "show_help", action: "show_help" }
+      ])
+    };
+  }
+}
+
+
+// Función auxiliar para generar menú de órdenes
+function generateOrderTrackingMenu(activeOrders) {
+  const menuOptions = [];
+
+  for (const order of activeOrders) {
+    const statusEmoji = getStatusEmoji(order.status);
+    const orderDate = new Date(order.createdAt).toLocaleDateString('es-DO');
+    
+    menuOptions.push({
+      label: `${statusEmoji} Pedido #${order.orderNumber} - ${orderDate}`,
+      value: `order_${order.id}`,
+      action: "show_order_details"
+    });
+  }
+
+  // Agregar opciones adicionales
+  menuOptions.push(
+    { label: "🛍️ Hacer Pedido Nuevo", value: "new_order", action: "show_products" },
+    { label: "🏠 Menú Principal", value: "welcome", action: "welcome" }
+  );
+
+  return JSON.stringify(menuOptions);
+}
+
+async function getOrderDetails(orderId, customerId, tenantStorage) {
+  try {
+    const order = await tenantStorage.getOrderById(orderId);
+    if (!order || order.customerId !== customerId) {
+      return null;
+    }
+    
+    const orderItems = await tenantStorage.getOrderItems(orderId);
+    return { ...order, items: orderItems };
+  } catch (error) {
+    console.error('Error obteniendo detalles de orden:', error);
+    return null;
+  }
+}
+
+function formatOrderDetailsMessage(orderDetails) {
+  const statusEmoji = getStatusEmoji(orderDetails.status);
+  const statusText = getStatusText(orderDetails.status);
+  const orderDate = new Date(orderDetails.createdAt).toLocaleDateString('es-DO');
+  
+  let itemsText = '';
+  if (orderDetails.items && orderDetails.items.length > 0) {
+    itemsText = orderDetails.items.map(item => 
+      `• ${item.name || 'Producto'} (Cantidad: ${item.quantity})`
+    ).join('\n');
+  } else {
+    itemsText = '• Ver detalles en el sistema';
+  }
+  
+  return `📋 *Detalles del Pedido #${orderDetails.orderNumber}*
+
+👤 *Cliente:* ${orderDetails.customerName || 'Cliente'}
+📅 *Fecha:* ${orderDate}
+📍 *Estado:* ${statusText} ${statusEmoji}
+💰 *Total:* $${parseFloat(orderDetails.totalAmount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+
+🛍️ *Productos:*
+${itemsText}
+
+📝 *Notas:* ${orderDetails.notes || 'Sin notas adicionales'}
+
+⏱️ *Tiempo estimado:* ${orderDetails.estimatedTime || 'Por confirmar'}
+
+¿Qué deseas hacer con este pedido?`;
+}
+
+async function sendSimpleMessage(phoneNumber: string, messageText: string, storeMapping: any) {
+  try {
+    const storageFactory = await import('./storage/storage-factory.js');
+    const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
+    const config = await masterStorage.getWhatsAppConfig(storeMapping.storeId);
+    await sendWhatsAppMessage(phoneNumber, messageText, config);
+  } catch (error) {
+    console.error('Error enviando mensaje simple:', error);
+  }
+}
+
+// Agregar todas las demás funciones del código que me pasaste...
 
 export {
   processLocationMessage,
