@@ -2,6 +2,8 @@
 import { storage } from './storage_bk.js';
 import { createTenantStorage } from './tenant-storage.js';
 import { createTenantStorageForStore } from './tenant-storage.js';
+import { IntelligentWelcomeService, OrderTrackingService } from './order-tracking';
+
 
 
 interface CollectedData {
@@ -79,7 +81,9 @@ async function checkCustomerOrders(phoneNumber, tenantStorage) {
     if (!customer) return { hasOrders: false };
 
     // Buscar órdenes activas del cliente
-    const activeOrders = await tenantStorage.getActiveOrdersByCustomer(customer.id);
+    const welcomeService = new IntelligentWelcomeService(storage,tenantStorage);
+const activeOrders = await welcomeService.getCustomerActiveOrders(customer.id);
+
     
     return {
       hasOrders: activeOrders && activeOrders.length > 0,
