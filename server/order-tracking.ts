@@ -42,49 +42,13 @@ export class OrderTrackingService {
     this.storeId = storeId;
   }
 
-  async getCustomerActiveOrders(customerId: number): Promise<OrderDetails[]> {
-    const query = `
-      SELECT 
-        o.id,
-        o.order_number,
-        o.customer_id,
-        c.name as customer_name,
-        o.status,
-        o.total_amount,
-        o.created_at,
-        o.estimated_delivery_time,
-        o.notes,
-        COUNT(oi.id) as item_count
-      FROM orders o
-      LEFT JOIN customers c ON o.customer_id = c.id
-      LEFT JOIN order_items oi ON o.id = oi.order_id
-      WHERE o.customer_id = $1 
-        AND o.status IN ('pending', 'confirmed', 'processing', 'shipped')
-      GROUP BY o.id, c.name
-      ORDER BY o.created_at DESC
-    `;
-
-    const result = await this.storage.query(query, [customerId]);
-    const orders: OrderDetails[] = [];
-
-    for (const row of result.rows) {
-      const items = await this.getOrderItems(row.id);
-      orders.push({
-        id: row.id,
-        orderNumber: row.order_number,
-        customerId: row.customer_id,
-        customerName: row.customer_name,
-        status: row.status,
-        totalAmount: row.total_amount,
-        createdAt: row.created_at,
-        estimatedDeliveryTime: row.estimated_delivery_time,
-        notes: row.notes,
-        items: items
-      });
-    }
-
-    return orders;
-  }
+async getCustomerActiveOrders(customerId: number) {
+  const orders = await this.storage.getAllOrders(); // usa método existente
+  return orders.filter(o =>
+    o.customerId === customerId &&
+    ['pending', 'confirmed', 'processing', 'shipped'].includes(o.status)
+  );
+}
 
   async getOrderDetails(orderId: number, customerId: number): Promise<OrderDetails | null> {
     const query = `

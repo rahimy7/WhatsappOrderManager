@@ -81,10 +81,8 @@ async function checkCustomerOrders(phoneNumber, tenantStorage) {
     if (!customer) return { hasOrders: false };
 
     // Buscar órdenes activas del cliente
-    const welcomeService = new IntelligentWelcomeService(storage,tenantStorage);
-const activeOrders = await welcomeService.getCustomerActiveOrders(customer.id);
+   const activeOrders = await tenantStorage.getCustomerActiveOrders(customer.id);
 
-    
     return {
       hasOrders: activeOrders && activeOrders.length > 0,
       orders: activeOrders || [],
