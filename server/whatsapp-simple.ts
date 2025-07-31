@@ -406,6 +406,7 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string, config:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ WHATSAPP API ERROR:', errorText);
+      console.error(response, config.accessToken)
       return false;
     }
 
