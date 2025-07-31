@@ -2593,3 +2593,106 @@ apiRouter.get('/test-whatsapp-token/:storeId', async (req, res) => {
   }
 });
 
+apiRouter.get('/debug-whatsapp-tokens/:storeId', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    
+    const { getMasterStorage } = await import('./storage/index.js');
+    const masterStorage = getMasterStorage();
+    const config = await masterStorage.getWhatsAppConfig(storeId);
+    
+    if (!config) {
+      return res.json({ 
+        success: false, 
+        error: 'No config found',
+        storeId 
+      });
+    }
+    
+    // Show token details for debugging
+    const token = config.accessToken;
+    
+    res.json({
+      storeId,
+      phoneNumberId: config.phoneNumberId,
+      tokenInfo: {
+        length: token.length,
+        firstChars: token.substring(0, 20),
+        lastChars: token.substring(token.length - 10),
+        hasSpaces: token.includes(' '),
+        hasNewlines: token.includes('\n'),
+        hasCarriageReturns: token.includes('\r'),
+        rawToken: token // ⚠️ Remove this in production!
+      },
+      postmanToken: {
+        expected: "EAAKHVoxT6IUBPHtaPqe...", // From your Postman screenshot
+        matches: token.startsWith("EAAKHVoxT6IUBPHtaPqe")
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Add this endpoint to test the exact token from database
+apiRouter.post('/debug-send-with-db-token/:storeId', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    const { phoneNumber, message } = req.body;
+    
+    const { getMasterStorage } = await import('./storage/index.js');
+    const masterStorage = getMasterStorage();
+    const config = await masterStorage.getWhatsAppConfig(storeId);
+    
+    if (!config) {
+      return res.status(404).json({ error: 'Config not found' });
+    }
+    
+    // Clean the token of any potential whitespace/newlines
+    const cleanToken = config.accessToken.trim().replace(/\s+/g, '');
+    
+    console.log('🔍 TOKEN DEBUG:', {
+      original: config.accessToken,
+      cleaned: cleanToken,
+      length: cleanToken.length
+    });
+    
+    const messagePayload = {
+      messaging_product: "whatsapp",
+      to: phoneNumber || "18494553242",
+      type: "text",
+      text: {
+        body: message || "Debug test message"
+      }
+    };
+    
+    const response = await fetch(`https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${cleanToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(messagePayload)
+    });
+    
+    const result = await response.json();
+    
+    res.json({
+      success: response.ok,
+      status: response.status,
+      result,
+      tokenUsed: {
+        length: cleanToken.length,
+        preview: cleanToken.substring(0, 30) + '...'
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});

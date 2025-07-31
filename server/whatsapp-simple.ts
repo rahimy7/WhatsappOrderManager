@@ -391,9 +391,22 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
 
 async function sendWhatsAppMessage(phoneNumber: string, message: string, config: any): Promise<boolean> {
   try {
-    console.log(`📤 SENDING WHATSAPP MESSAGE - To: ${phoneNumber}, Using phoneNumberId: ${config.phoneNumberId}`);
+    console.log(`📤 SENDING WHATSAPP MESSAGE - To: ${phoneNumber}`);
 
-    const url = `https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`;
+    // 🔧 SOLUCIÓN: Obtener token fresco directamente de la DB
+    const { getMasterStorage } = await import('./storage/index.js');
+    const storage = getMasterStorage();
+    
+    // Usar storeId del config, o el store conocido como fallback
+    const storeId = config.storeId || 6;
+    const freshConfig = await storage.getWhatsAppConfig(storeId);
+    
+    if (!freshConfig) {
+      console.error('❌ NO FRESH CONFIG FOUND');
+      return false;
+    }
+
+    const url = `https://graph.facebook.com/v22.0/${freshConfig.phoneNumberId}/messages`;
     
     const data = {
       messaging_product: "whatsapp",
@@ -401,10 +414,12 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string, config:
       text: { body: message }
     };
 
+    console.log('🔧 USING FRESH TOKEN FROM DB');
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${config.accessToken}`,
+        'Authorization': `Bearer ${freshConfig.accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
@@ -413,7 +428,6 @@ async function sendWhatsAppMessage(phoneNumber: string, message: string, config:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ WHATSAPP API ERROR:', errorText);
-      console.error(response, config.accessToken)
       return false;
     }
 
@@ -2198,7 +2212,19 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
   try {
     console.log(`📤 SENDING INTERACTIVE MESSAGE - To: ${phoneNumber}, Buttons: ${menuOptions.length}`);
 
-    const url = `https://graph.facebook.com/v22.0/${config.phoneNumberId}/messages`;
+    // 🔧 SOLUCIÓN: Obtener token fresco directamente de la DB
+    const { getMasterStorage } = await import('./storage/index.js');
+    const storage = getMasterStorage();
+    const storeId = config.storeId || 6;
+    const freshConfig = await storage.getWhatsAppConfig(storeId);
+    
+    if (!freshConfig) {
+      console.error('❌ NO FRESH CONFIG FOUND');
+      return;
+    }
+
+    const url = `https://graph.facebook.com/v22.0/${freshConfig.phoneNumberId}/messages`;
+    
     
     // Preparar botones (máximo 3 botones permitidos por WhatsApp)
     const buttons = menuOptions.slice(0, 3).map((option, index) => ({
@@ -2224,10 +2250,10 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
       }
     };
 
-    const response = await fetch(url, {
+   const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${config.accessToken}`,
+        'Authorization': `Bearer ${freshConfig.accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
