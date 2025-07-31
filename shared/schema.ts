@@ -293,6 +293,7 @@ export const orderItems = pgTable("order_items", {
   deliveryCost: decimal("delivery_cost", { precision: 10, scale: 2 }).default("0"),
   deliveryDistance: decimal("delivery_distance", { precision: 8, scale: 2 }), // km
   notes: text("notes"),
+  storeId: integer("store_id"),
 });
 
 // Order workflow tracking

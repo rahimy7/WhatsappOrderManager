@@ -78,15 +78,56 @@ export function createTenantStorage(tenantDb: any, storeId: number) {
         throw error;
       }
     },
-
-    async getOrderItemsByOrderId(orderId: number) {
+ async getOrderItemsByOrderId(orderId: number) {
   try {
-    return await tenantDb.select()
+    console.log(`🔍 GETTING ORDER ITEMS WITH PRODUCT NAMES - Order ID: ${orderId}`);
+    
+    // ✅ HACER JOIN entre order_items y products para obtener nombres
+    const orderItemsWithProducts = await tenantDb
+      .select({
+        // Campos de order_items
+        id: schema.orderItems.id,
+        orderId: schema.orderItems.orderId,
+        productId: schema.orderItems.productId,
+        quantity: schema.orderItems.quantity,
+        unitPrice: schema.orderItems.unitPrice,
+        totalPrice: schema.orderItems.totalPrice,
+        installationCost: schema.orderItems.installationCost,
+        partsCost: schema.orderItems.partsCost,
+        laborHours: schema.orderItems.laborHours,
+        laborRate: schema.orderItems.laborRate,
+        deliveryCost: schema.orderItems.deliveryCost,
+        deliveryDistance: schema.orderItems.deliveryDistance,
+        notes: schema.orderItems.notes,
+        storeId: schema.orderItems.storeId,
+        
+        // ✅ CAMPOS DEL PRODUCTO (lo que necesitamos)
+        productName: schema.products.name,
+        productDescription: schema.products.description,
+        productPrice: schema.products.price,
+        productCategory: schema.products.category,
+        productBrand: schema.products.brand,
+        productModel: schema.products.model
+      })
       .from(schema.orderItems)
+      .leftJoin(
+        schema.products,
+        eq(schema.orderItems.productId, schema.products.id)
+      )
       .where(eq(schema.orderItems.orderId, orderId))
       .orderBy(desc(schema.orderItems.id));
+
+    console.log(`📦 ORDER ITEMS WITH PRODUCTS FOUND: ${orderItemsWithProducts.length}`);
+    
+    // ✅ LOGGING DETALLADO para debugging
+    orderItemsWithProducts.forEach((item, index) => {
+      console.log(`  ${index + 1}. Product ID: ${item.productId} | Name: "${item.productName}" | Quantity: ${item.quantity}`);
+    });
+
+    return orderItemsWithProducts;
+    
   } catch (error) {
-    console.error('Error getting order items by order ID:', error);
+    console.error('❌ Error getting order items with products:', error);
     return [];
   }
 },
