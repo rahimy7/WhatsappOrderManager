@@ -647,13 +647,12 @@ async function handleRegistrationFlow(
         break;
 
      // ✅ ACTUALIZAR el case 'collect_notes' en handleRegistrationFlow
-
+// ✅ CORRECCIÓN 1: Case 'collect_notes' - Mejorar obtención de nombres de productos
 case 'collect_notes':
-  // ✅ LOGS DE DEBUG - Agregar al inicio
   console.log(`\n🔍 ===== DEBUG COLLECT_NOTES =====`);
   console.log(`📝 Registration Flow:`, JSON.stringify(registrationFlow, null, 2));
   console.log(`📦 Order ID from flow:`, registrationFlow.orderId);
-  console.log(`📋 Order Number from flow:`, registrationFlow.orderNumber); // ✅ AGREGAR
+  console.log(`📋 Order Number from flow:`, registrationFlow.orderNumber);
   console.log(`👤 Customer:`, JSON.stringify(customer, null, 2));
   console.log(`📋 Collected Data:`, JSON.stringify(collectedData, null, 2));
 
@@ -681,7 +680,6 @@ case 'collect_notes':
   let totalAmount = '0.00';
   let displayOrderNumber = '';
   
-  // ✅ USAR orderNumber si está disponible, sino usar orderId
   const orderReference = registrationFlow.orderNumber || registrationFlow.orderId;
   
   if (orderReference) {
@@ -689,10 +687,8 @@ case 'collect_notes':
       let order = null;
       
       if (registrationFlow.orderId) {
-        // Buscar por ID
         order = await tenantStorage.getOrderById(registrationFlow.orderId);
       } else if (registrationFlow.orderNumber) {
-        // Buscar por número de orden
         const allOrders = await tenantStorage.getAllOrders();
         order = allOrders.find(o => o.orderNumber === registrationFlow.orderNumber);
       }
@@ -703,15 +699,37 @@ case 'collect_notes':
         totalAmount = order.totalAmount || '0.00';
         displayOrderNumber = order.orderNumber || `ORD-${order.id}`;
         
-        // Obtener items del pedido
+        // ✅ CORRECCIÓN: Obtener items del pedido con nombres completos
         const orderItems = await tenantStorage.getOrderItemsByOrderId(order.id);
         console.log(`📦 ORDER ITEMS:`, orderItems);
         
         if (orderItems && orderItems.length > 0) {
           orderDetails = `📦 *Pedido:* ${displayOrderNumber}\n🛍️ *Productos:* ${orderItems.length} artículo(s)\n`;
           
-          orderItems.forEach(item => {
-            const itemName = item.productName || item.name || 'Producto';
+          // ✅ CORRECCIÓN: Mejorar la obtención del nombre del producto
+          for (const item of orderItems) {
+            // Priorizar productName, luego name, luego buscar en products table
+            let itemName = item.productName || item.name;
+            
+            // ✅ NUEVO: Si no tiene nombre, buscar en la tabla de productos
+            if (!itemName || itemName === 'Producto') {
+              try {
+                if (item.productId) {
+                  const product = await tenantStorage.getProductById(item.productId);
+                  if (product) {
+                    itemName = product.name || product.title || 'Producto sin nombre';
+                  }
+                }
+              } catch (productError) {
+                console.log(`⚠️ Error obteniendo producto ${item.productId}:`, productError);
+              }
+            }
+            
+            // ✅ FALLBACK: Si aún no tiene nombre, usar un genérico descriptivo
+            if (!itemName || itemName === 'Producto') {
+              itemName = `Producto #${item.id || 'N/A'}`;
+            }
+            
             const quantity = item.quantity || 1;
             const unitPrice = item.unitPrice || item.price || '0.00';
             
@@ -719,7 +737,7 @@ case 'collect_notes':
             if (unitPrice !== '0.00') {
               orderDetails += `  💰 Precio: $${parseFloat(unitPrice).toLocaleString('es-DO', { minimumFractionDigits: 2 })}\n`;
             }
-          });
+          }
         } else {
           orderDetails = `📦 *Pedido:* ${displayOrderNumber}\n🛍️ *Productos:* Ver detalles en el sistema\n`;
         }
@@ -740,7 +758,7 @@ case 'collect_notes':
   console.log(`💰 FINAL TOTAL AMOUNT: ${totalAmount}`);
   console.log(`📋 DISPLAY ORDER NUMBER: ${displayOrderNumber}`);
 
-  // ✅ MEJORA: Crear mensaje de confirmación completo
+  // Crear mensaje de confirmación completo
   const confirmationMessage = `✅ *Confirmación de Pedido*
 
 ¡Perfecto! Aquí está el resumen completo de tu pedido:
@@ -759,7 +777,6 @@ ${orderDetails}
   // Enviar mensaje de confirmación personalizado con botones
   const confirmResponse = await tenantStorage.getAutoResponsesByTrigger('confirm_order');
   if (confirmResponse && confirmResponse.length > 0) {
-    // Usar los botones configurados pero con el mensaje mejorado
     let menuOptions = null;
     try {
       if (confirmResponse[0].menuOptions && typeof confirmResponse[0].menuOptions === 'string') {
@@ -771,23 +788,20 @@ ${orderDetails}
       console.log(`⚠️ INVALID MENU OPTIONS JSON:`, parseError);
     }
 
-    // Obtener configuración global
     const storageFactory = await import('./storage/storage-factory.js');
     const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();  
     const config = await masterStorage.getWhatsAppConfig(storeId);
 
     if (menuOptions && Array.isArray(menuOptions) && menuOptions.length > 0) {
-      // Enviar mensaje interactivo con botones
       await sendInteractiveMessage(customer.phone, confirmationMessage, menuOptions, config);
     } else {
-      // Enviar mensaje de texto normal
       await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
     }
   } else {
-    // Fallback si no existe configuración
     await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
   }
   break;
+
      // ✅ ACTUALIZAR el case 'confirm_order' en handleRegistrationFlow
 
 case 'confirm_order':
@@ -896,12 +910,6 @@ case 'confirm_order':
 }
 
 
-
-// ========================================
-// FUNCIÓN AUXILIAR CORREGIDA CON TIPOS
-// ========================================
-// ✅ FUNCIÓN ACTUALIZADA: finalizeOrderWithData - Usando orderNumber
-
 async function finalizeOrderWithData(
   orderId: number,
   collectedData: any,
@@ -940,15 +948,46 @@ async function finalizeOrderWithData(
     const finalOrder = await tenantStorage.getOrderById(orderId);
     const orderItems = await tenantStorage.getOrderItemsByOrderId(orderId);
     
-    // 4. Enviar mensaje de confirmación final
+    // ✅ CORRECCIÓN: Generar texto de productos con nombres completos
     let orderItemsText = '';
     if (orderItems && orderItems.length > 0) {
-      orderItemsText = orderItems.map(item => 
-        `• ${item.productName || item.name || 'Producto'} (Cantidad: ${item.quantity})`
-      ).join('\n');
+      const productTexts = [];
+      
+      for (const item of orderItems) {
+        // ✅ MEJORADO: Obtener nombre completo del producto
+        let itemName = item.productName || item.name;
+        
+        // Si no tiene nombre o es genérico, buscar en la tabla de productos
+        if (!itemName || itemName === 'Producto') {
+          try {
+            if (item.productId) {
+              const product = await tenantStorage.getProductById(item.productId);
+              if (product) {
+                itemName = product.name || product.title || 'Producto sin nombre';
+                console.log(`✅ Product name resolved: ${itemName} for productId: ${item.productId}`);
+              }
+            }
+          } catch (productError) {
+            console.log(`⚠️ Error obteniendo producto ${item.productId}:`, productError);
+          }
+        }
+        
+        // Fallback si aún no tiene nombre
+        if (!itemName || itemName === 'Producto') {
+          itemName = `Producto #${item.id || 'N/A'}`;
+        }
+        
+        const quantity = item.quantity || 1;
+        productTexts.push(`• ${itemName} (Cantidad: ${quantity})`);
+      }
+      
+      orderItemsText = productTexts.join('\n');
+    } else {
+      orderItemsText = '• No se pudieron cargar los detalles de productos';
     }
     
-    // ✅ MEJORADO: Usar orderNumber en lugar de orderId en el mensaje
+    console.log(`📦 FINAL ORDER ITEMS TEXT:`, orderItemsText);
+    
     const displayOrderNumber = finalOrder?.orderNumber || orderNumber;
     
     const finalMessage = `🎉 *¡PEDIDO CONFIRMADO!*
@@ -979,7 +1018,7 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
 
     await sendWhatsAppMessageDirect(customer.phone, finalMessage, storeId);
     
-    // 5. Log del éxito - ✅ MEJORADO: Usar orderNumber en logs también
+    // 5. Log del éxito
     const storageFactory = await import('./storage/storage-factory.js');
     const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
     await masterStorage.addWhatsAppLog({
@@ -992,7 +1031,8 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
         orderId, 
         orderNumber: displayOrderNumber,
         collectedData, 
-        finalOrder 
+        finalOrder,
+        resolvedProductNames: orderItemsText
       })
     });
     
@@ -1001,7 +1041,6 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
   } catch (error) {
     console.error(`❌ ERROR FINALIZING ORDER ${orderId}:`, error);
     
-    // ✅ MEJORADO: Obtener orderNumber para mensaje de error también
     let orderReference = `ID ${orderId}`;
     try {
       const errorOrder = await tenantStorage.getOrderById(orderId);
@@ -1012,14 +1051,12 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
       console.log(`⚠️ Could not get order number for error message`);
     }
     
-    // Enviar mensaje de error al cliente
     await sendWhatsAppMessageDirect(
       customer.phone,
       `❌ Ha ocurrido un error al procesar tu pedido ${orderReference}. Nuestro equipo te contactará pronto para resolverlo. 📞 +1 809-357-6939`,
       storeId
     );
     
-    // Log del error con más detalles
     const storageFactory = await import('./storage/storage-factory.js');
     const masterStorage = storageFactory.StorageFactory.getInstance().getMasterStorage();
     await masterStorage.addWhatsAppLog({
