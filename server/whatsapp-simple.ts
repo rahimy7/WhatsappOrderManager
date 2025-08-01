@@ -1231,6 +1231,7 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
   }
 }
 
+// 🔧 CORRECCIÓN DEL PROCESAMIENTO DE WEBHOOK
 export async function processWhatsAppMessage(webhookData: any) {
   try {
     console.log('📨 WEBHOOK DATA RECEIVED:', JSON.stringify(webhookData, null, 2));
@@ -1248,139 +1249,185 @@ export async function processWhatsAppMessage(webhookData: any) {
     }
 
     const value = changes.value;
-    if (!value.messages || !value.metadata) {
-      console.log('❌ NO MESSAGES OR METADATA FOUND');
+    
+    // ✅ NUEVA VALIDACIÓN: Verificar si hay metadata
+    if (!value.metadata) {
+      console.log('❌ NO METADATA FOUND');
       return;
     }
 
     const phoneNumberId = value.metadata.phone_number_id;
-    const message = value.messages[0];
-    const customerPhone = message.from;
-    const messageText = message.text?.body || '';
-    const messageId = message.id;
 
-    console.log(`📱 MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
-
-    // 🔍 BUSCAR TIENDA DINÁMICAMENTE
-    const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
+    // ✅ NUEVA LÓGICA: Manejar diferentes tipos de webhook
     
-    if (!storeMapping) {
-      console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
-      return;
-    }
-
-    console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
-
-    // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
-    const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
-
-    // 👤 PROCESAR CLIENTE
-    let customer = await tenantStorage.getCustomerByPhone(customerPhone);
-    
-    if (!customer) {
-      console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
+    // 1. MENSAJES ENTRANTES (de usuarios)
+    if (value.messages && value.messages.length > 0) {
+      console.log('📱 PROCESSING INCOMING MESSAGE');
       
-      customer = await tenantStorage.createCustomer({
-        name: `Cliente ${customerPhone.slice(-4)}`,
-        phone: customerPhone,
-        storeId: storeMapping.storeId,
-        whatsappId: customerPhone,
-        address: null,
-        latitude: null,
-        longitude: null,
-        lastContact: new Date(),
-        registrationDate: new Date(),
-        totalOrders: 0,
-        totalSpent: "0.00",
-        isVip: false,
-        notes: 'Cliente creado automáticamente desde WhatsApp'
+      const message = value.messages[0];
+      const customerPhone = message.from;
+      const messageText = message.text?.body || '';
+      const messageId = message.id;
+
+      console.log(`📱 MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
+
+      // 🔍 BUSCAR TIENDA DINÁMICAMENTE
+      const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
+      
+      if (!storeMapping) {
+        console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
+        return;
+      }
+
+      console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
+
+      // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
+      const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+
+      // 👤 PROCESAR CLIENTE
+      let customer = await tenantStorage.getCustomerByPhone(customerPhone);
+      
+      if (!customer) {
+        console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
+        
+        customer = await tenantStorage.createCustomer({
+          name: `Cliente ${customerPhone.slice(-4)}`,
+          phone: customerPhone,
+          storeId: storeMapping.storeId,
+          whatsappId: customerPhone,
+          address: null,
+          latitude: null,
+          longitude: null,
+          lastContact: new Date(),
+          registrationDate: new Date(),
+          totalOrders: 0,
+          totalSpent: "0.00",
+          isVip: false,
+          notes: 'Cliente creado automáticamente desde WhatsApp'
+        });
+      }
+
+      // 📝 REGISTRAR LOG EN BASE DE DATOS
+      const masterStorage = getMasterStorage();
+      await masterStorage.addWhatsAppLog({
+        type: 'incoming',
+        phoneNumber: customerPhone,
+        messageContent: messageText,
+        messageId: messageId,
+        status: 'received',
+        rawData: JSON.stringify(webhookData),
+        storeId: storeMapping.storeId
       });
-    }
 
-    // 📝 REGISTRAR LOG EN BASE DE DATOS
-    const masterStorage = getMasterStorage();
-    await masterStorage.addWhatsAppLog({
-      type: 'incoming',
-      phoneNumber: customerPhone,
-      messageContent: messageText,
-      messageId: messageId,
-      status: 'received',
-      rawData: JSON.stringify(webhookData)
-    });
+      // ✅ VERIFICACIÓN CRÍTICA: Flujo activo PRIMERO
+      console.log(`🔍 CHECKING REGISTRATION FLOW for phone: ${customerPhone}`);
+      
+      const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
+      
+      console.log(`🔍 Registration Flow Result:`, {
+        exists: !!registrationFlow,
+        isCompleted: registrationFlow?.isCompleted,
+        currentStep: registrationFlow?.currentStep,
+        orderId: registrationFlow?.orderId,
+        customerId: registrationFlow?.customerId,
+        expiresAt: registrationFlow?.expiresAt,
+        hasExpired: registrationFlow?.expiresAt ? new Date() > registrationFlow.expiresAt : false
+      });
+      
+      // ✅ VERIFICACIÓN: Flujo activo y no expirado
+      if (registrationFlow && 
+          !registrationFlow.isCompleted && 
+          (!registrationFlow.expiresAt || new Date() <= registrationFlow.expiresAt)) {
+        
+        console.log(`🔄 ACTIVE REGISTRATION FLOW CONFIRMED - Processing step: ${registrationFlow.currentStep}`);
+        
+        await handleRegistrationFlow(
+          customer,
+          messageText,
+          message,
+          registrationFlow,
+          storeMapping.storeId,
+          tenantStorage
+        );
+        
+        console.log(`✅ REGISTRATION FLOW PROCESSED - Exiting without auto-response processing`);
+        return;
+      }
 
-    // ✅ VERIFICACIÓN CRÍTICA MEJORADA: Flujo activo PRIMERO
-    console.log(`🔍 CHECKING REGISTRATION FLOW for phone: ${customerPhone}`);
-    
-    const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
-    
-    console.log(`🔍 Registration Flow Result:`, {
-      exists: !!registrationFlow,
-      isCompleted: registrationFlow?.isCompleted,
-      currentStep: registrationFlow?.currentStep,
-      orderId: registrationFlow?.orderId,
-      customerId: registrationFlow?.customerId,
-      expiresAt: registrationFlow?.expiresAt,
-      hasExpired: registrationFlow?.expiresAt ? new Date() > registrationFlow.expiresAt : false
-    });
-    
-    // ✅ VERIFICACIÓN MEJORADA: Flujo activo y no expirado
-    if (registrationFlow && 
-        !registrationFlow.isCompleted && 
-        (!registrationFlow.expiresAt || new Date() <= registrationFlow.expiresAt)) {
+      // ✅ LIMPIAR FLUJOS EXPIRADOS
+      if (registrationFlow && registrationFlow.expiresAt && new Date() > registrationFlow.expiresAt) {
+        console.log(`🧹 CLEANING EXPIRED FLOW for ${customerPhone}`);
+        await tenantStorage.deleteRegistrationFlowByPhone(customerPhone);
+      }
+
+      // 🤖 PROCESAR AUTO-RESPUESTAS DINÁMICAMENTE
+      console.log(`🤖 NO ACTIVE FLOW - Processing auto-response for message: "${messageText}"`);
       
-      console.log(`🔄 ACTIVE REGISTRATION FLOW CONFIRMED - Processing step: ${registrationFlow.currentStep}`);
-      
-      // ✅ IMPORTANTE: Procesar flujo de registro y RETORNAR inmediatamente
-      await handleRegistrationFlow(
-        customer,
-        messageText,
-        message,
-        registrationFlow,
-        storeMapping.storeId,
-        tenantStorage
-      );
-      
-      // ✅ CRÍTICO: RETORNAR AQUÍ para evitar procesar auto-respuestas
-      console.log(`✅ REGISTRATION FLOW PROCESSED - Exiting without auto-response processing`);
+      // ✅ USAR TU SISTEMA DINÁMICO
+      await processAutoResponse(messageText, customerPhone, storeMapping.storeId, tenantStorage);
+
+      console.log(`✅ MESSAGE PROCESSED SUCCESSFULLY - Store: ${storeMapping.storeName}`);
       return;
     }
 
-    // ✅ LIMPIAR FLUJOS EXPIRADOS ANTES DE CONTINUAR
-    if (registrationFlow && registrationFlow.expiresAt && new Date() > registrationFlow.expiresAt) {
-      console.log(`🧹 CLEANING EXPIRED FLOW for ${customerPhone}`);
-      await tenantStorage.deleteRegistrationFlowByPhone(customerPhone);
-    }
-
-    // 🔄 Solo procesar auto-respuestas si NO hay flujo activo
-    console.log(`🤖 NO ACTIVE FLOW - Processing auto-response for message: "${messageText}"`);
-    
-    // Verificar si es un mensaje de bienvenida
-    if (isWelcomeMessage(messageText)) {
-      const response = await handleIntelligentWelcome(customerPhone, tenantStorage, storeMapping.storeId);
+    // 2. ESTADOS DE MENSAJES (confirmaciones de entrega, lectura, etc.)
+    if (value.statuses && value.statuses.length > 0) {
+      console.log('📊 PROCESSING MESSAGE STATUS UPDATE');
       
-      await sendInteractiveMessage(customerPhone, response.message, JSON.parse(response.menuOptions), storeMapping);
-      return;
-    }
-    
-    // Manejar seguimiento de órdenes
-    if (messageText === 'track_orders' || messageText.includes('seguimiento')) {
-      await handleOrderTracking(customerPhone, storeMapping, tenantStorage);
-      return;
-    }
-    
-    // Manejar selección de orden específica
-    if (messageText.startsWith('order_')) {
-      await handleOrderSelection(messageText, customerPhone, storeMapping, tenantStorage);
+      const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
+      if (!storeMapping) {
+        console.log(`❌ STORE NOT FOUND for status update - phoneNumberId: ${phoneNumberId}`);
+        return;
+      }
+
+      const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+      
+      for (const status of value.statuses) {
+        await processMessageStatus(status, storeMapping, tenantStorage);
+      }
+      
+      console.log(`✅ STATUS UPDATES PROCESSED - Store: ${storeMapping.storeName}`);
       return;
     }
 
-    // Procesar auto-respuestas configuradas
-    await processConfiguredAutoResponse(messageText, customerPhone, customer, tenantStorage, storeMapping);
+    // 3. ERRORES DE WEBHOOK
+    if (value.errors && value.errors.length > 0) {
+      console.log('💥 PROCESSING WEBHOOK ERRORS');
+      
+      const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
+      if (storeMapping) {
+        const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+        
+        for (const error of value.errors) {
+          await processWebhookError(error, storeMapping, tenantStorage);
+        }
+      }
+      
+      console.log(`✅ ERRORS PROCESSED`);
+      return;
+    }
 
-    console.log(`✅ MESSAGE PROCESSED SUCCESSFULLY - Store: ${storeMapping.storeName}`);
+    // 4. NINGÚN TIPO RECONOCIDO
+    console.log('⚠️ UNKNOWN WEBHOOK TYPE - No messages, statuses, or errors found');
+    console.log('📋 VALUE STRUCTURE:', Object.keys(value));
 
   } catch (error) {
     console.error('❌ ERROR PROCESSING WHATSAPP MESSAGE:', error);
+    
+    // Log error usando master storage
+    try {
+      const masterStorage = getMasterStorage();
+      await masterStorage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: 'WEBHOOK_ERROR',
+        messageContent: 'Error procesando webhook de WhatsApp',
+        status: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        rawData: JSON.stringify({ webhookData, error: error instanceof Error ? error.stack : error })
+      });
+    } catch (logError) {
+      console.error('❌ ERROR LOGGING WEBHOOK ERROR:', logError);
+    }
   }
 }
 
