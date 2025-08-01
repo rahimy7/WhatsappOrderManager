@@ -1,7 +1,7 @@
 import { Pool } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "../shared/schema.js";
-import { eq, desc, and, or, count, sql, ilike } from "drizzle-orm";
+import { eq, desc, and, or, count, sql, ilike, asc, like, lt } from "drizzle-orm";
 import { getTenantDb } from "./multi-tenant-db.js";
 import { CustomerRegistrationFlow } from "../shared/schema.js";
 

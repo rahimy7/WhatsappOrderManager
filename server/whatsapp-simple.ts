@@ -18,6 +18,7 @@ interface CollectedData {
   contactNumber?: string;
   paymentMethod?: string;
   notes?: string;
+  location?: LocationData;
 }
 
 interface Customer {

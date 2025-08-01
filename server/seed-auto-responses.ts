@@ -1,7 +1,9 @@
-import { storage } from "./storage";
+import { getTenantStorage } from './storage/index.js';
 
-export async function seedAutoResponses() {
-  console.log("Seeding auto responses...");
+
+
+export async function seedAutoResponses(storeId: number) {
+  console.log(`🌱 Seeding auto responses for store ${storeId}...`);
 
   const defaultResponses = [
     {
@@ -130,7 +132,7 @@ export async function seedAutoResponses() {
       trigger: "goodbye",
       messageText: "👋 ¡Gracias por contactarnos!\n\nSi necesitas ayuda adicional, no dudes en escribirnos.\n\n¡Que tengas un excelente día!",
       isActive: true,
-      priority: 8,
+      priority: 10, // ✅ Corregido: cambié de 8 a 10 para evitar conflicto con "Consulta de Productos"
       requiresRegistration: false,
       menuOptions: JSON.stringify([
         { label: "Reiniciar Conversación", value: "restart", action: "show_welcome" }
@@ -140,22 +142,69 @@ export async function seedAutoResponses() {
   ];
 
   try {
+    // ✅ CORREGIDO: Usar tenant storage específico para la tienda
+    const tenantStorage = await getTenantStorage(storeId);
+    
     // Check if responses already exist
-    const existingResponses = await storage.getAllAutoResponses();
+    const existingResponses = await tenantStorage.getAllAutoResponses();
     
     if (existingResponses.length === 0) {
-      console.log("Creating default auto responses...");
+      console.log(`📝 Creating ${defaultResponses.length} default auto responses for store ${storeId}...`);
       
       for (const response of defaultResponses) {
-        await storage.createAutoResponse(response);
-        console.log(`Created auto response: ${response.name}`);
+        try {
+          // ✅ CORREGIDO: Usar tenant storage
+          await tenantStorage.createAutoResponse(response);
+          console.log(`✅ Created auto response: ${response.name}`);
+        } catch (error) {
+          console.error(`❌ Error creating ${response.name}:`, error);
+        }
       }
       
       console.log("✅ Default auto responses created successfully");
     } else {
-      console.log("Auto responses already exist, skipping seed");
+      console.log(`ℹ️ Auto responses already exist for store ${storeId} (${existingResponses.length} found), skipping seed`);
     }
   } catch (error) {
-    console.error("Error seeding auto responses:", error);
+    console.error(`❌ Error seeding auto responses for store ${storeId}:`, error);
+    throw error;
   }
 }
+
+// ================================
+// FUNCIÓN AUXILIAR PARA SEED EN TODAS LAS TIENDAS
+// ================================
+
+export async function seedAutoResponsesForAllStores() {
+  try {
+    console.log("🌱 Starting auto responses seed for all stores...");
+    
+    const { getMasterStorage } = await import('./storage/index.js');
+    const masterStorage = getMasterStorage();
+    
+    // Obtener todas las tiendas virtuales
+    const stores = await masterStorage.getAllVirtualStores();
+    
+    if (stores.length === 0) {
+      console.log("⚠️ No stores found, skipping seed");
+      return;
+    }
+    
+    console.log(`📊 Found ${stores.length} stores, seeding auto responses...`);
+    
+    for (const store of stores) {
+      try {
+        console.log(`\n🏪 Processing store: ${store.name} (ID: ${store.id})`);
+        await seedAutoResponses(store.id);
+      } catch (error) {
+        console.error(`❌ Error seeding store ${store.id} (${store.name}):`, error);
+      }
+    }
+    
+    console.log("\n✅ Auto responses seed completed for all stores");
+  } catch (error) {
+    console.error("❌ Error seeding auto responses for all stores:", error);
+    throw error;
+  }
+}
+

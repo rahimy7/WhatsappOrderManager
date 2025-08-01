@@ -21,7 +21,21 @@ const masterStorage = storageFactory.getMasterStorage();
 // ================================
 // HELPER FUNCTIONS PARA STORAGE
 // ================================
-
+interface WhatsAppValidationResults {
+  basic: {
+    found: boolean;
+    isActive: boolean;
+    hasAllRequiredFields: boolean;
+  };
+  detailed?: {
+    hasAccessToken: boolean;
+    hasWebhookToken: boolean;
+    hasBusinessAccountId: boolean;
+    hasAppId: boolean;
+    storeExists: boolean;
+    storeActive: boolean;
+  };
+}
 /**
  * Obtiene el tenant storage para un usuario específico
  */
@@ -111,8 +125,8 @@ const whatsAppLogFiltersSchema = z.object({
   phoneNumberId: z.string().optional(),
   type: z.enum(['incoming', 'outgoing', 'webhook', 'error']).optional(),
   status: z.enum(['success', 'failed', 'pending']).optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional()
+ /*  startDate: z.string().optional(),
+  endDate: z.string().optional() */
 });
 
 const bulkOperationSchema = z.object({
@@ -190,7 +204,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
         return {
           ...config,
           storeName: store?.name || `Tienda ${config.storeId}`,
-          storeStatus: store?.status || 'unknown',
+          storeStatus: store?.isActive ? 'active' : 'inactive',
           // Ocultar tokens sensibles en la respuesta
           accessToken: config.accessToken ? '***' + config.accessToken.slice(-4) : null,
           webhookVerifyToken: config.webhookVerifyToken ? '***' + config.webhookVerifyToken.slice(-4) : null
@@ -209,7 +223,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
           totalConfigs: total,
           activeConfigs: configs.filter(c => c.isActive).length,
           inactiveConfigs: configs.filter(c => !c.isActive).length,
-          storesWithConfig: [...new Set(configs.map(c => c.storeId))].length
+          storesWithConfig: Array.from(new Set(configs.map(c => c.storeId))).length
         }
       });
     } catch (error) {
@@ -237,7 +251,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
       res.json({
         ...config,
         storeName: store?.name || `Tienda ${config.storeId}`,
-        storeStatus: store?.status || 'unknown'
+        storeStatus: store?.isActive ? 'active' : 'inactive'
       });
     } catch (error) {
       console.error("Error getting WhatsApp config:", error);
@@ -266,7 +280,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
       }
       
       // ✅ CORREGIDO: Usar master storage para crear configuración
-      const config = await masterStorage.createWhatsAppConfig(configData);
+      const config = await masterStorage.updateWhatsAppConfig( configData,configData.storeId);
       
       res.status(201).json({ 
         success: true, 
@@ -300,7 +314,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
       }
       
       // ✅ CORREGIDO: Usar master storage con storeId
-      const config = await masterStorage.updateWhatsAppConfig(storeId, configData);
+      const config = await masterStorage.updateWhatsAppConfig(configData, storeId);
       
       res.json({ 
         success: true, 
@@ -412,14 +426,14 @@ export function registerWhatsAppManagementRoutes(app: Express) {
         });
       }
 
-      let testResults = {
-        basic: {
-          hasToken: !!config.accessToken,
-          hasPhoneNumberId: !!config.phoneNumberId,
-          hasWebhookToken: !!config.webhookVerifyToken,
-          isActive: config.isActive
-        }
-      };
+     let testResults: any = {
+  basic: {
+    hasToken: !!config.accessToken,
+    hasPhoneNumberId: !!config.phoneNumberId,
+    hasWebhookToken: !!config.webhookVerifyToken,
+    isActive: config.isActive
+  }
+};
 
       // Tests adicionales según el tipo
       if (testType === 'advanced') {
@@ -479,13 +493,13 @@ export function registerWhatsAppManagementRoutes(app: Express) {
       // Obtener información de la tienda
       const store = await masterStorage.getVirtualStore(config.storeId);
       
-      let validationResults = {
-        basic: {
-          found: true,
-          isActive: config.isActive,
-          hasAllRequiredFields: !!(config.accessToken && config.phoneNumberId && config.webhookVerifyToken)
-        }
-      };
+      let validationResults: WhatsAppValidationResults = {
+  basic: {
+    found: true,
+    isActive: config.isActive,
+    hasAllRequiredFields: !!(config.accessToken && config.phoneNumberId && config.webhookVerifyToken)
+  }
+};
       
       if (fullValidation) {
         validationResults = {
@@ -496,7 +510,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
             hasBusinessAccountId: !!config.businessAccountId,
             hasAppId: !!config.appId,
             storeExists: !!store,
-            storeActive: store?.status === 'active'
+            storeActive: store?.isActive === true
           }
         };
       }
@@ -646,8 +660,8 @@ export function registerWhatsAppManagementRoutes(app: Express) {
       if (search) {
         const searchTerm = (search as string).toLowerCase();
         logs = logs.filter(log => 
-          log.phoneNumberId?.toLowerCase().includes(searchTerm) ||
-          log.message?.toLowerCase().includes(searchTerm) ||
+          log.phoneNumber?.toLowerCase().includes(searchTerm) ||
+          log.messageContent?.toLowerCase().includes(searchTerm) ||
           log.errorMessage?.toLowerCase().includes(searchTerm)
         );
       }
@@ -831,7 +845,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
       }
       
       // ✅ CORREGIDO: Usar master storage para actualizar configuración
-      const config = await masterStorage.updateWhatsAppConfig(storeId, updateData);
+     const config = await masterStorage.updateWhatsAppConfig(updateData, storeId);
       
       // Ocultar tokens sensibles
       const safeConfig = {
@@ -868,17 +882,15 @@ export function registerWhatsAppManagementRoutes(app: Express) {
         storeId,
         type: type as string,
         status: status as string,
-        startDate: startDate as string,
-        endDate: endDate as string
       };
       
       // ✅ CORREGIDO: Usar master storage para logs de tienda
       const logs = await masterStorage.getWhatsAppLogs(
-        storeId,
-        parseInt(limit as string),
-        parseInt(offset as string),
-        filters
-      );
+  storeId,
+  parseInt(limit as string),
+  parseInt(offset as string),
+  filters
+);
       
       res.json({
         success: true,
@@ -979,14 +991,14 @@ export function registerWhatsAppManagementRoutes(app: Express) {
         }
       }
       
-      res.json({
-        success: true,
-        operation,
-        processed: results.length,
-        errors: errors.length,
-        results,
-        errors
-      });
+     res.json({
+  success: true,
+  operation,
+  processed: results.length,
+  errorsCount: errors.length,  // ✅ Cambiar a 'errorsCount'
+  results,
+  errors                       // ✅ Mantener esta como 'errors'
+});
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid bulk operation data", details: error.errors });
@@ -1021,8 +1033,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
         message: "Webhook updated successfully",
         config: {
           id: config.id,
-          webhookUrl: config.webhookUrl,
-          webhookVerifyToken: config.webhookVerifyToken ? '***' + config.webhookVerifyToken.slice(-4) : null
+                webhookVerifyToken: config.webhookVerifyToken ? '***' + config.webhookVerifyToken.slice(-4) : null
         }
       });
     } catch (error) {
@@ -1035,46 +1046,114 @@ export function registerWhatsAppManagementRoutes(app: Express) {
   });
 
   // POST - Probar webhook de una configuración
-  app.post("/api/super-admin/whatsapp-configs/:id/test-webhook", authenticateToken, requireSuperAdmin, async (req, res) => {
+app.post("/api/super-admin/whatsapp-configs/:id/test-webhook", authenticateToken, requireSuperAdmin, async (req, res) => {
+  try {
+    const configId = parseInt(req.params.id);
+    
+    const configs = await masterStorage.getAllWhatsAppConfigs();
+    const config = configs.find(c => c.id === configId);
+    
+    if (!config) {
+      return res.status(404).json({ error: "Configuración no encontrada" });
+    }
+    
+    // Generar URL del webhook dinámicamente basado en tu sistema
+    const webhookUrl = generarUrlWebhook(config.storeId, config.phoneNumberId);
+    
+    if (!webhookUrl) {
+      return res.json({
+        success: false,
+        error: "NO_WEBHOOK_URL",
+        message: "No se pudo generar la URL del webhook"
+      });
+    }
+    
+    // Probar conectividad del webhook
     try {
-      const configId = parseInt(req.params.id);
+      const resultadoTest = await probarConectividadWebhook(webhookUrl, config);
       
-      const configs = await masterStorage.getAllWhatsAppConfigs();
-      const config = configs.find(c => c.id === configId);
-      
-      if (!config) {
-        return res.status(404).json({ error: "Configuration not found" });
-      }
-      
-      if (!config.webhookUrl) {
-        return res.json({
-          success: false,
-          error: "NO_WEBHOOK_URL",
-          message: "No webhook URL configured"
-        });
-      }
-      
-      // Aquí iría la lógica real de testing del webhook
-      // Por ahora simulamos el test
       res.json({
         success: true,
-        message: "Webhook test completed",
-        webhookUrl: config.webhookUrl,
+        message: "Test de webhook completado exitosamente",
+        webhookUrl: webhookUrl,
+        testResult: resultadoTest
+      });
+    } catch (errorTest) {
+      res.json({
+        success: false,
+        error: "WEBHOOK_TEST_FAILED",
+        message: "El test del webhook falló",
+        webhookUrl: webhookUrl,
         testResult: {
-          status: "success",
-          responseTime: "150ms",
-          statusCode: 200,
+          status: "error",
+          error: errorTest instanceof Error ? errorTest.message : "Error desconocido",
           timestamp: new Date().toISOString()
         }
       });
-    } catch (error) {
-      console.error("Error testing webhook:", error);
-      res.status(500).json({
-        success: false,
-        error: "Failed to test webhook"
-      });
     }
-  });
+    
+  } catch (error) {
+    console.error("Error probando webhook:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error al probar el webhook"
+    });
+  }
+});
+
+// Función auxiliar para generar la URL del webhook
+function generarUrlWebhook(storeId: number, phoneNumberId: string): string {
+  // Obtener la URL base de tu sistema
+  const urlBase = process.env.BASE_URL || 
+                  process.env.REPLIT_URL || 
+                  process.env.WEBHOOK_BASE_URL ||
+                  'https://tu-dominio.com';
+  
+  // Tu sistema parece usar un endpoint centralizado /api/webhook
+  return `${urlBase}/api/webhook`;
+  
+  // Alternativa: Si quieres URLs específicas por tienda:
+  // return `${urlBase}/api/webhook/${storeId}`;
+}
+
+// Función auxiliar para probar la conectividad del webhook
+async function probarConectividadWebhook(webhookUrl: string, config: any) {
+  try {
+    const tiempoInicio = Date.now();
+    
+    // Probar si el endpoint del webhook es alcanzable
+    const response = await fetch(webhookUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'WhatsApp-Webhook-Test',
+        'Accept': 'application/json'
+      },
+      // Timeout de 10 segundos
+      signal: AbortSignal.timeout(10000)
+    });
+    
+    const tiempoRespuesta = Date.now() - tiempoInicio;
+    
+    return {
+      status: "success",
+      responseTime: `${tiempoRespuesta}ms`,
+      statusCode: response.status,
+      alcanzable: response.status < 500,
+      mensaje: response.status === 200 ? "Webhook alcanzable" : 
+               response.status === 405 ? "Endpoint existe pero método no permitido (normal para GET)" :
+               "Respuesta inesperada del webhook",
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      error: error instanceof Error ? error.message : "Error desconocido",
+      alcanzable: false,
+      mensaje: "No se pudo conectar al webhook",
+      timestamp: new Date().toISOString()
+    };
+  }
+}
 
   // ================================
   // TEMPLATES Y MENSAJES
@@ -1174,9 +1253,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
       if (includeLogs === 'true') {
         // Obtener logs para el reporte
         const logs = await masterStorage.getAllWhatsAppLogs(100, 0, {
-          startDate: startDate as string,
-          endDate: endDate as string
-        });
+                });
         report['recentLogs'] = logs.slice(0, 50); // Limitar logs en el reporte
       }
       
@@ -1230,7 +1307,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
               hasPhoneNumberId: !!config.phoneNumberId,
               hasWebhookToken: !!config.webhookVerifyToken,
               storeExists: !!store,
-              storeActive: store?.status === 'active'
+               storeActive: store?.isActive === true
             }
           };
         })
@@ -1353,7 +1430,7 @@ export function registerWhatsAppManagementRoutes(app: Express) {
         success: true,
         action,
         processed: results.length,
-        errors: errors.length,
+        errorsCount: errors.length,
         results,
         errors
       });
@@ -1405,27 +1482,5 @@ export function registerWhatsAppManagementRoutes(app: Express) {
     }
   });
 
-  console.log("✅ WhatsApp Management routes registered successfully with migrated storage");
-  console.log("📝 Available endpoints:");
-  console.log("   === SUPER ADMIN ENDPOINTS ===");
-  console.log("   - GET    /api/super-admin/whatsapp-configs");
-  console.log("   - GET    /api/super-admin/whatsapp-configs/:id");
-  console.log("   - POST   /api/super-admin/whatsapp-configs");
-  console.log("   - PUT    /api/super-admin/whatsapp-configs/:id");
-  console.log("   - DELETE /api/super-admin/whatsapp-configs/:id");
-  console.log("   - POST   /api/super-admin/whatsapp-test");
-  console.log("   - POST   /api/super-admin/whatsapp-validate");
-  console.log("   - GET    /api/super-admin/stores");
-  console.log("   - GET    /api/super-admin/whatsapp-logs");
-  console.log("   - GET    /api/super-admin/whatsapp-logs/stats");
-  console.log("   - DELETE /api/super-admin/whatsapp-logs/cleanup");
-  console.log("   - POST   /api/super-admin/whatsapp-configs/bulk");
-  console.log("   - GET    /api/super-admin/whatsapp-report");
-  console.log("   - GET    /api/super-admin/whatsapp-health");
-  console.log("   === STORE LEVEL ENDPOINTS ===");
-  console.log("   - GET    /api/store/:storeId/whatsapp-config");
-  console.log("   - PUT    /api/store/:storeId/whatsapp-config");
-  console.log("   - GET    /api/store/:storeId/whatsapp-logs");
-  console.log("   - GET    /api/store/:storeId/whatsapp-stats");
-  console.log("   - GET    /api/store/:storeId/whatsapp-templates");
+  
 }
