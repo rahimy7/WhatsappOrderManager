@@ -1075,25 +1075,19 @@ export async function processWhatsAppMessage(webhookData: any) {
 
     const changes = entry.changes?.[0];
     if (!changes || changes.field !== 'messages') {
-      console.log('❌ NO MESSAGE CHANGES FOUND');
+      console.log('❌ NO MESSAGE CHANGES FOUND or field is not "messages"');
       return;
     }
 
     const value = changes.value;
-    if (!value.messages || !value.metadata) {
-      console.log('❌ NO MESSAGES OR METADATA FOUND');
+    if (!value.metadata) {
+      console.log('❌ NO METADATA FOUND');
       return;
     }
 
     const phoneNumberId = value.metadata.phone_number_id;
-    const message = value.messages[0];
-    const customerPhone = message.from;
-    const messageText = message.text?.body || '';
-    const messageId = message.id;
-
-    console.log(`📱 MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
-
-    // 🔍 BUSCAR TIENDA DINÁMICAMENTE
+    
+    // 🔍 BUSCAR TIENDA DINÁMICAMENTE (necesario para ambos tipos)
     const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
     
     if (!storeMapping) {
@@ -1101,10 +1095,42 @@ export async function processWhatsAppMessage(webhookData: any) {
       return;
     }
 
-    console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
-
-    // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
     const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+
+    // ✅ CORRECCIÓN CRÍTICA: Distinguir entre mensajes de usuario y status de Meta
+    
+    // 1️⃣ PROCESAR STATUS DE MENSAJES (delivery, read, failed, etc.)
+    if (value.statuses && Array.isArray(value.statuses) && value.statuses.length > 0) {
+      console.log('📊 PROCESSING MESSAGE STATUSES');
+      
+      // Procesar cada status recibido
+      for (const status of value.statuses) {
+        await processMessageStatus(status, storeMapping, tenantStorage);
+      }
+      
+      return; // ✅ IMPORTANTE: Salir después de procesar statuses - NO activar auto-respuestas
+    }
+
+    // 2️⃣ PROCESAR MENSAJES DE USUARIOS
+    if (!value.messages || !Array.isArray(value.messages) || value.messages.length === 0) {
+      console.log('ℹ️ NO USER MESSAGES FOUND - This was likely a status-only webhook');
+      return;
+    }
+
+    const message = value.messages[0];
+    const customerPhone = message.from;
+    const messageText = message.text?.body || '';
+    const messageId = message.id;
+    const messageType = message.type || 'text';
+
+    // ✅ VALIDAR QUE SEA UN MENSAJE DE TEXTO VÁLIDO
+    if (messageType !== 'text' || (!messageText || messageText.trim() === '')) {
+      console.log(`ℹ️ SKIPPING NON-TEXT MESSAGE - Type: ${messageType}, From: ${customerPhone}`);
+      return;
+    }
+
+    console.log(`📱 USER MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
+    console.log(`✅ PROCESSING USER MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
 
     // 👤 PROCESAR CLIENTE
     let customer = await tenantStorage.getCustomerByPhone(customerPhone);
@@ -1137,10 +1163,11 @@ export async function processWhatsAppMessage(webhookData: any) {
       messageContent: messageText,
       messageId: messageId,
       status: 'received',
-      rawData: JSON.stringify(webhookData)
+      rawData: JSON.stringify(webhookData),
+      storeId: storeMapping.storeId
     });
 
-    // ✅ VERIFICACIÓN CRÍTICA MEJORADA: Flujo activo PRIMERO
+    // ✅ VERIFICACIÓN CRÍTICA: Flujo activo PRIMERO
     console.log(`🔍 CHECKING REGISTRATION FLOW for phone: ${customerPhone}`);
     
     const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
@@ -1149,70 +1176,25 @@ export async function processWhatsAppMessage(webhookData: any) {
       exists: !!registrationFlow,
       isCompleted: registrationFlow?.isCompleted,
       currentStep: registrationFlow?.currentStep,
-      orderId: registrationFlow?.orderId,
-      customerId: registrationFlow?.customerId,
-      expiresAt: registrationFlow?.expiresAt,
-      hasExpired: registrationFlow?.expiresAt ? new Date() > registrationFlow.expiresAt : false
+      isExpired: registrationFlow?.expiresAt ? new Date() > registrationFlow.expiresAt : false
     });
-    
-    // ✅ VERIFICACIÓN MEJORADA: Flujo activo y no expirado
-    if (registrationFlow && 
-        !registrationFlow.isCompleted && 
+
+    // ✅ SI HAY FLUJO ACTIVO, PROCESARLO PRIMERO
+    if (registrationFlow && !registrationFlow.isCompleted && 
         (!registrationFlow.expiresAt || new Date() <= registrationFlow.expiresAt)) {
       
-      console.log(`🔄 ACTIVE REGISTRATION FLOW CONFIRMED - Processing step: ${registrationFlow.currentStep}`);
-      
-      // ✅ IMPORTANTE: Procesar flujo de registro y RETORNAR inmediatamente
-      await handleRegistrationFlow(
-        customer,
-        messageText,
-        message,
-        registrationFlow,
-        storeMapping.storeId,
-        tenantStorage
-      );
-      
-      // ✅ CRÍTICO: RETORNAR AQUÍ para evitar procesar auto-respuestas
-      console.log(`✅ REGISTRATION FLOW PROCESSED - Exiting without auto-response processing`);
-      return;
+      console.log(`🔄 CONTINUING REGISTRATION FLOW - Step: ${registrationFlow.currentStep}`);
+      await handleRegistrationFlow(customer, messageText, message, registrationFlow, storeMapping.storeId, tenantStorage);
+      return; // ✅ IMPORTANTE: Salir para evitar procesar auto-respuestas
     }
 
-    // ✅ LIMPIAR FLUJOS EXPIRADOS ANTES DE CONTINUAR
-    if (registrationFlow && registrationFlow.expiresAt && new Date() > registrationFlow.expiresAt) {
-      console.log(`🧹 CLEANING EXPIRED FLOW for ${customerPhone}`);
-      await tenantStorage.deleteRegistrationFlowByPhone(customerPhone);
-    }
+    // ✅ PROCESAR AUTO-RESPUESTAS SOLO SI NO HAY FLUJO ACTIVO
+    console.log(`🤖 PROCESSING AUTO-RESPONSES`);
+    await processAutoResponse(messageText, customerPhone, storeMapping.storeId, tenantStorage);
 
-    // 🔄 Solo procesar auto-respuestas si NO hay flujo activo
-    console.log(`🤖 NO ACTIVE FLOW - Processing auto-response for message: "${messageText}"`);
-    
-    // Verificar si es un mensaje de bienvenida
-    if (isWelcomeMessage(messageText)) {
-      const response = await handleIntelligentWelcome(customerPhone, tenantStorage, storeMapping.storeId);
-      
-      await sendInteractiveMessage(customerPhone, response.message, JSON.parse(response.menuOptions), storeMapping);
-      return;
-    }
-    
-    // Manejar seguimiento de órdenes
-    if (messageText === 'track_orders' || messageText.includes('seguimiento')) {
-      await handleOrderTracking(customerPhone, storeMapping, tenantStorage);
-      return;
-    }
-    
-    // Manejar selección de orden específica
-    if (messageText.startsWith('order_')) {
-      await handleOrderSelection(messageText, customerPhone, storeMapping, tenantStorage);
-      return;
-    }
-
-    // Procesar auto-respuestas configuradas
-    await processConfiguredAutoResponse(messageText, customerPhone, customer, tenantStorage, storeMapping);
-
-    console.log(`✅ MESSAGE PROCESSED SUCCESSFULLY - Store: ${storeMapping.storeName}`);
-
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ ERROR PROCESSING WHATSAPP MESSAGE:', error);
+    console.error('Stack trace:', error.stack);
   }
 }
 
@@ -1289,12 +1271,13 @@ async function processMessageStatus(
     const statusType = status.status; // 'sent', 'delivered', 'read', 'failed'
     const recipientId = status.recipient_id;
     const timestamp = status.timestamp;
+    const conversation = status.conversation;
 
     console.log(`📊 STATUS UPDATE - MessageID: ${messageId}, Status: ${statusType}, Recipient: ${recipientId}`);
 
-    // Update message status in database
+    // ✅ REGISTRAR STATUS EN BASE DE DATOS
     const masterStorage = getMasterStorage();
-   await masterStorage.addWhatsAppLog({
+    await masterStorage.addWhatsAppLog({
       type: 'status',
       phoneNumber: recipientId,
       messageContent: `Estado actualizado: ${statusType}`,
@@ -1304,32 +1287,77 @@ async function processMessageStatus(
       storeId: storeMapping.storeId
     });
 
-    // Handle specific status types
+    // ✅ PROCESAR TIPOS ESPECÍFICOS DE STATUS
     switch (statusType) {
       case 'read':
         console.log(`✅ MESSAGE READ - MessageID: ${messageId} by ${recipientId}`);
-        // Mark message as read in conversation
         await markMessageAsReadInConversation(messageId, recipientId, tenantStorage);
         break;
       
       case 'delivered':
         console.log(`📬 MESSAGE DELIVERED - MessageID: ${messageId} to ${recipientId}`);
+        // Opcional: Actualizar estado en base de datos local
+        break;
+      
+      case 'sent':
+        console.log(`📤 MESSAGE SENT - MessageID: ${messageId} to ${recipientId}`);
         break;
       
       case 'failed':
         console.log(`❌ MESSAGE FAILED - MessageID: ${messageId} to ${recipientId}`);
         const errorCode = status.errors?.[0]?.code;
         const errorTitle = status.errors?.[0]?.title;
-        console.log(`💥 DELIVERY ERROR - Code: ${errorCode}, Title: ${errorTitle}`);
+        const errorMessage = status.errors?.[0]?.message;
+        
+        console.log(`💥 DELIVERY ERROR - Code: ${errorCode}, Title: ${errorTitle}, Message: ${errorMessage}`);
+        
+        // ✅ REGISTRAR ERROR DETALLADO
+        await masterStorage.addWhatsAppLog({
+          type: 'error',
+          phoneNumber: recipientId,
+          messageContent: `Mensaje falló: ${errorTitle}`,
+          messageId: messageId,
+          status: 'failed',
+          errorMessage: `Code: ${errorCode}, Title: ${errorTitle}, Message: ${errorMessage}`,
+          rawData: JSON.stringify(status),
+          storeId: storeMapping.storeId
+        });
         break;
       
-      case 'sent':
-        console.log(`📤 MESSAGE SENT - MessageID: ${messageId} to ${recipientId}`);
-        break;
+      default:
+        console.log(`ℹ️ UNKNOWN STATUS TYPE: ${statusType} - MessageID: ${messageId}`);
+    }
+
+    // ✅ INFORMACIÓN ADICIONAL DE LA CONVERSACIÓN
+    if (conversation) {
+      console.log(`💬 CONVERSATION INFO - ID: ${conversation.id}, Origin: ${conversation.origin?.type}`);
+      
+      // Registrar información de pricing si está disponible
+      if (status.pricing) {
+        console.log(`💰 PRICING INFO - Billable: ${status.pricing.billable}, Category: ${status.pricing.category}, Type: ${status.pricing.type}`);
+      }
     }
 
   } catch (error: any) {
     console.error('❌ ERROR PROCESSING MESSAGE STATUS:', error);
+    console.error('Status data:', JSON.stringify(status, null, 2));
+  }
+}
+
+export function debugWebhookStructure(webhookData: any): void {
+  console.log('🔍 WEBHOOK STRUCTURE DEBUG:');
+  console.log('- Has entry:', !!webhookData?.entry);
+  console.log('- Has changes:', !!webhookData?.entry?.[0]?.changes);
+  console.log('- Field:', webhookData?.entry?.[0]?.changes?.[0]?.field);
+  console.log('- Has messages:', !!webhookData?.entry?.[0]?.changes?.[0]?.value?.messages);
+  console.log('- Has statuses:', !!webhookData?.entry?.[0]?.changes?.[0]?.value?.statuses);
+  console.log('- Has metadata:', !!webhookData?.entry?.[0]?.changes?.[0]?.value?.metadata);
+  
+  const value = webhookData?.entry?.[0]?.changes?.[0]?.value;
+  if (value) {
+    console.log('- Messages count:', value.messages?.length || 0);
+    console.log('- Statuses count:', value.statuses?.length || 0);
+    console.log('- Phone Number ID:', value.metadata?.phone_number_id);
   }
 }
 
