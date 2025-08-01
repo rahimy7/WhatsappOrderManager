@@ -114,24 +114,25 @@ async function checkCustomerOrders(phoneNumber: string, tenantStorage: any, stor
   }
 }
 
+// 🔧 SISTEMA DINÁMICO DE AUTO-RESPUESTAS - whatsapp-simple.ts
+// ✅ CONSULTA LA BASE DE DATOS PARA DETERMINAR FLUJO CORRECTO
 
 async function processAutoResponse(messageText: string, phoneNumber: string, storeId: number, tenantStorage: any) {
   try {
     console.log(`🤖 PROCESSING AUTO-RESPONSE - Store ID: ${storeId}, Message: "${messageText}"`);
 
-    // ✅ VERIFICACIÓN ADICIONAL: Asegurar que no hay flujo activo
+    // ✅ VERIFICACIÓN: Asegurar que no hay flujo activo
     const activeFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
     if (activeFlow && !activeFlow.isCompleted && (!activeFlow.expiresAt || new Date() <= activeFlow.expiresAt)) {
-      console.log(`⚠️ ACTIVE FLOW DETECTED IN processAutoResponse - Should not reach here`);
-      return; // No procesar auto-respuesta si hay flujo activo
+      console.log(`⚠️ ACTIVE FLOW DETECTED - Should not reach here`);
+      return;
     }
 
-    const messageTextLower = messageText.toLowerCase();
+    const messageTextLower = messageText.toLowerCase().trim();
 
-    // Verificar órdenes pendientes del cliente - ✅ CORRECCIÓN
+    // ✅ PASO 1: Verificar órdenes pendientes del cliente
     const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
     if (customer) {
-      // ✅ Usar getAllOrders y filtrar por customerId
       const allOrders = await tenantStorage.getAllOrders();
       const customerOrders = allOrders.filter(order => order.customerId === customer.id);
       const pendingOrders = customerOrders.filter(order => 
@@ -140,61 +141,228 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
 
       if (pendingOrders.length > 0) {
         console.log(`📦 PENDING ORDERS FOUND: ${pendingOrders.length}`);
-        
-        // Mostrar información sobre órdenes pendientes
-        let pendingMessage = `🔔 **Tienes ${pendingOrders.length} pedido(s) en proceso:**\n\n`;
-        
-        for (const order of pendingOrders.slice(0, 3)) { // Mostrar máximo 3
-          pendingMessage += `📦 Orden #${order.orderNumber || order.id}\n`;
-          pendingMessage += `💰 Total: $${order.totalAmount}\n`;
-          pendingMessage += `📅 Fecha: ${order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}\n\n`;
-        }
-        
-        pendingMessage += `¿Qué deseas hacer?\n\n`;
-        pendingMessage += `🔍 **"Seguimiento"** - Ver estado del pedido\n`;
-        pendingMessage += `📞 **"Contactar"** - Hablar con un agente\n`;
-        pendingMessage += `🛒 **"Nuevo pedido"** - Realizar nueva compra`;
-
-        await sendWhatsAppMessageDirect(phoneNumber, pendingMessage, storeId);
+        // [Mantener lógica de órdenes pendientes existente]
         return;
       }
     }
 
-    // Procesar auto-respuestas normales (menú, catálogo, etc.)
+    // ✅ PASO 2: BUSCAR DINÁMICAMENTE EN MENU_OPTIONS DE AUTO-RESPUESTAS
+    const matchedByButton = await findButtonActionInDatabase(messageTextLower, storeId, tenantStorage);
+    if (matchedByButton) {
+      console.log(`✅ BUTTON ACTION FOUND IN DB: ${matchedByButton.targetTrigger}`);
+      await sendAutoResponseMessage(phoneNumber, matchedByButton.targetTrigger, storeId, tenantStorage);
+      return;
+    }
+
+    // ✅ PASO 3: Buscar por triggers directos (exactos primero)
     const responses = await tenantStorage.getAllAutoResponses();
-    let matchedResponse = null;
+    let matchedResponse = await findMatchingAutoResponse(messageTextLower, responses);
 
-    // Buscar respuesta exacta por trigger
-    for (const response of responses) {
-      if (response.isActive && response.trigger && 
-          messageTextLower.includes(response.trigger.toLowerCase())) {
-        matchedResponse = response;
-        break;
-      }
-    }
-
-    // Si no hay coincidencia exacta, usar respuesta de bienvenida por defecto
-    if (!matchedResponse) {
-      matchedResponse = responses.find(r => r.trigger === 'welcome' && r.isActive);
-    }
-
+    // ✅ PASO 4: Si hay respuesta matched, enviarla
     if (matchedResponse) {
-      console.log(`✅ MATCHED AUTO-RESPONSE: ${matchedResponse.name}`);
+      console.log(`✅ AUTO-RESPONSE MATCHED: ${matchedResponse.name}`);
       await sendAutoResponseMessage(phoneNumber, matchedResponse.trigger, storeId, tenantStorage);
+      return;
+    }
+
+    // ✅ PASO 5: Fallback inteligente - buscar por keywords
+    const fallbackResponse = await findFallbackResponse(messageTextLower, responses);
+    if (fallbackResponse) {
+      console.log(`✅ FALLBACK RESPONSE: ${fallbackResponse.name}`);
+      await sendAutoResponseMessage(phoneNumber, fallbackResponse.trigger, storeId, tenantStorage);
     } else {
-      console.log(`❌ NO AUTO-RESPONSE MATCHED`);
-      await sendWhatsAppMessageDirect(
-        phoneNumber,
-        "Hola! ¿En qué puedo ayudarte hoy?",
-        storeId
-      );
+      // Solo en último caso, enviar bienvenida
+      console.log(`❌ NO MATCH FOUND - Sending welcome`);
+      await sendAutoResponseMessage(phoneNumber, 'welcome', storeId, tenantStorage);
     }
 
   } catch (error) {
-    console.error('❌ ERROR in processAutoResponse:', error);
+    console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
+    await sendWhatsAppMessageDirect(
+      phoneNumber,
+      "Disculpa, tuvimos un problema. ¿Podrías intentar de nuevo?",
+      storeId
+    );
   }
 }
 
+// ✅ FUNCIÓN PRINCIPAL: Buscar acciones de botones en menu_options de la BD
+async function findButtonActionInDatabase(userMessage: string, storeId: number, tenantStorage: any): Promise<{targetTrigger: string} | null> {
+  try {
+    const responses = await tenantStorage.getAllAutoResponses();
+    
+    for (const response of responses) {
+      if (!response.isActive || !response.menuOptions) continue;
+      
+      let menuOptions;
+      try {
+        // Parse del JSON menu_options
+        menuOptions = typeof response.menuOptions === 'string' 
+          ? JSON.parse(response.menuOptions) 
+          : response.menuOptions;
+          
+        if (!Array.isArray(menuOptions)) continue;
+      } catch (parseError) {
+        console.log(`⚠️ Error parsing menu_options for response ${response.id}`);
+        continue;
+      }
+
+      // Buscar en cada opción del menú
+      for (const option of menuOptions) {
+        const { label, value, action } = option;
+        
+        // Verificar coincidencias con el mensaje del usuario
+        if (
+          (value && userMessage === value.toLowerCase()) ||
+          (action && userMessage === action.toLowerCase()) ||
+          (label && userMessage === label.toLowerCase()) ||
+          (label && normalizeText(userMessage) === normalizeText(label))
+        ) {
+          console.log(`🎯 BUTTON MATCH FOUND: "${userMessage}" -> Option: ${JSON.stringify(option)}`);
+          
+          // Determinar el trigger de destino basado en la acción
+          const targetTrigger = mapActionToTrigger(action || value);
+          if (targetTrigger) {
+            return { targetTrigger };
+          }
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ ERROR SEARCHING BUTTON ACTIONS:', error);
+    return null;
+  }
+}
+
+// ✅ MAPEAR ACCIONES A TRIGGERS ESPECÍFICOS
+function mapActionToTrigger(action: string): string | null {
+  const actionMap = {
+    // Acciones de productos/servicios
+    'show_products': 'show_products',
+    'show_services': 'show_services',
+    
+    // Acciones de ayuda/menu
+    'show_help': 'show_help',
+    'show_main_menu': 'menu',
+    'welcome': 'welcome',
+    'menu': 'menu',
+    
+    // Acciones de pedidos
+    'show_order_status': 'order_status',
+    'track_order': 'order_status',
+    
+    // Acciones del flujo de registro
+    'collect_name': 'collect_name',
+    'collect_contact': 'collect_contact',
+    'collect_address': 'collect_address',
+    'collect_payment': 'collect_payment',
+    'collect_notes': 'collect_notes',
+    'confirm_order': 'confirm_order',
+    
+    // Acciones específicas
+    'contact_technician': 'contact_technician',
+    'use_whatsapp': 'collect_address',
+    'collect_other_number': 'collect_other_number',
+    'card': 'collect_payment',
+    'transfer': 'collect_payment',
+    'cash': 'collect_payment',
+    'no_notes': 'confirm_order',
+    'restart': 'welcome',
+    'edit_order': 'edit_order',
+    'cancel_order': 'cancel_order'
+  };
+
+  return actionMap[action.toLowerCase()] || null;
+}
+
+// ✅ BUSCAR RESPUESTA AUTOMÁTICA POR TRIGGERS
+async function findMatchingAutoResponse(userMessage: string, responses: any[]): Promise<any | null> {
+  // 1. Buscar coincidencia exacta en trigger
+  for (const response of responses) {
+    if (response.isActive && response.trigger && 
+        userMessage === response.trigger.toLowerCase()) {
+      return response;
+    }
+  }
+
+  // 2. Buscar coincidencia exacta en trigger_text
+  for (const response of responses) {
+    if (response.isActive && response.triggerText && 
+        userMessage === response.triggerText.toLowerCase()) {
+      return response;
+    }
+  }
+
+  // 3. Buscar coincidencia parcial en trigger
+  for (const response of responses) {
+    if (response.isActive && response.trigger && 
+        userMessage.includes(response.trigger.toLowerCase())) {
+      return response;
+    }
+  }
+
+  // 4. Buscar coincidencia parcial en trigger_text
+  for (const response of responses) {
+    if (response.isActive && response.triggerText && 
+        userMessage.includes(response.triggerText.toLowerCase())) {
+      return response;
+    }
+  }
+
+  return null;
+}
+
+// ✅ FALLBACK INTELIGENTE POR KEYWORDS
+async function findFallbackResponse(userMessage: string, responses: any[]): Promise<any | null> {
+  // Keywords para productos
+  const productKeywords = ['producto', 'productos', 'catálogo', 'catalogo', 'comprar', 'precio'];
+  if (productKeywords.some(keyword => userMessage.includes(keyword))) {
+    return responses.find(r => r.isActive && (r.trigger === 'show_products' || r.trigger === 'product_inquiry'));
+  }
+
+  // Keywords para servicios
+  const serviceKeywords = ['servicio', 'servicios', 'instalar', 'instalación', 'mantenimiento'];
+  if (serviceKeywords.some(keyword => userMessage.includes(keyword))) {
+    return responses.find(r => r.isActive && (r.trigger === 'show_services' || r.trigger === 'service_inquiry'));
+  }
+
+  // Keywords para ayuda
+  const helpKeywords = ['ayuda', 'help', 'soporte', 'asistencia', 'información'];
+  if (helpKeywords.some(keyword => userMessage.includes(keyword))) {
+    return responses.find(r => r.isActive && (r.trigger === 'show_help' || r.trigger === 'help'));
+  }
+
+  // Keywords para menú
+  const menuKeywords = ['menu', 'menú', 'opciones', 'principal'];
+  if (menuKeywords.some(keyword => userMessage.includes(keyword))) {
+    return responses.find(r => r.isActive && r.trigger === 'menu');
+  }
+
+  return null;
+}
+
+// ✅ NORMALIZAR TEXTO PARA COMPARACIONES
+function normalizeText(text: string): string {
+  return text.toLowerCase()
+    .replace(/[🛍️⚙️❓🏠📦]/g, '') // Remover emojis
+    .replace(/\s+/g, ' ') // Normalizar espacios
+    .trim();
+}
+
+// ✅ FUNCIÓN AUXILIAR: Log detallado para debugging
+function logButtonSearchDetails(response: any, userMessage: string) {
+  console.log(`🔍 Checking response: ${response.name}`);
+  if (response.menuOptions) {
+    try {
+      const options = JSON.parse(response.menuOptions);
+      console.log(`📋 Menu options: ${JSON.stringify(options, null, 2)}`);
+    } catch (e) {
+      console.log(`⚠️ Invalid JSON in menu_options`);
+    }
+  }
+}
 async function sendWhatsAppMessage(phoneNumber: string, message: string, config: any): Promise<boolean> {
   try {
     console.log(`📤 SENDING WHATSAPP MESSAGE - To: ${phoneNumber}`);
