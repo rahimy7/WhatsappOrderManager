@@ -4,7 +4,10 @@ import { createTenantStorage } from './tenant-storage.js';
 import { createTenantStorageForStore } from './tenant-storage.js';
 import { IntelligentWelcomeService, OrderTrackingService } from './order-tracking';
 
+import { resilientDb } from './db'; // Tu nuevo db con ResilientDatabase
+import { ImprovedWebhookHandler } from '../webhook/improved-handler';
 
+const webhookHandler = new ImprovedWebhookHandler(resilientDb);
 const storageFactory = StorageFactory.getInstance();
 const masterStorage = storageFactory.getMasterStorage();
 
@@ -1063,52 +1066,225 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
   }
 }
 
-export async function processWhatsAppMessage(webhookData: any) {
+export async function processWhatsAppMessage(webhookData: any): Promise<void> {
   try {
     console.log('📨 WEBHOOK DATA RECEIVED:', JSON.stringify(webhookData, null, 2));
     
+    // 🛡️ USAR EL HANDLER RESILIENTE COMO CAPA PRINCIPAL
+    await webhookHandler.processWebhook(webhookData);
+    
+    console.log('✅ Webhook procesado exitosamente con handler resiliente');
+    
+  } catch (error: any) {
+    console.error('💥 Error crítico en processWhatsAppMessage:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack?.split('\n').slice(0, 5)
+    });
+    
+    // 🚨 Enviar alerta crítica si está configurada
+    if (process.env.ALERT_WEBHOOK_URL) {
+      try {
+        await fetch(process.env.ALERT_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'critical_webhook_error',
+            error: error.message,
+            code: error.code,
+            timestamp: new Date().toISOString(),
+            webhookSize: JSON.stringify(webhookData).length
+          })
+        });
+      } catch (alertError) {
+        console.error('❌ Error enviando alerta crítica:', alertError);
+      }
+    }
+    
+    // 📝 Log crítico en base de datos como último recurso
+    try {
+      const { getMasterStorage } = await import('./storage/index.js');
+      const masterStorage = getMasterStorage();
+      await masterStorage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: 'CRITICAL_ERROR',
+        messageContent: `Critical webhook error: ${error.message}`,
+        status: 'failed',
+        errorMessage: `Code: ${error.code}, Message: ${error.message}`,
+        rawData: JSON.stringify({ error: error.message, webhookData }),
+        storeId: 0
+      });
+    } catch (logError) {
+      console.error('💀 No se pudo registrar error crítico:', logError);
+    }
+    
+    // Re-lanzar para que Express maneje la respuesta HTTP
+    throw error;
+  }
+}
+
+
+
+/**
+ * 🔄 VERSIÓN RESILIENTE del manejo de flujo de registro
+ */
+
+
+
+/**
+ * 🎯 Verifica si un mensaje coincide con una auto-respuesta
+ */
+function matchesAutoResponse(messageText: string, autoResponse: any): boolean {
+  const text = messageText.toLowerCase().trim();
+  const trigger = autoResponse.trigger?.toLowerCase();
+  const triggerText = autoResponse.triggerText?.toLowerCase();
+  
+  // Coincidencia por trigger
+  if (trigger && text.includes(trigger)) {
+    return true;
+  }
+  
+  // Coincidencia por trigger text
+  if (triggerText && text.includes(triggerText)) {
+    return true;
+  }
+  
+  // Triggers especiales
+  if (trigger === 'welcome' && (text === 'hola' || text === 'hello' || text === 'hi')) {
+    return true;
+  }
+  
+  if (trigger === 'menu' && (text === 'menu' || text === 'menú' || text === 'opciones')) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * 📤 VERSIÓN RESILIENTE del envío de auto-respuestas
+ */
+async function sendAutoResponseResilient(
+  phoneNumber: string, 
+  autoResponse: any, 
+  storeMapping: any
+): Promise<void> {
+  try {
+    console.log(`📤 Sending auto-response: ${autoResponse.name} to ${phoneNumber}`);
+    
+    if (autoResponse.isInteractive && autoResponse.interactiveData) {
+      // Mensaje interactivo
+      await sendInteractiveMessageResilient(
+        phoneNumber, 
+        autoResponse.messageText || autoResponse.message,
+        autoResponse.interactiveData.buttons || [],
+        storeMapping
+      );
+    } else {
+      // Mensaje simple
+      await sendWhatsAppMessageResilient(
+        phoneNumber,
+        autoResponse.messageText || autoResponse.message,
+        storeMapping
+      );
+    }
+    
+    console.log(`✅ Auto-response sent: ${autoResponse.name}`);
+    
+  } catch (error) {
+    console.error(`❌ Error sending auto-response ${autoResponse.name}:`, error);
+    throw error;
+  }
+}
+
+async function handleRegistrationFlowResilient(
+  customer: any,
+  messageText: string,
+  message: any,
+  registrationFlow: any,
+  storeId: number,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    console.log(`🔄 Processing registration flow step: ${registrationFlow.currentStep}`);
+    
+    // ✅ USAR DIRECTAMENTE tu función existente handleRegistrationFlow
+    // Esta función SÍ EXISTE en tu whatsapp-simple.ts (línea aproximada 2800+)
+    await handleRegistrationFlow(
+      customer,
+      messageText,
+      message,
+      registrationFlow,
+      storeId,
+      tenantStorage
+    );
+    
+    console.log(`✅ Registration flow step processed: ${registrationFlow.currentStep}`);
+    
+  } catch (error: any) {
+    console.error(`❌ Error in registration flow resilient:`, error);
+    
+    // 🚨 Enviar mensaje de error al cliente si falla el flujo
+    try {
+      const success = await sendWhatsAppMessage(
+        customer.phone,
+        "Lo siento, hubo un problema procesando tu solicitud. Por favor intenta nuevamente o contacta a soporte.",
+        { storeId }
+      );
+      if (!success) {
+        console.error('❌ Failed to send error message to customer');
+      }
+    } catch (sendError) {
+      console.error('❌ Error enviando mensaje de error:', sendError);
+    }
+    
+    throw error;
+  }
+}
+
+/**
+ * 🤖 VERSIÓN CORREGIDA del procesamiento de auto-respuestas
+ * Usa las funciones que realmente existen
+ */
+async function processAutoResponseResilient(
+  messageText: string,
+  customerPhone: string,
+  storeId: number,
+  tenantStorage: any,
+  storeMapping: any
+): Promise<void> {
+  try {
+    console.log(`🤖 PROCESSING AUTO-RESPONSES for message: "${messageText}"`);
+    
+    // 🔄 USAR TU FUNCIÓN EXISTENTE processAutoResponse
+    // Esta función YA EXISTE en tu whatsapp-simple.ts
+    await processAutoResponse(messageText, customerPhone, storeId, tenantStorage);
+    
+    console.log(`✅ Auto-response processing completed`);
+    
+  } catch (error: any) {
+    console.error('❌ Error in processAutoResponseResilient:', error);
+    throw error;
+  }
+}
+
+export async function processIncomingUserMessage(webhookData: any, storeMapping: any): Promise<void> {
+  try {
+    console.log('📱 Processing incoming user message with resilient handling');
+    
     const entry = webhookData.entry?.[0];
     if (!entry) {
-      console.log('❌ NO ENTRY FOUND in webhook data');
-      return;
+      throw new Error('NO ENTRY FOUND in webhook data');
     }
 
     const changes = entry.changes?.[0];
     if (!changes || changes.field !== 'messages') {
-      console.log('❌ NO MESSAGE CHANGES FOUND or field is not "messages"');
-      return;
+      throw new Error('NO MESSAGE CHANGES FOUND or field is not "messages"');
     }
 
     const value = changes.value;
     if (!value.metadata) {
-      console.log('❌ NO METADATA FOUND');
-      return;
-    }
-
-    const phoneNumberId = value.metadata.phone_number_id;
-    
-    // 🔍 BUSCAR TIENDA DINÁMICAMENTE (necesario para ambos tipos)
-    const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
-    
-    if (!storeMapping) {
-      console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
-      return;
-    }
-
-    const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
-
-    // ✅ CORRECCIÓN CRÍTICA: Distinguir entre mensajes de usuario y status de Meta
-    
-    // 1️⃣ PROCESAR STATUS DE MENSAJES (delivery, read, failed, etc.)
-    if (value.statuses && Array.isArray(value.statuses) && value.statuses.length > 0) {
-      console.log('📊 PROCESSING MESSAGE STATUSES');
-      
-      // Procesar cada status recibido
-      for (const status of value.statuses) {
-        await processMessageStatus(status, storeMapping, tenantStorage);
-      }
-      
-      return; // ✅ IMPORTANTE: Salir después de procesar statuses - NO activar auto-respuestas
+      throw new Error('NO METADATA FOUND');
     }
 
     // 2️⃣ PROCESAR MENSAJES DE USUARIOS
@@ -1129,48 +1305,73 @@ export async function processWhatsAppMessage(webhookData: any) {
       return;
     }
 
-    console.log(`📱 USER MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
+    console.log(`📱 USER MESSAGE RECEIVED - From: ${customerPhone}, Text: "${messageText}"`);
     console.log(`✅ PROCESSING USER MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
 
-    // 👤 PROCESAR CLIENTE
-    let customer = await tenantStorage.getCustomerByPhone(customerPhone);
+    // 🏪 OBTENER TENANT STORAGE CON MANEJO DE ERRORES
+    const { createTenantStorageForStore } = await import('./tenant-storage.js');
+    const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+
+    // 👤 PROCESAR CLIENTE CON RETRY
+    let customer = await resilientDb.executeWithRetry(
+      async (client) => {
+        return await tenantStorage.getCustomerByPhone(customerPhone);
+      },
+      `get customer ${customerPhone}`
+    );
     
     if (!customer) {
       console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
       
-      customer = await tenantStorage.createCustomer({
-        name: `Cliente ${customerPhone.slice(-4)}`,
-        phone: customerPhone,
-        storeId: storeMapping.storeId,
-        whatsappId: customerPhone,
-        address: null,
-        latitude: null,
-        longitude: null,
-        lastContact: new Date(),
-        registrationDate: new Date(),
-        totalOrders: 0,
-        totalSpent: "0.00",
-        isVip: false,
-        notes: 'Cliente creado automáticamente desde WhatsApp'
-      });
+      customer = await resilientDb.executeWithRetry(
+        async (client) => {
+          return await tenantStorage.createCustomer({
+            name: `Cliente ${customerPhone.slice(-4)}`,
+            phone: customerPhone,
+            storeId: storeMapping.storeId,
+            whatsappId: customerPhone,
+            address: null,
+            latitude: null,
+            longitude: null,
+            lastContact: new Date(),
+            registrationDate: new Date(),
+            totalOrders: 0,
+            totalSpent: "0.00",
+            isVip: false,
+            notes: 'Cliente creado automáticamente desde WhatsApp'
+          });
+        },
+        `create customer ${customerPhone}`
+      );
     }
 
-    // 📝 REGISTRAR LOG EN BASE DE DATOS
-    const masterStorage = getMasterStorage();
-    await masterStorage.addWhatsAppLog({
-      type: 'incoming',
-      phoneNumber: customerPhone,
-      messageContent: messageText,
-      messageId: messageId,
-      status: 'received',
-      rawData: JSON.stringify(webhookData),
-      storeId: storeMapping.storeId
-    });
+    // 📝 REGISTRAR LOG EN BASE DE DATOS CON RETRY
+    await resilientDb.executeWithRetry(
+      async (client) => {
+        const { getMasterStorage } = await import('./storage/index.js');
+        const masterStorage = getMasterStorage();
+        await masterStorage.addWhatsAppLog({
+          type: 'incoming',
+          phoneNumber: customerPhone,
+          messageContent: messageText,
+          messageId: messageId,
+          status: 'received',
+          rawData: JSON.stringify(webhookData),
+          storeId: storeMapping.storeId
+        });
+      },
+      `log incoming message ${messageId}`
+    );
 
     // ✅ VERIFICACIÓN CRÍTICA: Flujo activo PRIMERO
     console.log(`🔍 CHECKING REGISTRATION FLOW for phone: ${customerPhone}`);
     
-    const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
+    const registrationFlow = await resilientDb.executeWithRetry(
+      async (client) => {
+        return await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
+      },
+      `get registration flow ${customerPhone}`
+    );
     
     console.log(`🔍 Registration Flow Result:`, {
       exists: !!registrationFlow,
@@ -1184,20 +1385,145 @@ export async function processWhatsAppMessage(webhookData: any) {
         (!registrationFlow.expiresAt || new Date() <= registrationFlow.expiresAt)) {
       
       console.log(`🔄 CONTINUING REGISTRATION FLOW - Step: ${registrationFlow.currentStep}`);
-      await handleRegistrationFlow(customer, messageText, message, registrationFlow, storeMapping.storeId, tenantStorage);
+      
+      // 🔄 USAR TU FUNCIÓN EXISTENTE CON RETRY
+      await resilientDb.executeWithRetry(
+        async (client) => {
+          // ✅ LLAMAR DIRECTAMENTE A TU FUNCIÓN EXISTENTE
+          await handleRegistrationFlow(
+            customer, 
+            messageText, 
+            message, 
+            registrationFlow, 
+            storeMapping.storeId, 
+            tenantStorage
+          );
+        },
+        `handle registration flow ${customerPhone}`
+      );
+      
       return; // ✅ IMPORTANTE: Salir para evitar procesar auto-respuestas
     }
 
     // ✅ PROCESAR AUTO-RESPUESTAS SOLO SI NO HAY FLUJO ACTIVO
     console.log(`🤖 PROCESSING AUTO-RESPONSES`);
-    await processAutoResponse(messageText, customerPhone, storeMapping.storeId, tenantStorage);
+    
+    await resilientDb.executeWithRetry(
+      async (client) => {
+        // ✅ LLAMAR A TU FUNCIÓN EXISTENTE processAutoResponse
+        await processAutoResponse(
+          messageText, 
+          customerPhone, 
+          storeMapping.storeId, 
+          tenantStorage
+        );
+      },
+      `process auto-response ${customerPhone}`
+    );
 
   } catch (error: any) {
-    console.error('❌ ERROR PROCESSING WHATSAPP MESSAGE:', error);
-    console.error('Stack trace:', error.stack);
+    console.error('❌ ERROR in processIncomingUserMessage:', error);
+    throw error; // Re-lanzar para que ImprovedWebhookHandler lo maneje
   }
 }
 
+/**
+ * 📊 FUNCIÓN HELPER CORREGIDA - Procesa estados de mensaje
+ */
+export async function processMessageStatusUpdate(status: any, storeMapping: any): Promise<void> {
+  try {
+    console.log(`📊 Processing status update: ${status.status} for message ${status.id}`);
+    
+    // Usar tu función existente con retry
+    await resilientDb.executeWithRetry(
+      async (client) => {
+        const { createTenantStorageForStore } = await import('./tenant-storage.js');
+        const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+        
+        // ✅ LLAMAR A TU FUNCIÓN EXISTENTE processMessageStatus
+        await processMessageStatus(status, storeMapping, tenantStorage);
+      },
+      `process message status ${status.id}`
+    );
+    
+    console.log(`✅ Status update processed for message ${status.id}`);
+    
+  } catch (error: any) {
+    console.error('❌ Error in processMessageStatusUpdate:', error);
+    throw error;
+  }
+}
+
+/**
+ * 📤 VERSIÓN RESILIENTE del envío de mensajes de WhatsApp
+ */
+async function sendWhatsAppMessageResilient(
+  phoneNumber: string,
+  message: string,
+  storeMapping: any
+): Promise<void> {
+  return resilientDb.executeWithRetry(
+    async (client) => {
+      // ✅ USAR TU FUNCIÓN EXISTENTE sendWhatsAppMessage
+      const success = await sendWhatsAppMessage(phoneNumber, message, storeMapping);
+      if (!success) {
+        throw new Error('Failed to send WhatsApp message');
+      }
+    },
+    `send whatsapp message to ${phoneNumber}`
+  );
+}
+
+/**
+ * 🔘 VERSIÓN RESILIENTE del envío de mensajes interactivos  
+ */
+async function sendInteractiveMessageResilient(
+  phoneNumber: string,
+  messageText: string,
+  buttons: any[],
+  storeMapping: any
+): Promise<void> {
+  return resilientDb.executeWithRetry(
+    async (client) => {
+      // ✅ USAR TU FUNCIÓN EXISTENTE sendInteractiveMessage
+      await sendInteractiveMessage(phoneNumber, messageText, buttons, storeMapping);
+    },
+    `send interactive message to ${phoneNumber}`
+  );
+}
+
+
+export async function validateUpdatedWebhookProcessing(): Promise<boolean> {
+  try {
+    console.log('🧪 Validating updated webhook processing...');
+    
+    // Test 1: Handler resiliente
+    const health = await resilientDb.healthCheck();
+    if (!health.healthy) {
+      throw new Error('ResilientDatabase not healthy');
+    }
+    console.log('✅ ResilientDatabase health check passed');
+    
+    // Test 2: Verificar que las funciones requeridas existen
+    if (typeof handleRegistrationFlow !== 'function') {
+      throw new Error('handleRegistrationFlow function not found');
+    }
+    console.log('✅ handleRegistrationFlow function exists');
+    
+    if (typeof processAutoResponse !== 'function') {
+      throw new Error('processAutoResponse function not found');
+    }
+    console.log('✅ processAutoResponse function exists');
+    
+    console.log('✅ All required functions validated');
+    console.log('✅ Updated webhook processing validation completed');
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Validation failed:', error);
+    return false;
+  }
+}
 
 function detectUserAction(messageText: string): 'confirm' | 'modify' | 'cancel' | 'unknown' {
   const message = messageText.toLowerCase().trim();

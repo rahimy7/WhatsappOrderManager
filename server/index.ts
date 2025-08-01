@@ -20,7 +20,7 @@ import { authenticateToken } from './authMiddleware.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
-import setupCorsForRailway from './cors-config-railway.js';
+import setupCorsForRailway from '../cors-config-railway.js';
 import multer from 'multer';
 import fs from 'fs';
 import { SupabaseStorageManager } from './supabase-storage.js';

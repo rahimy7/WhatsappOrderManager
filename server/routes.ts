@@ -807,9 +807,26 @@ async function processWhatsAppMessage(value: any) {
   console.log('🎯 PROCESSWHATSAPPMESSAGE - Iniciando procesamiento');
   console.log('🚀 WEBHOOK RECEIVED - Function called successfully');
   
-  const { processWhatsAppMessageSimple } = await import('./whatsapp-simple.js');
-  await processWhatsAppMessageSimple(value);
-  return;
+  try {
+    // ✅ IMPORT DIRECTO con nombre correcto
+    const whatsappModule = await import('./whatsapp-simple.js');
+    
+    // Verificar qué función usar basado en lo que está disponible
+    if (whatsappModule.processWhatsAppMessage) {
+      await whatsappModule.processWhatsAppMessage(value);
+    } else if (whatsappModule.default) {
+      await whatsappModule.default(value);
+    } else {
+      console.error('❌ No se encontró función de procesamiento de WhatsApp');
+      throw new Error('WhatsApp processing function not found');
+    }
+    
+    console.log('✅ WhatsApp message processed successfully');
+    
+  } catch (error) {
+    console.error('❌ Error processing WhatsApp message:', error);
+    throw error;
+  }
 }
 
 // ================================
