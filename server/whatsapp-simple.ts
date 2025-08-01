@@ -500,7 +500,7 @@ async function processConfiguredAutoResponse(messageText: string, from: string, 
 
 
 // ======================================
-// FUNCIÓN AUXILIAR: sendWhatsAppMessageDirect
+// FUNCIÓN AUXILIAR: s   endWhatsAppMessageDirect
 // ======================================
 
 
