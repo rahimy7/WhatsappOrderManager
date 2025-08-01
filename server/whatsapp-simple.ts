@@ -2647,6 +2647,7 @@ async function sendSimpleMessage(phoneNumber: string, messageText: string, store
 // Agregar todas las demás funciones del código que me pasaste...
 
 export {
+  
   processLocationMessage,
   handleCollectAddressStep,
   formatLocationAddress,
@@ -2655,5 +2656,11 @@ export {
   calculateDeliveryCost,
   sendLocationRequest,
   type WhatsAppLocation,
-  type LocationData
+  type LocationData,
+   
+  sendInteractiveMessage,
+  isWelcomeMessage,
+  handleRegistrationFlow
 };
+
+export default processWhatsAppMessage;
