@@ -16,6 +16,7 @@ export const virtualStores = pgTable("virtual_stores", {
   logo: text("logo"), // URL del logo de la tienda
   domain: text("domain"), // Dominio personalizado opcional
   whatsappNumber: text("whatsapp_number"),
+  phoneNumberId: text("phone_number_id"),
   address: text("address"),
   timezone: text("timezone").default("America/Mexico_City"),
   currency: text("currency").default("MXN"),

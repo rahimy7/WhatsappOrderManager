@@ -2291,8 +2291,8 @@ apiRouter.post('/webhook', async (req, res) => {
   try {
     console.log('📥 Webhook received:', JSON.stringify(req.body, null, 2));
     
-    const { processWhatsAppMessage } = await import('./whatsapp-simple.js');
-await processWhatsAppMessage(req.body);
+    const { processWhatsAppMessageSafe } = await import('./whatsapp-simple.js');
+await processWhatsAppMessageSafe (req.body);
     
     res.status(200).send('OK');
   } catch (error) {
