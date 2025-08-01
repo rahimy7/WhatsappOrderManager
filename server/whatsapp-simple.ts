@@ -114,25 +114,24 @@ async function checkCustomerOrders(phoneNumber: string, tenantStorage: any, stor
   }
 }
 
-// 🔧 SISTEMA DINÁMICO DE AUTO-RESPUESTAS - whatsapp-simple.ts
-// ✅ CONSULTA LA BASE DE DATOS PARA DETERMINAR FLUJO CORRECTO
 
 async function processAutoResponse(messageText: string, phoneNumber: string, storeId: number, tenantStorage: any) {
   try {
     console.log(`🤖 PROCESSING AUTO-RESPONSE - Store ID: ${storeId}, Message: "${messageText}"`);
 
-    // ✅ VERIFICACIÓN: Asegurar que no hay flujo activo
+    // ✅ VERIFICACIÓN ADICIONAL: Asegurar que no hay flujo activo
     const activeFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
     if (activeFlow && !activeFlow.isCompleted && (!activeFlow.expiresAt || new Date() <= activeFlow.expiresAt)) {
-      console.log(`⚠️ ACTIVE FLOW DETECTED - Should not reach here`);
-      return;
+      console.log(`⚠️ ACTIVE FLOW DETECTED IN processAutoResponse - Should not reach here`);
+      return; // No procesar auto-respuesta si hay flujo activo
     }
 
-    const messageTextLower = messageText.toLowerCase().trim();
+    const messageTextLower = messageText.toLowerCase();
 
-    // ✅ PASO 1: Verificar órdenes pendientes del cliente
+    // Verificar órdenes pendientes del cliente - ✅ CORRECCIÓN
     const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
     if (customer) {
+      // ✅ Usar getAllOrders y filtrar por customerId
       const allOrders = await tenantStorage.getAllOrders();
       const customerOrders = allOrders.filter(order => order.customerId === customer.id);
       const pendingOrders = customerOrders.filter(order => 
@@ -141,228 +140,61 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
 
       if (pendingOrders.length > 0) {
         console.log(`📦 PENDING ORDERS FOUND: ${pendingOrders.length}`);
-        // [Mantener lógica de órdenes pendientes existente]
+        
+        // Mostrar información sobre órdenes pendientes
+        let pendingMessage = `🔔 **Tienes ${pendingOrders.length} pedido(s) en proceso:**\n\n`;
+        
+        for (const order of pendingOrders.slice(0, 3)) { // Mostrar máximo 3
+          pendingMessage += `📦 Orden #${order.orderNumber || order.id}\n`;
+          pendingMessage += `💰 Total: $${order.totalAmount}\n`;
+          pendingMessage += `📅 Fecha: ${order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}\n\n`;
+        }
+        
+        pendingMessage += `¿Qué deseas hacer?\n\n`;
+        pendingMessage += `🔍 **"Seguimiento"** - Ver estado del pedido\n`;
+        pendingMessage += `📞 **"Contactar"** - Hablar con un agente\n`;
+        pendingMessage += `🛒 **"Nuevo pedido"** - Realizar nueva compra`;
+
+        await sendWhatsAppMessageDirect(phoneNumber, pendingMessage, storeId);
         return;
       }
     }
 
-    // ✅ PASO 2: BUSCAR DINÁMICAMENTE EN MENU_OPTIONS DE AUTO-RESPUESTAS
-    const matchedByButton = await findButtonActionInDatabase(messageTextLower, storeId, tenantStorage);
-    if (matchedByButton) {
-      console.log(`✅ BUTTON ACTION FOUND IN DB: ${matchedByButton.targetTrigger}`);
-      await sendAutoResponseMessage(phoneNumber, matchedByButton.targetTrigger, storeId, tenantStorage);
-      return;
-    }
-
-    // ✅ PASO 3: Buscar por triggers directos (exactos primero)
+    // Procesar auto-respuestas normales (menú, catálogo, etc.)
     const responses = await tenantStorage.getAllAutoResponses();
-    let matchedResponse = await findMatchingAutoResponse(messageTextLower, responses);
+    let matchedResponse = null;
 
-    // ✅ PASO 4: Si hay respuesta matched, enviarla
-    if (matchedResponse) {
-      console.log(`✅ AUTO-RESPONSE MATCHED: ${matchedResponse.name}`);
-      await sendAutoResponseMessage(phoneNumber, matchedResponse.trigger, storeId, tenantStorage);
-      return;
-    }
-
-    // ✅ PASO 5: Fallback inteligente - buscar por keywords
-    const fallbackResponse = await findFallbackResponse(messageTextLower, responses);
-    if (fallbackResponse) {
-      console.log(`✅ FALLBACK RESPONSE: ${fallbackResponse.name}`);
-      await sendAutoResponseMessage(phoneNumber, fallbackResponse.trigger, storeId, tenantStorage);
-    } else {
-      // Solo en último caso, enviar bienvenida
-      console.log(`❌ NO MATCH FOUND - Sending welcome`);
-      await sendAutoResponseMessage(phoneNumber, 'welcome', storeId, tenantStorage);
-    }
-
-  } catch (error) {
-    console.error('❌ ERROR PROCESSING AUTO-RESPONSE:', error);
-    await sendWhatsAppMessageDirect(
-      phoneNumber,
-      "Disculpa, tuvimos un problema. ¿Podrías intentar de nuevo?",
-      storeId
-    );
-  }
-}
-
-// ✅ FUNCIÓN PRINCIPAL: Buscar acciones de botones en menu_options de la BD
-async function findButtonActionInDatabase(userMessage: string, storeId: number, tenantStorage: any): Promise<{targetTrigger: string} | null> {
-  try {
-    const responses = await tenantStorage.getAllAutoResponses();
-    
+    // Buscar respuesta exacta por trigger
     for (const response of responses) {
-      if (!response.isActive || !response.menuOptions) continue;
-      
-      let menuOptions;
-      try {
-        // Parse del JSON menu_options
-        menuOptions = typeof response.menuOptions === 'string' 
-          ? JSON.parse(response.menuOptions) 
-          : response.menuOptions;
-          
-        if (!Array.isArray(menuOptions)) continue;
-      } catch (parseError) {
-        console.log(`⚠️ Error parsing menu_options for response ${response.id}`);
-        continue;
-      }
-
-      // Buscar en cada opción del menú
-      for (const option of menuOptions) {
-        const { label, value, action } = option;
-        
-        // Verificar coincidencias con el mensaje del usuario
-        if (
-          (value && userMessage === value.toLowerCase()) ||
-          (action && userMessage === action.toLowerCase()) ||
-          (label && userMessage === label.toLowerCase()) ||
-          (label && normalizeText(userMessage) === normalizeText(label))
-        ) {
-          console.log(`🎯 BUTTON MATCH FOUND: "${userMessage}" -> Option: ${JSON.stringify(option)}`);
-          
-          // Determinar el trigger de destino basado en la acción
-          const targetTrigger = mapActionToTrigger(action || value);
-          if (targetTrigger) {
-            return { targetTrigger };
-          }
-        }
+      if (response.isActive && response.trigger && 
+          messageTextLower.includes(response.trigger.toLowerCase())) {
+        matchedResponse = response;
+        break;
       }
     }
-    
-    return null;
+
+    // Si no hay coincidencia exacta, usar respuesta de bienvenida por defecto
+    if (!matchedResponse) {
+      matchedResponse = responses.find(r => r.trigger === 'welcome' && r.isActive);
+    }
+
+    if (matchedResponse) {
+      console.log(`✅ MATCHED AUTO-RESPONSE: ${matchedResponse.name}`);
+      await sendAutoResponseMessage(phoneNumber, matchedResponse.trigger, storeId, tenantStorage);
+    } else {
+      console.log(`❌ NO AUTO-RESPONSE MATCHED`);
+      await sendWhatsAppMessageDirect(
+        phoneNumber,
+        "Hola! ¿En qué puedo ayudarte hoy?",
+        storeId
+      );
+    }
+
   } catch (error) {
-    console.error('❌ ERROR SEARCHING BUTTON ACTIONS:', error);
-    return null;
+    console.error('❌ ERROR in processAutoResponse:', error);
   }
 }
 
-// ✅ MAPEAR ACCIONES A TRIGGERS ESPECÍFICOS
-function mapActionToTrigger(action: string): string | null {
-  const actionMap = {
-    // Acciones de productos/servicios
-    'show_products': 'show_products',
-    'show_services': 'show_services',
-    
-    // Acciones de ayuda/menu
-    'show_help': 'show_help',
-    'show_main_menu': 'menu',
-    'welcome': 'welcome',
-    'menu': 'menu',
-    
-    // Acciones de pedidos
-    'show_order_status': 'order_status',
-    'track_order': 'order_status',
-    
-    // Acciones del flujo de registro
-    'collect_name': 'collect_name',
-    'collect_contact': 'collect_contact',
-    'collect_address': 'collect_address',
-    'collect_payment': 'collect_payment',
-    'collect_notes': 'collect_notes',
-    'confirm_order': 'confirm_order',
-    
-    // Acciones específicas
-    'contact_technician': 'contact_technician',
-    'use_whatsapp': 'collect_address',
-    'collect_other_number': 'collect_other_number',
-    'card': 'collect_payment',
-    'transfer': 'collect_payment',
-    'cash': 'collect_payment',
-    'no_notes': 'confirm_order',
-    'restart': 'welcome',
-    'edit_order': 'edit_order',
-    'cancel_order': 'cancel_order'
-  };
-
-  return actionMap[action.toLowerCase()] || null;
-}
-
-// ✅ BUSCAR RESPUESTA AUTOMÁTICA POR TRIGGERS
-async function findMatchingAutoResponse(userMessage: string, responses: any[]): Promise<any | null> {
-  // 1. Buscar coincidencia exacta en trigger
-  for (const response of responses) {
-    if (response.isActive && response.trigger && 
-        userMessage === response.trigger.toLowerCase()) {
-      return response;
-    }
-  }
-
-  // 2. Buscar coincidencia exacta en trigger_text
-  for (const response of responses) {
-    if (response.isActive && response.triggerText && 
-        userMessage === response.triggerText.toLowerCase()) {
-      return response;
-    }
-  }
-
-  // 3. Buscar coincidencia parcial en trigger
-  for (const response of responses) {
-    if (response.isActive && response.trigger && 
-        userMessage.includes(response.trigger.toLowerCase())) {
-      return response;
-    }
-  }
-
-  // 4. Buscar coincidencia parcial en trigger_text
-  for (const response of responses) {
-    if (response.isActive && response.triggerText && 
-        userMessage.includes(response.triggerText.toLowerCase())) {
-      return response;
-    }
-  }
-
-  return null;
-}
-
-// ✅ FALLBACK INTELIGENTE POR KEYWORDS
-async function findFallbackResponse(userMessage: string, responses: any[]): Promise<any | null> {
-  // Keywords para productos
-  const productKeywords = ['producto', 'productos', 'catálogo', 'catalogo', 'comprar', 'precio'];
-  if (productKeywords.some(keyword => userMessage.includes(keyword))) {
-    return responses.find(r => r.isActive && (r.trigger === 'show_products' || r.trigger === 'product_inquiry'));
-  }
-
-  // Keywords para servicios
-  const serviceKeywords = ['servicio', 'servicios', 'instalar', 'instalación', 'mantenimiento'];
-  if (serviceKeywords.some(keyword => userMessage.includes(keyword))) {
-    return responses.find(r => r.isActive && (r.trigger === 'show_services' || r.trigger === 'service_inquiry'));
-  }
-
-  // Keywords para ayuda
-  const helpKeywords = ['ayuda', 'help', 'soporte', 'asistencia', 'información'];
-  if (helpKeywords.some(keyword => userMessage.includes(keyword))) {
-    return responses.find(r => r.isActive && (r.trigger === 'show_help' || r.trigger === 'help'));
-  }
-
-  // Keywords para menú
-  const menuKeywords = ['menu', 'menú', 'opciones', 'principal'];
-  if (menuKeywords.some(keyword => userMessage.includes(keyword))) {
-    return responses.find(r => r.isActive && r.trigger === 'menu');
-  }
-
-  return null;
-}
-
-// ✅ NORMALIZAR TEXTO PARA COMPARACIONES
-function normalizeText(text: string): string {
-  return text.toLowerCase()
-    .replace(/[🛍️⚙️❓🏠📦]/g, '') // Remover emojis
-    .replace(/\s+/g, ' ') // Normalizar espacios
-    .trim();
-}
-
-// ✅ FUNCIÓN AUXILIAR: Log detallado para debugging
-function logButtonSearchDetails(response: any, userMessage: string) {
-  console.log(`🔍 Checking response: ${response.name}`);
-  if (response.menuOptions) {
-    try {
-      const options = JSON.parse(response.menuOptions);
-      console.log(`📋 Menu options: ${JSON.stringify(options, null, 2)}`);
-    } catch (e) {
-      console.log(`⚠️ Invalid JSON in menu_options`);
-    }
-  }
-}
 async function sendWhatsAppMessage(phoneNumber: string, message: string, config: any): Promise<boolean> {
   try {
     console.log(`📤 SENDING WHATSAPP MESSAGE - To: ${phoneNumber}`);
@@ -1231,7 +1063,6 @@ Nuestro equipo se pondrá en contacto contigo en las próximas 2 horas para:
   }
 }
 
-// 🔧 CORRECCIÓN DEL PROCESAMIENTO DE WEBHOOK
 export async function processWhatsAppMessage(webhookData: any) {
   try {
     console.log('📨 WEBHOOK DATA RECEIVED:', JSON.stringify(webhookData, null, 2));
@@ -1249,185 +1080,139 @@ export async function processWhatsAppMessage(webhookData: any) {
     }
 
     const value = changes.value;
-    
-    // ✅ NUEVA VALIDACIÓN: Verificar si hay metadata
-    if (!value.metadata) {
-      console.log('❌ NO METADATA FOUND');
+    if (!value.messages || !value.metadata) {
+      console.log('❌ NO MESSAGES OR METADATA FOUND');
       return;
     }
 
     const phoneNumberId = value.metadata.phone_number_id;
+    const message = value.messages[0];
+    const customerPhone = message.from;
+    const messageText = message.text?.body || '';
+    const messageId = message.id;
 
-    // ✅ NUEVA LÓGICA: Manejar diferentes tipos de webhook
+    console.log(`📱 MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
+
+    // 🔍 BUSCAR TIENDA DINÁMICAMENTE
+    const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
     
-    // 1. MENSAJES ENTRANTES (de usuarios)
-    if (value.messages && value.messages.length > 0) {
-      console.log('📱 PROCESSING INCOMING MESSAGE');
+    if (!storeMapping) {
+      console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
+      return;
+    }
+
+    console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
+
+    // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
+    const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+
+    // 👤 PROCESAR CLIENTE
+    let customer = await tenantStorage.getCustomerByPhone(customerPhone);
+    
+    if (!customer) {
+      console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
       
-      const message = value.messages[0];
-      const customerPhone = message.from;
-      const messageText = message.text?.body || '';
-      const messageId = message.id;
-
-      console.log(`📱 MESSAGE RECEIVED - From: ${customerPhone}, PhoneNumberId: ${phoneNumberId}, Text: "${messageText}"`);
-
-      // 🔍 BUSCAR TIENDA DINÁMICAMENTE
-      const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
-      
-      if (!storeMapping) {
-        console.log(`❌ STORE NOT FOUND - No store configured for phoneNumberId: ${phoneNumberId}`);
-        return;
-      }
-
-      console.log(`✅ PROCESSING MESSAGE - Store: ${storeMapping.storeName} (ID: ${storeMapping.storeId})`);
-
-      // 🔄 CREAR STORAGE ESPECÍFICO DE LA TIENDA
-      const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
-
-      // 👤 PROCESAR CLIENTE
-      let customer = await tenantStorage.getCustomerByPhone(customerPhone);
-      
-      if (!customer) {
-        console.log(`👤 CREATING NEW CUSTOMER - Phone: ${customerPhone}`);
-        
-        customer = await tenantStorage.createCustomer({
-          name: `Cliente ${customerPhone.slice(-4)}`,
-          phone: customerPhone,
-          storeId: storeMapping.storeId,
-          whatsappId: customerPhone,
-          address: null,
-          latitude: null,
-          longitude: null,
-          lastContact: new Date(),
-          registrationDate: new Date(),
-          totalOrders: 0,
-          totalSpent: "0.00",
-          isVip: false,
-          notes: 'Cliente creado automáticamente desde WhatsApp'
-        });
-      }
-
-      // 📝 REGISTRAR LOG EN BASE DE DATOS
-      const masterStorage = getMasterStorage();
-      await masterStorage.addWhatsAppLog({
-        type: 'incoming',
-        phoneNumber: customerPhone,
-        messageContent: messageText,
-        messageId: messageId,
-        status: 'received',
-        rawData: JSON.stringify(webhookData),
-        storeId: storeMapping.storeId
+      customer = await tenantStorage.createCustomer({
+        name: `Cliente ${customerPhone.slice(-4)}`,
+        phone: customerPhone,
+        storeId: storeMapping.storeId,
+        whatsappId: customerPhone,
+        address: null,
+        latitude: null,
+        longitude: null,
+        lastContact: new Date(),
+        registrationDate: new Date(),
+        totalOrders: 0,
+        totalSpent: "0.00",
+        isVip: false,
+        notes: 'Cliente creado automáticamente desde WhatsApp'
       });
+    }
 
-      // ✅ VERIFICACIÓN CRÍTICA: Flujo activo PRIMERO
-      console.log(`🔍 CHECKING REGISTRATION FLOW for phone: ${customerPhone}`);
-      
-      const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
-      
-      console.log(`🔍 Registration Flow Result:`, {
-        exists: !!registrationFlow,
-        isCompleted: registrationFlow?.isCompleted,
-        currentStep: registrationFlow?.currentStep,
-        orderId: registrationFlow?.orderId,
-        customerId: registrationFlow?.customerId,
-        expiresAt: registrationFlow?.expiresAt,
-        hasExpired: registrationFlow?.expiresAt ? new Date() > registrationFlow.expiresAt : false
-      });
-      
-      // ✅ VERIFICACIÓN: Flujo activo y no expirado
-      if (registrationFlow && 
-          !registrationFlow.isCompleted && 
-          (!registrationFlow.expiresAt || new Date() <= registrationFlow.expiresAt)) {
-        
-        console.log(`🔄 ACTIVE REGISTRATION FLOW CONFIRMED - Processing step: ${registrationFlow.currentStep}`);
-        
-        await handleRegistrationFlow(
-          customer,
-          messageText,
-          message,
-          registrationFlow,
-          storeMapping.storeId,
-          tenantStorage
-        );
-        
-        console.log(`✅ REGISTRATION FLOW PROCESSED - Exiting without auto-response processing`);
-        return;
-      }
+    // 📝 REGISTRAR LOG EN BASE DE DATOS
+    const masterStorage = getMasterStorage();
+    await masterStorage.addWhatsAppLog({
+      type: 'incoming',
+      phoneNumber: customerPhone,
+      messageContent: messageText,
+      messageId: messageId,
+      status: 'received',
+      rawData: JSON.stringify(webhookData)
+    });
 
-      // ✅ LIMPIAR FLUJOS EXPIRADOS
-      if (registrationFlow && registrationFlow.expiresAt && new Date() > registrationFlow.expiresAt) {
-        console.log(`🧹 CLEANING EXPIRED FLOW for ${customerPhone}`);
-        await tenantStorage.deleteRegistrationFlowByPhone(customerPhone);
-      }
-
-      // 🤖 PROCESAR AUTO-RESPUESTAS DINÁMICAMENTE
-      console.log(`🤖 NO ACTIVE FLOW - Processing auto-response for message: "${messageText}"`);
+    // ✅ VERIFICACIÓN CRÍTICA MEJORADA: Flujo activo PRIMERO
+    console.log(`🔍 CHECKING REGISTRATION FLOW for phone: ${customerPhone}`);
+    
+    const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
+    
+    console.log(`🔍 Registration Flow Result:`, {
+      exists: !!registrationFlow,
+      isCompleted: registrationFlow?.isCompleted,
+      currentStep: registrationFlow?.currentStep,
+      orderId: registrationFlow?.orderId,
+      customerId: registrationFlow?.customerId,
+      expiresAt: registrationFlow?.expiresAt,
+      hasExpired: registrationFlow?.expiresAt ? new Date() > registrationFlow.expiresAt : false
+    });
+    
+    // ✅ VERIFICACIÓN MEJORADA: Flujo activo y no expirado
+    if (registrationFlow && 
+        !registrationFlow.isCompleted && 
+        (!registrationFlow.expiresAt || new Date() <= registrationFlow.expiresAt)) {
       
-      // ✅ USAR TU SISTEMA DINÁMICO
-      await processAutoResponse(messageText, customerPhone, storeMapping.storeId, tenantStorage);
-
-      console.log(`✅ MESSAGE PROCESSED SUCCESSFULLY - Store: ${storeMapping.storeName}`);
+      console.log(`🔄 ACTIVE REGISTRATION FLOW CONFIRMED - Processing step: ${registrationFlow.currentStep}`);
+      
+      // ✅ IMPORTANTE: Procesar flujo de registro y RETORNAR inmediatamente
+      await handleRegistrationFlow(
+        customer,
+        messageText,
+        message,
+        registrationFlow,
+        storeMapping.storeId,
+        tenantStorage
+      );
+      
+      // ✅ CRÍTICO: RETORNAR AQUÍ para evitar procesar auto-respuestas
+      console.log(`✅ REGISTRATION FLOW PROCESSED - Exiting without auto-response processing`);
       return;
     }
 
-    // 2. ESTADOS DE MENSAJES (confirmaciones de entrega, lectura, etc.)
-    if (value.statuses && value.statuses.length > 0) {
-      console.log('📊 PROCESSING MESSAGE STATUS UPDATE');
-      
-      const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
-      if (!storeMapping) {
-        console.log(`❌ STORE NOT FOUND for status update - phoneNumberId: ${phoneNumberId}`);
-        return;
-      }
+    // ✅ LIMPIAR FLUJOS EXPIRADOS ANTES DE CONTINUAR
+    if (registrationFlow && registrationFlow.expiresAt && new Date() > registrationFlow.expiresAt) {
+      console.log(`🧹 CLEANING EXPIRED FLOW for ${customerPhone}`);
+      await tenantStorage.deleteRegistrationFlowByPhone(customerPhone);
+    }
 
-      const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
+    // 🔄 Solo procesar auto-respuestas si NO hay flujo activo
+    console.log(`🤖 NO ACTIVE FLOW - Processing auto-response for message: "${messageText}"`);
+    
+    // Verificar si es un mensaje de bienvenida
+    if (isWelcomeMessage(messageText)) {
+      const response = await handleIntelligentWelcome(customerPhone, tenantStorage, storeMapping.storeId);
       
-      for (const status of value.statuses) {
-        await processMessageStatus(status, storeMapping, tenantStorage);
-      }
-      
-      console.log(`✅ STATUS UPDATES PROCESSED - Store: ${storeMapping.storeName}`);
+      await sendInteractiveMessage(customerPhone, response.message, JSON.parse(response.menuOptions), storeMapping);
+      return;
+    }
+    
+    // Manejar seguimiento de órdenes
+    if (messageText === 'track_orders' || messageText.includes('seguimiento')) {
+      await handleOrderTracking(customerPhone, storeMapping, tenantStorage);
+      return;
+    }
+    
+    // Manejar selección de orden específica
+    if (messageText.startsWith('order_')) {
+      await handleOrderSelection(messageText, customerPhone, storeMapping, tenantStorage);
       return;
     }
 
-    // 3. ERRORES DE WEBHOOK
-    if (value.errors && value.errors.length > 0) {
-      console.log('💥 PROCESSING WEBHOOK ERRORS');
-      
-      const storeMapping = await findStoreByPhoneNumberId(phoneNumberId);
-      if (storeMapping) {
-        const tenantStorage = await createTenantStorageForStore(storeMapping.storeId);
-        
-        for (const error of value.errors) {
-          await processWebhookError(error, storeMapping, tenantStorage);
-        }
-      }
-      
-      console.log(`✅ ERRORS PROCESSED`);
-      return;
-    }
+    // Procesar auto-respuestas configuradas
+    await processConfiguredAutoResponse(messageText, customerPhone, customer, tenantStorage, storeMapping);
 
-    // 4. NINGÚN TIPO RECONOCIDO
-    console.log('⚠️ UNKNOWN WEBHOOK TYPE - No messages, statuses, or errors found');
-    console.log('📋 VALUE STRUCTURE:', Object.keys(value));
+    console.log(`✅ MESSAGE PROCESSED SUCCESSFULLY - Store: ${storeMapping.storeName}`);
 
   } catch (error) {
     console.error('❌ ERROR PROCESSING WHATSAPP MESSAGE:', error);
-    
-    // Log error usando master storage
-    try {
-      const masterStorage = getMasterStorage();
-      await masterStorage.addWhatsAppLog({
-        type: 'error',
-        phoneNumber: 'WEBHOOK_ERROR',
-        messageContent: 'Error procesando webhook de WhatsApp',
-        status: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        rawData: JSON.stringify({ webhookData, error: error instanceof Error ? error.stack : error })
-      });
-    } catch (logError) {
-      console.error('❌ ERROR LOGGING WEBHOOK ERROR:', logError);
-    }
   }
 }
 
