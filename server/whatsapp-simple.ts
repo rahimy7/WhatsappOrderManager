@@ -3698,28 +3698,24 @@ async function validateCustomerOrdersEarly(
     const messageAction = detectOrderActionMessage(messageText);
     console.log(`🔍 MESSAGE ACTION DETECTED:`, messageAction);
     
-    // 4. Manejar mensajes de bienvenida con órdenes pendientes
+    // 4. ✅ CORREGIDO: Manejar acciones específicas PRIMERO
+    if (messageAction.isOrderAction) {
+      console.log(`🎯 PROCESSING ORDER ACTION: ${messageAction.action}`);
+      await handleSpecificOrderAction(customer, messageAction, pendingOrders, storeId, tenantStorage);
+      return { handled: true };
+    }
+    
+    // 5. ✅ CORREGIDO: Solo si NO es acción específica Y es mensaje de bienvenida
     if (isWelcomeOrGeneralMessage(messageText)) {
       console.log(`👋 WELCOME MESSAGE WITH PENDING ORDERS`);
       await sendPendingOrdersWelcomeMessage(customer, pendingOrders, storeId);
       return { handled: true };
     }
     
-    // 5. Manejar acciones específicas de órdenes
-    if (messageAction.isOrderAction) {
-      console.log(`🎯 ORDER ACTION DETECTED: ${messageAction.action}`);
-      await handleSpecificOrderAction(customer, messageAction, pendingOrders, storeId, tenantStorage);
-      return { handled: true };
-    }
-    
-    // 6. Para otros mensajes, mostrar contexto de órdenes pendientes
-    if (pendingOrders.length > 0) {
-      console.log(`💡 SHOWING ORDER CONTEXT FOR NON-ORDER MESSAGE`);
-      await sendOrderContextMessage(customer, pendingOrders, messageText, storeId);
-      return { handled: true };
-    }
-    
-    return { handled: false };
+    // 6. Para otros mensajes, mostrar contexto de órdenes pendientes pero continuar flujo
+    console.log(`💡 SHOWING ORDER CONTEXT FOR NON-ORDER MESSAGE`);
+    await sendOrderContextMessage(customer, pendingOrders, messageText, storeId);
+    return { handled: true };
     
   } catch (error) {
     console.error('❌ Error in validateCustomerOrdersEarly:', error);
@@ -3727,56 +3723,7 @@ async function validateCustomerOrdersEarly(
   }
 }
 
-/**
- * 🔍 Detectar si el mensaje es sobre órdenes
- */
-function detectOrderActionMessage(messageText: string): { 
-  isOrderAction: boolean; 
-  action: string; 
-  orderNumber?: string; 
-} {
-  const text = messageText.toLowerCase().trim();
-  
-  // Botones específicos del flujo (estos vienen de los botones interactivos)
-  if (text === 'track_orders' || text === 'ver_ordenes') {
-    return { isOrderAction: true, action: 'track_orders' };
-  }
-  
-  if (text === 'new_order' || text === 'nueva_orden') {
-    return { isOrderAction: true, action: 'new_order' };
-  }
-  
-  if (text === 'support' || text === 'soporte') {
-    return { isOrderAction: true, action: 'support' };
-  }
-  
-  // Texto relacionado con seguimiento
-  if (text.includes('seguimiento') || text.includes('rastrear') || text.includes('estado') || text.includes('tracking')) {
-    return { isOrderAction: true, action: 'track_orders' };
-  }
-  
-  // Búsqueda de orden específica
-  if ((text.includes('orden') || text.includes('order')) && (text.includes('#') || /\d+/.test(text))) {
-    const orderMatch = text.match(/(?:orden|order)[\s#]*(\d+)/);
-    return { 
-      isOrderAction: true, 
-      action: 'order_details',
-      orderNumber: orderMatch ? orderMatch[1] : undefined
-    };
-  }
-  
-  // Acciones de modificación
-  if (text.includes('modificar') || text.includes('cambiar') || text.includes('editar')) {
-    return { isOrderAction: true, action: 'modify_order' };
-  }
-  
-  // Cancelación
-  if (text.includes('cancelar')) {
-    return { isOrderAction: true, action: 'cancel_order' };
-  }
-  
-  return { isOrderAction: false, action: 'none' };
-}
+
 
 /**
  * 👋 Verificar si es mensaje de bienvenida
@@ -3790,7 +3737,13 @@ function isWelcomeOrGeneralMessage(messageText: string): boolean {
     'buen día', 'qué tal', 'como estas', 'cómo estás', 'buenas'
   ];
   
-  return welcomePatterns.some(pattern => text.includes(pattern)) || text.length <= 15;
+  // Es mensaje de bienvenida si:
+  // 1. Contiene palabras de saludo
+  // 2. Es muy corto (probablemente saludo informal)
+  const isWelcome = welcomePatterns.some(pattern => text.includes(pattern)) || text.length <= 10;
+  
+  console.log(`👋 WELCOME CHECK: "${text}" = ${isWelcome}`);
+  return isWelcome;
 }
 
 /**
@@ -3801,11 +3754,11 @@ async function sendPendingOrdersWelcomeMessage(
   pendingOrders: any[],
   storeId: number
 ): Promise<void> {
+  const customerName = customer.name && customer.name !== customer.phone 
+    ? customer.name 
+    : 'Cliente';
+  
   try {
-    const customerName = customer.name && customer.name !== customer.phone 
-      ? customer.name 
-      : 'Cliente';
-    
     const orderCount = pendingOrders.length;
     const orderWord = orderCount === 1 ? 'orden' : 'órdenes';
     
@@ -3828,27 +3781,52 @@ async function sendPendingOrdersWelcomeMessage(
       welcomeMessage += `... y ${pendingOrders.length - 3} más\n`;
     }
     
-    welcomeMessage += `\n*¿Qué deseas hacer?*\n\n`;
-    welcomeMessage += `📦 Escribe "*seguimiento*" para ver el estado\n`;
-    welcomeMessage += `🛒 Escribe "*nuevo*" para hacer otro pedido\n`;
-    welcomeMessage += `💬 Escribe "*soporte*" para ayuda\n`;
+    welcomeMessage += `\n*¿Qué deseas hacer?*`;
     
-    // Enviar usando tu función existente
-    await sendWhatsAppMessageDirect(customer.phone, welcomeMessage, storeId);
+    // ✅ BOTONES INTERACTIVOS
+    const buttons = [
+      {
+        type: 'reply',
+        reply: {
+          id: 'track_orders',
+          title: '📦 Ver órdenes'
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'new_order',
+          title: '🛒 Nueva orden'
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'support',
+          title: '💬 Soporte'
+        }
+      }
+    ];
     
-    console.log(`✅ Pending orders welcome sent to ${customer.phone}`);
+    // ✅ USAR LA FUNCIÓN CORREGIDA
+    await sendWhatsAppMessageWithButtonsAlternative(customer.phone, welcomeMessage, buttons, storeId);
+    console.log(`✅ Pending orders welcome with buttons sent to ${customer.phone}`);
     
   } catch (error) {
-    console.error('❌ Error sending pending orders welcome:', error);
+    console.error('❌ Error sending pending orders welcome with buttons:', error);
     
-    // Fallback a mensaje simple
-    await sendWhatsAppMessageDirect(
-      customer.phone,
-      `¡Hola! Tienes ${pendingOrders.length} órdenes pendientes. Escribe "seguimiento" para verlas.`,
-      storeId
-    );
+    // Fallback manual
+    let fallbackMessage = `¡Hola ${customerName}! 👋\n\n`;
+    fallbackMessage += `Tienes ${pendingOrders.length} órdenes pendientes.\n\n`;
+    fallbackMessage += `1. 📦 Ver órdenes\n`;
+    fallbackMessage += `2. 🛒 Nueva orden\n`;
+    fallbackMessage += `3. 💬 Soporte\n\n`;
+    fallbackMessage += `💡 Responde con el número de la opción`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, fallbackMessage, storeId);
   }
 }
+
 
 /**
  * 🎯 Manejar acciones específicas de órdenes
@@ -3861,14 +3839,16 @@ async function handleSpecificOrderAction(
   tenantStorage: any
 ): Promise<void> {
   try {
-    console.log(`🎯 Handling order action: ${action.action}`);
+    console.log(`🎯 EXECUTING ORDER ACTION: ${action.action}`);
     
     switch (action.action) {
       case 'track_orders':
+        console.log(`📋 SHOWING ORDER TRACKING LIST`);
         await showOrderTrackingList(customer, pendingOrders, storeId);
         break;
         
       case 'order_details':
+        console.log(`📄 SHOWING ORDER DETAILS: ${action.orderNumber}`);
         if (action.orderNumber) {
           await showSpecificOrderDetails(customer, action.orderNumber, storeId, tenantStorage);
         } else {
@@ -3877,13 +3857,52 @@ async function handleSpecificOrderAction(
         break;
         
       case 'new_order':
+        console.log(`🛒 HANDLING NEW ORDER REQUEST`);
         await handleNewOrderRequest(customer, storeId);
         break;
         
       case 'support':
+        console.log(`💬 HANDLING SUPPORT REQUEST`);
         await handleSupportRequest(customer, pendingOrders, storeId);
         break;
         
+      // ✅ NUEVAS ACCIONES ESPECÍFICAS
+      case 'modify_specific_order':
+        console.log(`✏️ HANDLING SPECIFIC ORDER MODIFICATION: ${action.orderId}`);
+        await handleSpecificOrderModification(customer, action.orderId, storeId, tenantStorage);
+        break;
+        
+      case 'cancel_specific_order':
+        console.log(`❌ HANDLING SPECIFIC ORDER CANCELLATION: ${action.orderId}`);
+        await handleSpecificOrderCancellation(customer, action.orderId, storeId, tenantStorage);
+        break;
+        
+      case 'track_specific_order':
+        console.log(`🚚 HANDLING SPECIFIC ORDER TRACKING: ${action.orderId}`);
+        await handleSpecificOrderTracking(customer, action.orderId, storeId, tenantStorage);
+        break;
+        
+      case 'show_catalog':
+        console.log(`📖 SHOWING CATALOG`);
+        await handleShowCatalog(customer, storeId);
+        break;
+        
+      case 'text_order_mode':
+        console.log(`✍️ ENABLING TEXT ORDER MODE`);
+        await handleTextOrderMode(customer, storeId);
+        break;
+        
+      case 'agent_assistance':
+        console.log(`👤 REQUESTING AGENT ASSISTANCE`);
+        await handleAgentAssistance(customer, storeId);
+        break;
+        
+      case 'show_all_orders':
+        console.log(`📋 SHOWING ALL ORDERS`);
+        await showAllOrdersList(customer, pendingOrders, storeId);
+        break;
+        
+      // ✅ ACCIONES EXISTENTES
       case 'modify_order':
         await handleOrderModificationRequest(customer, pendingOrders, storeId);
         break;
@@ -3893,12 +3912,14 @@ async function handleSpecificOrderAction(
         break;
         
       default:
-        console.log(`⚠️ Unknown order action: ${action.action}`);
+        console.log(`⚠️ UNKNOWN ORDER ACTION: ${action.action} - Falling back to tracking list`);
         await showOrderTrackingList(customer, pendingOrders, storeId);
     }
     
+    console.log(`✅ ORDER ACTION COMPLETED: ${action.action}`);
+    
   } catch (error) {
-    console.error('❌ Error handling order action:', error);
+    console.error(`❌ Error handling order action ${action.action}:`, error);
     await sendWhatsAppMessageDirect(
       customer.phone,
       '❌ Hubo un problema procesando tu solicitud. Por favor intenta nuevamente.',
@@ -3907,15 +3928,81 @@ async function handleSpecificOrderAction(
   }
 }
 
+async function handleSpecificOrderModification(customer: any, orderId: string, storeId: number, tenantStorage: any): Promise<void> {
+  await sendWhatsAppMessageDirect(
+    customer.phone,
+    `✏️ Para modificar la orden #${orderId}, contacta a soporte. Un agente te asistirá.`,
+    storeId
+  );
+}
+
+async function handleSpecificOrderCancellation(customer: any, orderId: string, storeId: number, tenantStorage: any): Promise<void> {
+  await sendWhatsAppMessageDirect(
+    customer.phone,
+    `❌ Para cancelar la orden #${orderId}, contacta a soporte. Un agente procesará tu solicitud.`,
+    storeId
+  );
+}
+
+async function handleSpecificOrderTracking(customer: any, orderId: string, storeId: number, tenantStorage: any): Promise<void> {
+  await sendWhatsAppMessageDirect(
+    customer.phone,
+    `🚚 La orden #${orderId} está en tránsito. Te notificaremos cuando llegue a destino.`,
+    storeId
+  );
+}
+
+async function handleShowCatalog(customer: any, storeId: number): Promise<void> {
+  await sendWhatsAppMessageDirect(
+    customer.phone,
+    `📖 Aquí tienes nuestro catálogo de productos. Escribe el nombre del producto que te interesa.`,
+    storeId
+  );
+}
+
+async function handleTextOrderMode(customer: any, storeId: number): Promise<void> {
+  await sendWhatsAppMessageDirect(
+    customer.phone,
+    `✍️ Perfecto! Describe tu pedido con el mayor detalle posible. Ejemplo: "2 botellas de agua, 1 pan integral"`,
+    storeId
+  );
+}
+
+async function handleAgentAssistance(customer: any, storeId: number): Promise<void> {
+  await sendWhatsAppMessageDirect(
+    customer.phone,
+    `👤 Un agente te contactará en breve para asistirte personalmente con tu pedido.`,
+    storeId
+  );
+}
+
+async function showAllOrdersList(customer: any, pendingOrders: any[], storeId: number): Promise<void> {
+  let message = `📋 *Todas tus órdenes (${pendingOrders.length}):*\n\n`;
+  
+  pendingOrders.forEach((order, index) => {
+    const statusEmoji = getOrderStatusEmoji(order.status);
+    const orderNumber = order.orderNumber || order.id;
+    const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+    
+    message += `${statusEmoji} Orden #${orderNumber} - ${total}\n`;
+  });
+  
+  message += `\n💡 Escribe el número de orden para ver detalles`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+}
 /**
  * 📋 Mostrar lista de seguimiento de órdenes
  */
+
 async function showOrderTrackingList(
   customer: any,
   pendingOrders: any[],
   storeId: number
 ): Promise<void> {
   try {
+    console.log(`📋 GENERATING ORDER TRACKING LIST WITH BUTTONS FOR ${pendingOrders.length} ORDERS`);
+    
     let message = `📦 *Tus órdenes pendientes:*\n\n`;
     
     pendingOrders.forEach((order, index) => {
@@ -3925,27 +4012,106 @@ async function showOrderTrackingList(
       const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('es-ES') : 'N/A';
       
       message += `${statusEmoji} *Orden #${orderNumber}*\n`;
-      message += `   📅 Fecha: ${date}\n`;
-      message += `   📍 Estado: ${getOrderStatusText(order.status)}\n`;
-      message += `   💰 Total: ${total}\n\n`;
+      message += `   📅 ${date} | 💰 ${total}\n`;
+      message += `   📍 ${getOrderStatusText(order.status)}\n\n`;
     });
     
-    message += `💡 *Para ver detalles*, escribe:\n`;
-    message += `"Orden #${pendingOrders[0].orderNumber || pendingOrders[0].id}"\n\n`;
-    message += `🛒 Escribe "*nuevo*" para hacer otro pedido\n`;
-    message += `💬 Escribe "*soporte*" para ayuda`;
+    // ✅ CREAR BOTONES SIMPLES
+    const buttons = [
+      {
+        type: 'reply',
+        reply: {
+          id: `order_${pendingOrders[0].orderNumber || pendingOrders[0].id}`,
+          title: `📄 Ver #${pendingOrders[0].orderNumber || pendingOrders[0].id}`
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'new_order',
+          title: '🛒 Nueva orden'
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'support',
+          title: '💬 Soporte'
+        }
+      }
+    ];
     
-    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    message += `💡 *Selecciona una opción:*`;
+    
+    // ✅ USAR LA FUNCIÓN CORREGIDA
+    await sendWhatsAppMessageWithButtonsAlternative(customer.phone, message, buttons, storeId);
+    console.log(`✅ ORDER TRACKING LIST WITH BUTTONS SENT SUCCESSFULLY`);
     
   } catch (error) {
-    console.error('❌ Error showing order tracking list:', error);
-    throw error;
+    console.error('❌ Error showing order tracking list with buttons:', error);
+    
+    // Fallback manual
+    let fallbackMessage = `📦 Tus órdenes:\n\n`;
+    pendingOrders.forEach((order, index) => {
+      fallbackMessage += `${index + 1}. Orden #${order.orderNumber || order.id}\n`;
+    });
+    fallbackMessage += `\n💡 Escribe el número de la orden que quieres ver`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, fallbackMessage, storeId);
   }
 }
+
+async function sendAdditionalOrderButtons(
+  customer: any,
+  pendingOrders: any[],
+  storeId: number
+): Promise<void> {
+  try {
+    if (pendingOrders.length <= 1) return;
+    
+    let message = `📋 *Órdenes adicionales:*\n\n`;
+    
+    // Mostrar las órdenes restantes (máximo 3 botones por mensaje)
+    const remainingOrders = pendingOrders.slice(1, 4); // Órdenes 2, 3 y 4
+    
+    remainingOrders.forEach(order => {
+      const statusEmoji = getOrderStatusEmoji(order.status);
+      const orderNumber = order.orderNumber || order.id;
+      message += `${statusEmoji} Orden #${orderNumber}\n`;
+    });
+    
+    // Crear botones para las órdenes restantes
+    const buttons = remainingOrders.map(order => ({
+      type: 'reply',
+      reply: {
+        id: `order_${order.orderNumber || order.id}`,
+        title: `📄 #${order.orderNumber || order.id}`
+      }
+    }));
+    
+    // Si hay más de 4 órdenes total, agregar botón "Ver todas"
+    if (pendingOrders.length > 4) {
+      buttons.push({
+        type: 'reply',
+        reply: {
+          id: 'all_orders',
+          title: `📋 Ver todas (${pendingOrders.length})`
+        }
+      });
+    }
+    
+    await sendWhatsAppMessageWithButtonsAlternative(customer.phone, message, buttons, storeId);
+    
+  } catch (error) {
+    console.error('❌ Error sending additional order buttons:', error);
+  }
+}
+
 
 /**
  * 📄 Mostrar detalles de orden específica
  */
+
 async function showSpecificOrderDetails(
   customer: any,
   orderNumber: string,
@@ -3960,11 +4126,7 @@ async function showSpecificOrderDetails(
     );
     
     if (!order) {
-      await sendWhatsAppMessageDirect(
-        customer.phone,
-        `❌ No encontré la orden #${orderNumber} en tu cuenta.\n\nEscribe "*seguimiento*" para ver todas tus órdenes.`,
-        storeId
-      );
+      await sendOrderNotFoundMessage(customer, orderNumber, storeId);
       return;
     }
     
@@ -3985,44 +4147,293 @@ async function showSpecificOrderDetails(
           : order.collectedData;
         
         if (data.productos && data.productos.length > 0) {
-          message += `📦 *Productos ordenados:*\n`;
-          data.productos.forEach(producto => {
-            message += `• ${producto.nombre} - Cantidad: ${producto.cantidad}\n`;
-            if (producto.precio) {
-              message += `  💰 Precio: $${producto.precio}\n`;
-            }
+          message += `📦 *Productos:*\n`;
+          data.productos.slice(0, 3).forEach(producto => {
+            message += `• ${producto.nombre} (${producto.cantidad})\n`;
           });
+          if (data.productos.length > 3) {
+            message += `... y ${data.productos.length - 3} más\n`;
+          }
           message += `\n`;
         }
         
-        // Agregar dirección si está disponible
         if (data.direccion) {
-          message += `📍 *Dirección de entrega:*\n${data.direccion}\n\n`;
+          message += `📍 *Entrega:* ${data.direccion}\n\n`;
         }
-        
       } catch (e) {
         console.log('Could not parse order collectedData:', e);
       }
     }
     
-    // Información adicional
-    if (order.notes) {
-      message += `📝 *Notas:* ${order.notes}\n\n`;
+    // ✅ BOTONES SEGÚN EL ESTADO DE LA ORDEN
+    const buttons = [];
+    
+    // Botones según estado
+    if (['pending', 'created'].includes(order.status)) {
+      buttons.push({
+        type: 'reply',
+        reply: {
+          id: `modify_${order.id}`,
+          title: '✏️ Modificar'
+        }
+      });
+      
+      buttons.push({
+        type: 'reply',
+        reply: {
+          id: `cancel_${order.id}`,
+          title: '❌ Cancelar'
+        }
+      });
+    } else if (order.status === 'in_transit') {
+      buttons.push({
+        type: 'reply',
+        reply: {
+          id: `track_${order.id}`,
+          title: '🚚 Rastrear'
+        }
+      });
     }
     
-    message += `❓ *¿Necesitas ayuda?*\n`;
-    message += `💬 Escribe "*soporte*" para contactar un agente\n`;
-    message += `📦 Escribe "*seguimiento*" para ver todas tus órdenes`;
+    // Botón para volver
+    buttons.push({
+      type: 'reply',
+      reply: {
+        id: 'track_orders',
+        title: '← Mis órdenes'
+      }
+    });
     
-    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    // Solo mostrar botones si hay opciones disponibles
+    if (buttons.length > 1) { // Más que solo "volver"
+      await sendWhatsAppMessageWithButtonsAlternative(customer.phone, message, buttons, storeId);
+    } else {
+      // Solo botón de volver
+      message += `\n💡 Esta orden no se puede modificar en su estado actual.`;
+      const singleButton = [{
+        type: 'reply',
+        reply: {
+          id: 'track_orders',
+          title: '← Mis órdenes'
+        }
+      }];
+      await sendWhatsAppMessageWithButtonsAlternative(customer.phone, message, singleButton, storeId);
+    }
     
   } catch (error) {
-    console.error('❌ Error showing specific order details:', error);
+    console.error('❌ Error showing specific order details with buttons:', error);
     await sendWhatsAppMessageDirect(
       customer.phone,
-      `❌ Hubo un problema obteniendo los detalles de la orden. Escribe "*soporte*" para ayuda.`,
+      `❌ Hubo un problema obteniendo los detalles de la orden.`,
       storeId
     );
+  }
+}
+
+/**
+ * ❌ FUNCIÓN NUEVA: Mensaje cuando no se encuentra la orden
+ */
+async function sendOrderNotFoundMessage(customer: any, orderNumber: string, storeId: number): Promise<void> {
+  const message = `❌ No encontré la orden #${orderNumber} en tu cuenta.`;
+  
+  const buttons = [
+    {
+      type: 'reply',
+      reply: {
+        id: 'track_orders',
+        title: '📦 Ver mis órdenes'
+      }
+    },
+    {
+      type: 'reply',
+      reply: {
+        id: 'support',
+        title: '💬 Contactar soporte'
+      }
+    }
+  ];
+  
+  await sendWhatsAppMessageWithButtonsAlternative(customer.phone, message, buttons, storeId);
+}
+
+/**
+ * 🔍 FUNCIÓN ACTUALIZADA: Detectar botones específicos de órdenes
+ */
+
+function detectOrderActionMessage(messageText: string): { 
+  isOrderAction: boolean; 
+  action: string; 
+  orderNumber?: string;
+  orderId?: string;
+} {
+  const text = messageText.toLowerCase().trim();
+  
+  console.log(`🔍 ANALYZING MESSAGE: "${text}"`);
+  
+  // ✅ BOTONES NUMÉRICOS (fallback cuando no hay botones interactivos)
+  if (text === '1') {
+    return { isOrderAction: true, action: 'track_orders' };
+  }
+  if (text === '2') {
+    return { isOrderAction: true, action: 'new_order' };
+  }
+  if (text === '3') {
+    return { isOrderAction: true, action: 'support' };
+  }
+  
+  // ✅ BOTONES DE FLUJO PRINCIPAL (IDs exactos)
+  if (text === 'track_orders') {
+    return { isOrderAction: true, action: 'track_orders' };
+  }
+  
+  if (text === 'new_order') {
+    return { isOrderAction: true, action: 'new_order' };
+  }
+  
+  if (text === 'support') {
+    return { isOrderAction: true, action: 'support' };
+  }
+  
+  // ✅ BOTONES DE ÓRDENES ESPECÍFICAS
+  if (text.startsWith('order_')) {
+    const orderNumber = text.replace('order_', '');
+    return { 
+      isOrderAction: true, 
+      action: 'order_details',
+      orderNumber: orderNumber
+    };
+  }
+  
+  // ✅ BOTONES DE ACCIONES EN ÓRDENES
+  if (text.startsWith('modify_')) {
+    const orderId = text.replace('modify_', '');
+    return { 
+      isOrderAction: true, 
+      action: 'modify_specific_order',
+      orderId: orderId
+    };
+  }
+  
+  if (text.startsWith('cancel_')) {
+    const orderId = text.replace('cancel_', '');
+    return { 
+      isOrderAction: true, 
+      action: 'cancel_specific_order',
+      orderId: orderId
+    };
+  }
+  
+  if (text.startsWith('track_')) {
+    const orderId = text.replace('track_', '');
+    return { 
+      isOrderAction: true, 
+      action: 'track_specific_order',
+      orderId: orderId
+    };
+  }
+  
+  // ✅ BOTONES DE NUEVA ORDEN
+  if (text === 'catalog') {
+    return { isOrderAction: true, action: 'show_catalog' };
+  }
+  
+  if (text === 'text_order') {
+    return { isOrderAction: true, action: 'text_order_mode' };
+  }
+  
+  if (text === 'agent_help') {
+    return { isOrderAction: true, action: 'agent_assistance' };
+  }
+  
+  // ✅ BOTONES DE SOPORTE
+  if (text === 'order_help') {
+    return { isOrderAction: true, action: 'order_support' };
+  }
+  
+  if (text === 'general_help') {
+    return { isOrderAction: true, action: 'general_support' };
+  }
+  
+  if (text === 'urgent_help') {
+    return { isOrderAction: true, action: 'urgent_support' };
+  }
+  
+  // ✅ OTROS BOTONES
+  if (text === 'all_orders') {
+    return { isOrderAction: true, action: 'show_all_orders' };
+  }
+  
+  // ✅ TEXTO LIBRE (mantener compatibilidad)
+  if (text.includes('seguimiento') || text.includes('rastrear')) {
+    return { isOrderAction: true, action: 'track_orders' };
+  }
+  
+  if ((text.includes('orden') || text.includes('order')) && /\d+/.test(text)) {
+    const orderMatch = text.match(/(?:orden|order)[\s#]*(\d+)/);
+    return { 
+      isOrderAction: true, 
+      action: 'order_details',
+      orderNumber: orderMatch ? orderMatch[1] : undefined
+    };
+  }
+  
+  return { isOrderAction: false, action: 'none' };
+}
+/**
+ * 📤 FUNCIÓN AUXILIAR: Enviar mensaje con botones
+ */
+async function sendWhatsAppMessageWithButtonsAlternative(
+  phoneNumber: string,
+  message: string,
+  buttons: any[],
+  storeId: number
+): Promise<void> {
+  try {
+    console.log(`📤 SENDING MESSAGE WITH BUTTONS (ALTERNATIVE METHOD)`);
+    
+    // Verificar qué función de envío interactivo tienes disponible
+    if (typeof sendInteractiveMessage === 'function') {
+      console.log(`📤 Found sendInteractiveMessage - attempting to use it`);
+      
+      // Intentar con la estructura que probablemente espera tu función
+      const interactiveData = {
+        type: 'button',
+        body: { text: message },
+        action: { buttons: buttons }
+      };
+      
+      try {
+        await sendInteractiveMessage(phoneNumber, message, buttons, { storeId });
+        console.log(`✅ Interactive message sent successfully`);
+        return;
+      } catch (error) {
+        console.log(`❌ sendInteractiveMessage error:`, error);
+        // Continuar con fallback
+      }
+    }
+    
+    // Fallback: Convertir botones a texto numerado
+    console.log(`📤 Converting buttons to numbered text options`);
+    
+    let textWithOptions = message + '\n\n';
+    
+    buttons.forEach((button, index) => {
+      const number = index + 1;
+      const title = button.reply?.title || `Opción ${number}`;
+      textWithOptions += `${number}. ${title}\n`;
+    });
+    
+    textWithOptions += `\n💡 *Responde con el número de la opción que deseas*`;
+    
+    // Enviar como mensaje de texto simple
+    await sendWhatsAppMessageDirect(phoneNumber, textWithOptions, storeId);
+    console.log(`✅ Text message with numbered options sent successfully`);
+    
+  } catch (error) {
+    console.error('❌ Error in sendWhatsAppMessageWithButtonsAlternative:', error);
+    
+    // Último recurso: mensaje simple sin opciones
+    await sendWhatsAppMessageDirect(phoneNumber, message, storeId);
   }
 }
 
@@ -4032,22 +4443,43 @@ async function showSpecificOrderDetails(
 async function handleNewOrderRequest(customer: any, storeId: number): Promise<void> {
   try {
     let message = `🛒 *¡Perfecto! Vamos a crear una nueva orden.*\n\n`;
-    message += `Para hacer un nuevo pedido, puedes:\n\n`;
-    message += `📱 Escribir directamente los productos que deseas\n`;
-    message += `📋 Decir "*catálogo*" para ver productos disponibles\n`;
-    message += `💬 Contactar "*soporte*" para asistencia personalizada\n\n`;
-    message += `💡 *Ejemplo:* "Quiero 2 botellas de agua y 1 pan"\n`;
-    message += `📞 *O simplemente describe lo que necesitas*`;
+    message += `¿Cómo prefieres hacer tu pedido?`;
     
-    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    const buttons = [
+      {
+        type: 'reply',
+        reply: {
+          id: 'catalog',
+          title: '📖 Ver catálogo'
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'text_order',
+          title: '✍️ Escribir pedido'
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'agent_help',
+          title: '👤 Con agente'
+        }
+      }
+    ];
+    
+    await sendWhatsAppMessageWithButtonsAlternative(customer.phone, message, buttons, storeId);
     
   } catch (error) {
-    console.error('❌ Error handling new order request:', error);
-    await sendWhatsAppMessageDirect(
-      customer.phone,
-      `Escribe lo que necesitas y te ayudamos con tu pedido.`,
-      storeId
-    );
+    console.error('❌ Error handling new order request with buttons:', error);
+    
+    let fallbackMessage = `🛒 Nueva orden:\n\n`;
+    fallbackMessage += `📖 Escribe "*catálogo*" para ver productos\n`;
+    fallbackMessage += `✍️ O describe directamente lo que necesitas\n`;
+    fallbackMessage += `👤 Escribe "*agente*" para asistencia personalizada`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, fallbackMessage, storeId);
   }
 }
 
@@ -4060,27 +4492,46 @@ async function handleSupportRequest(customer: any, pendingOrders: any[], storeId
     message += `¡Estamos aquí para ayudarte!\n\n`;
     
     if (pendingOrders.length > 0) {
-      message += `📦 Tienes ${pendingOrders.length} orden(es) pendiente(s):\n`;
-      pendingOrders.slice(0, 2).forEach(order => {
-        message += `• Orden #${order.orderNumber || order.id} - ${getOrderStatusText(order.status)}\n`;
-      });
-      message += `\n`;
+      message += `📦 Tienes ${pendingOrders.length} orden(es) pendiente(s)\n\n`;
     }
     
-    message += `❓ *¿En qué podemos ayudarte?*\n\n`;
-    message += `📝 Describe tu consulta y un agente te contactará pronto\n`;
-    message += `📞 O llámanos para atención inmediata\n\n`;
-    message += `⏰ *Horario de atención:* Lunes a Viernes 8AM - 6PM`;
+    message += `¿Con qué necesitas ayuda?`;
     
-    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    const buttons = [
+      {
+        type: 'reply',
+        reply: {
+          id: 'order_help',
+          title: '📦 Mis órdenes'
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'general_help',
+          title: '❓ Consulta general'
+        }
+      },
+      {
+        type: 'reply',
+        reply: {
+          id: 'urgent_help',
+          title: '🚨 Urgente'
+        }
+      }
+    ];
+    
+    await sendWhatsAppMessageWithButtonsAlternative(customer.phone, message, buttons, storeId);
     
   } catch (error) {
-    console.error('❌ Error handling support request:', error);
-    await sendWhatsAppMessageDirect(
-      customer.phone,
-      `💬 Un agente te contactará pronto para ayudarte.`,
-      storeId
-    );
+    console.error('❌ Error handling support request with buttons:', error);
+    
+    let fallbackMessage = `💬 Soporte:\n\n`;
+    fallbackMessage += `📦 "*orden*" para ayuda con pedidos\n`;
+    fallbackMessage += `❓ "*consulta*" para información general\n`;
+    fallbackMessage += `🚨 "*urgente*" para casos críticos`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, fallbackMessage, storeId);
   }
 }
 
