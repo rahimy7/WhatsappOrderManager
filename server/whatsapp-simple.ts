@@ -565,50 +565,100 @@ async function handleRegistrationFlow(
         console.log(`✅ NAME COLLECTION COMPLETED SUCCESSFULLY`);
         break;
 
-      case 'collect_contact':
-        // Procesar número de contacto
-        console.log(`📞 PROCESSING CONTACT COLLECTION`);
-        
-        // Verificar si quiere usar el mismo número o proporcionar otro
-        const contactLower = messageText.toLowerCase();
-        
-        if (contactLower.includes('mismo') || 
-            contactLower.includes('este') || 
-            contactLower.includes('sí') ||
-            contactLower.includes('si') ||
-            contactLower.includes('yes') ||
-            contactLower.includes('ok')) {
-          
-          collectedData.contactNumber = customer.phone;
-          collectedData.useWhatsAppNumber = true;
-          
-        } else {
-          // Validar número de teléfono proporcionado
-          const phonePattern = /^[\+]?[1-9][\d]{0,15}$/;
-          const cleanPhone = messageText.replace(/[\s\-\(\)]/g, '');
-          
-          if (phonePattern.test(cleanPhone)) {
-            collectedData.contactNumber = cleanPhone;
-            collectedData.useWhatsAppNumber = false;
-          } else {
-            await sendWhatsAppMessageDirect(
-              customer.phone,
-              "❌ Por favor ingresa un número de teléfono válido o responde 'mismo' para usar este número:",
-              storeId
-            );
-            return;
-          }
-        }
+  case 'collect_contact':
+  // Procesar número de contacto
+  console.log(`📞 PROCESSING CONTACT COLLECTION`);
+  
+  // Verificar si quiere usar el mismo número o proporcionar otro
+  const contactLower = messageText.toLowerCase().trim();
+  
+  if (contactLower.includes('mismo') || 
+      contactLower.includes('este') || 
+      contactLower.includes('sí') ||
+      contactLower.includes('si') ||
+      contactLower.includes('yes') ||
+      contactLower.includes('ok') ||
+      contactLower === 'si' ||
+      contactLower === 'sí') {
+    
+    collectedData.contactNumber = customer.phone;
+    collectedData.useWhatsAppNumber = true;
+    
+    console.log(`✅ USING WHATSAPP NUMBER: ${customer.phone}`);
+    
+  } else {
+    // ✅ VALIDACIÓN UNIVERSAL DE NÚMERO DE TELÉFONO
+    console.log(`🔍 VALIDATING PROVIDED PHONE: "${messageText}"`);
+    
+    // Limpiar el número (quitar espacios, guiones, paréntesis, puntos)
+    const cleanPhone = messageText.replace(/[\s\-\(\)\+\.]/g, '');
+    
+    console.log(`📱 Cleaned phone: "${cleanPhone}"`);
+    
+    // ✅ VALIDACIONES UNIVERSALES (NO LIMITADAS A PAÍS)
+    let isValid = false;
+    let formattedPhone = '';
+    
+    // Validación 1: Números de 7-15 dígitos (estándar internacional)
+    if (/^[1-9][0-9]{6,14}$/.test(cleanPhone)) {
+      isValid = true;
+      formattedPhone = `+${cleanPhone}`;
+      console.log(`✅ Valid international number: ${formattedPhone}`);
+    }
+    
+    // Validación 2: Números que ya tienen + en el mensaje original
+    else if (messageText.includes('+')) {
+      const cleanWithPlus = messageText.replace(/[\s\-\(\)\.]/g, '');
+      if (/^\+[1-9][0-9]{6,14}$/.test(cleanWithPlus)) {
+        isValid = true;
+        formattedPhone = cleanWithPlus;
+        console.log(`✅ Valid number with + prefix: ${formattedPhone}`);
+      }
+    }
+    
+    // Validación 3: Casos especiales - números que empiecen con 0 (algunos países europeos)
+    else if (/^0[1-9][0-9]{6,13}$/.test(cleanPhone)) {
+      isValid = true;
+      formattedPhone = `+${cleanPhone}`;
+      console.log(`✅ Valid number starting with 0: ${formattedPhone}`);
+    }
+    
+    if (isValid) {
+      collectedData.contactNumber = formattedPhone;
+      collectedData.useWhatsAppNumber = false;
+      console.log(`✅ CONTACT NUMBER ACCEPTED: ${formattedPhone}`);
+      
+    } else {
+      console.log(`❌ INVALID PHONE FORMAT: "${messageText}" (cleaned: "${cleanPhone}")`);
+      
+      await sendWhatsAppMessageDirect(
+        customer.phone,
+        `❌ Número de teléfono inválido: "${messageText}"\n\n` +
+        `Por favor ingresa un número válido:\n` +
+        `📱 Ejemplos:\n` +
+        `• Con código de país: +1 809 123 4567\n` +
+        `• Solo números: 8091234567\n` +
+        `• Con guiones: 1-809-123-4567\n` +
+        `• Internacional: +34 612 345 678\n\n` +
+        `O responde "mismo" para usar este número`,
+        storeId
+      );
+      return;
+    }
+  }
 
-        // Continuar al siguiente paso
-        await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
-          currentStep: 'collect_address',
-          collectedData: JSON.stringify(collectedData),
-          updatedAt: new Date()
-        });
+  console.log(`📞 CONTACT COLLECTION COMPLETED - Number: ${collectedData.contactNumber}`);
 
-        await sendAutoResponseMessage(customer.phone, 'collect_address', storeId, tenantStorage);
-        break;
+  // Continuar al siguiente paso
+  await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+    currentStep: 'collect_address',
+    collectedData: JSON.stringify(collectedData),
+    updatedAt: new Date()
+  });
+
+  console.log(`✅ FLOW UPDATED TO NEXT STEP: collect_address`);
+  await sendAutoResponseMessage(customer.phone, 'collect_address', storeId, tenantStorage);
+  break;
 
       case 'collect_address':
         // Procesar dirección
@@ -749,7 +799,7 @@ async function generateAndSendOrderConfirmation(
   tenantStorage: any
 ) {
   try {
-    console.log(`📋 GENERATING ORDER CONFIRMATION for customer ${customer.id}`);
+    console.log(`📋 GENERATING INTERACTIVE ORDER CONFIRMATION for customer ${customer.id}`);
     
     let orderDetails = '';
     let totalAmount = '0.00';
@@ -776,13 +826,13 @@ async function generateAndSendOrderConfirmation(
       orderDetails = '• Consulta de servicios\n';
     }
 
-    // Generar mensaje de confirmación
+    // ✅ MENSAJE DE CONFIRMACIÓN CON FORMATO MEJORADO
     const confirmationMessage = `📋 *CONFIRMACIÓN DE PEDIDO* ${displayOrderNumber}
 
 👤 *Datos del Cliente:*
-• Nombre: ${collectedData.customerName || 'No especificado'}
-• Teléfono: ${collectedData.contactNumber || customer.phone}
-• Dirección: ${collectedData.address || 'No especificada'}
+- Nombre: ${collectedData.customerName || customer.name}
+- Teléfono: ${collectedData.contactNumber || customer.phone}
+- Dirección: ${collectedData.address || 'No especificada'}
 
 📦 *Productos/Servicios:*
 ${orderDetails}
@@ -791,35 +841,76 @@ ${orderDetails}
 ${collectedData.paymentMethod || 'No especificado'}
 
 📝 *Notas:*
-${collectedData.notes || 'Sin notas'}
+${collectedData.notes || 'Sin notas adicionales'}
 
-💰 *Total: $${totalAmount}*
+💰 *Total: $${parseFloat(totalAmount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}*
 
-✅ ¿Confirmas que todos los datos son correctos?
+✅ ¿Confirmas que todos los datos son correctos?`;
+
+    // ✅ BOTONES INTERACTIVOS
+    const confirmationButtons = [
+      {
+        label: "✅ Confirmar",
+        value: "confirm_order",
+        action: "confirm_order"
+      },
+      {
+        label: "✏️ Modificar",
+        value: "modify_order", 
+        action: "modify_order"
+      },
+      {
+        label: "❌ Cancelar",
+        value: "cancel_order",
+        action: "cancel_order"
+      }
+    ];
+
+    // ✅ ENVIAR MENSAJE INTERACTIVO
+    console.log(`📤 SENDING INTERACTIVE CONFIRMATION MESSAGE`);
+    
+    // Obtener configuración de WhatsApp
+    const { getMasterStorage } = await import('./storage/index.js');
+    const storage = getMasterStorage();
+    const whatsappConfig = await storage.getWhatsAppConfig(storeId);
+    
+    if (whatsappConfig) {
+      const config = {
+        storeId: storeId,
+        accessToken: whatsappConfig.accessToken,
+        phoneNumberId: whatsappConfig.phoneNumberId
+      };
+      
+      await sendInteractiveMessage(customer.phone, confirmationMessage, confirmationButtons, config);
+    } else {
+      // Fallback a mensaje de texto simple
+      const fallbackMessage = confirmationMessage + `
 
 Responde:
-• *"Confirmar"* para proceder
-• *"Modificar"* para cambiar algo`;
+- *"Confirmar"* para proceder
+- *"Modificar"* para cambiar algo
+- *"Cancelar"* para cancelar el pedido`;
+      
+      await sendWhatsAppMessageDirect(customer.phone, fallbackMessage, storeId);
+    }
 
-    await sendWhatsAppMessageDirect(customer.phone, confirmationMessage, storeId);
+    console.log(`✅ INTERACTIVE ORDER CONFIRMATION SENT`);
 
   } catch (error) {
-    console.error('❌ ERROR generating order confirmation:', error);
+    console.error('❌ ERROR generating interactive order confirmation:', error);
     
-    // Mensaje de respaldo
-    await sendWhatsAppMessageDirect(
-      customer.phone,
-      `📋 *CONFIRMACIÓN DE PEDIDO*
+    // Mensaje de respaldo en caso de error
+    const fallbackMessage = `📋 *CONFIRMACIÓN DE PEDIDO*
 
 Datos recopilados:
-• Nombre: ${collectedData.customerName || 'No especificado'}
-• Dirección: ${collectedData.address || 'No especificada'}
-• Contacto: ${collectedData.contactNumber || customer.phone}
-• Pago: ${collectedData.paymentMethod || 'No especificado'}
+- Nombre: ${collectedData.customerName || customer.name}
+- Dirección: ${collectedData.address || 'No especificada'}  
+- Contacto: ${collectedData.contactNumber || customer.phone}
+- Pago: ${collectedData.paymentMethod || 'No especificado'}
 
-✅ ¿Todo correcto? Responde "Confirmar" para proceder`,
-      storeId
-    );
+✅ Responde "Confirmar" para proceder o "Modificar" para cambiar algo`;
+
+    await sendWhatsAppMessageDirect(customer.phone, fallbackMessage, storeId);
   }
 }
 
@@ -2264,28 +2355,67 @@ async function handleInteractiveAction(action: string, phoneNumber: string, tena
         "Para modificar tu pedido, por favor contacta con nuestro soporte al +1 809-357-6939", 
         storeMapping.storeId);
       break;
-      
-    case 'cancel_order':
-      // Cancelar pedido y flujo
-      const flow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
-      if (flow && flow.orderId) {
-        await tenantStorage.updateOrder(flow.orderId, { status: 'cancelled' });
-        await tenantStorage.updateRegistrationFlowByPhone(phoneNumber, { 
-          isCompleted: true,
-          currentStep: 'cancelled' 
-        });
-        
-        await sendWhatsAppMessageDirect(phoneNumber, 
-          "❌ Tu pedido ha sido cancelado exitosamente. Si necesitas ayuda, no dudes en contactarnos.", 
-          storeMapping.storeId);
+
+      case 'confirm_order':
+  console.log(`✅ CONFIRMING ORDER for ${phoneNumber}`);
+  
+  const flow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
+  if (flow) {
+    // Obtener datos recopilados
+    let collectedData = {};
+    try {
+      if (flow.collectedData && typeof flow.collectedData === 'string') {
+        collectedData = JSON.parse(flow.collectedData);
+      } else if (flow.collectedData) {
+        collectedData = flow.collectedData;
       }
-      break;
+    } catch (parseError) {
+      console.log(`⚠️ Error parsing collected data`);
+    }
+    
+    // Completar el registro del pedido
+    const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+    if (customer) {
+      await completeOrderRegistration(customer, flow, collectedData, storeMapping.storeId, tenantStorage);
+    }
+  }
+  break;
+
+case 'modify_order':
+  console.log(`✏️ MODIFYING ORDER for ${phoneNumber}`);
+  
+  await sendWhatsAppMessageDirect(phoneNumber, 
+    `✏️ *¿Qué deseas modificar?*
+
+1️⃣ Nombre
+2️⃣ Dirección  
+3️⃣ Número de contacto
+4️⃣ Método de pago
+5️⃣ Notas
+
+Responde el número de la opción que quieres cambiar.`, 
+    storeMapping.storeId);
+  break;
+
+case 'cancel_order':
+  console.log(`❌ CANCELING ORDER for ${phoneNumber}`);
+  
+  // Ya tienes esta lógica implementada en el código existente
+  const cancelFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(phoneNumber);
+  if (cancelFlow && cancelFlow.orderId) {
+    await tenantStorage.updateOrder(cancelFlow.orderId, { status: 'cancelled' });
+    await tenantStorage.updateRegistrationFlowByPhone(phoneNumber, { 
+      isCompleted: true,
+      currentStep: 'cancelled' 
+    });
+    
+    await sendWhatsAppMessageDirect(phoneNumber, 
+      "❌ Tu pedido ha sido cancelado exitosamente. Si necesitas ayuda, no dudes en contactarnos.", 
+      storeMapping.storeId);
+  }
+  break;
       
-    default:
-      console.log(`⚠️ UNKNOWN ACTION: ${action}`);
-      // Procesar como auto-respuesta regular
-      await sendAutoResponseMessage(phoneNumber, action, storeMapping.storeId, tenantStorage);
-      break;
+   
   }
 }
 
