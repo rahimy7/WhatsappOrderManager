@@ -1363,17 +1363,22 @@ async updateRegistrationFlowByPhone(phoneNumber: string, updates: any) {
     // Configurar search_path
     await pool.query(`SET search_path TO ${schemaName}, public`);
     
+    // ✅ FILTRAR updated_at del objeto updates ANTES de procesarlo
+    const filteredUpdates = { ...updates };
+    delete filteredUpdates.updatedAt; // Remover si existe en camelCase
+    delete filteredUpdates.updated_at; // Remover si existe en snake_case
+    
     // Construir query de actualización dinámicamente
     const setParts = [];
     const values = [];
     let paramCounter = 1;
     
-    Object.keys(updates).forEach(key => {
-      if (updates[key] !== undefined) {
+    Object.keys(filteredUpdates).forEach(key => {
+      if (filteredUpdates[key] !== undefined) {
         // Convertir camelCase a snake_case para nombres de columna
         const columnName = key.replace(/([A-Z])/g, '_$1').toLowerCase();
         setParts.push(`${columnName} = $${paramCounter}`);
-        values.push(updates[key]);
+        values.push(filteredUpdates[key]);
         paramCounter++;
       }
     });
@@ -1384,6 +1389,7 @@ async updateRegistrationFlowByPhone(phoneNumber: string, updates: any) {
       return null;
     }
     
+    // ✅ SOLO UNA VEZ: Agregar updated_at al final
     setParts.push(`updated_at = NOW()`);
     values.push(phoneNumber);
     
