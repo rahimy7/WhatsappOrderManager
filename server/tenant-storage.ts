@@ -1323,7 +1323,34 @@ async getRegistrationFlowByPhoneNumber(phoneNumber: string): Promise<CustomerReg
     const flow = result.rows[0] || null;
     console.log(`🔍 Registration flow: ${flow ? 'FOUND' : 'NOT FOUND'}`);
     
-    return flow;
+    // ✅ MAPEAR CORRECTAMENTE DE SNAKE_CASE A CAMELCASE
+    if (!flow) return null;
+    
+    const mappedFlow = {
+      id: flow.id,
+      customerId: flow.customer_id,
+      phoneNumber: flow.phone_number,
+      currentStep: flow.current_step,           // ⬅️ CLAVE: snake_case → camelCase
+      flowType: flow.flow_type,
+      orderId: flow.order_id,
+      orderNumber: flow.order_number,
+      collectedData: flow.collected_data,       // ⬅️ CLAVE: snake_case → camelCase
+      requestedService: flow.requested_service,
+      isCompleted: flow.is_completed,           // ⬅️ CLAVE: snake_case → camelCase
+      expiresAt: flow.expires_at,              // ⬅️ CLAVE: snake_case → camelCase
+      createdAt: flow.created_at,
+      updatedAt: flow.updated_at,
+      storeId: flow.store_id
+    };
+    
+    console.log(`📋 Mapped flow details:`);
+    console.log(`   - ID: ${mappedFlow.id}`);
+    console.log(`   - Current Step: ${mappedFlow.currentStep}`);
+    console.log(`   - Is Completed: ${mappedFlow.isCompleted}`);
+    console.log(`   - Order ID: ${mappedFlow.orderId}`);
+    console.log(`   - Expires At: ${mappedFlow.expiresAt}`);
+    
+    return mappedFlow;
     
   } catch (error) {
     console.error('❌ Error getting registration flow:', error);
@@ -1820,6 +1847,7 @@ async ensureRegistrationFlowTableExists(): Promise<void> {
     );
   }
 },
+
 
 
     };
