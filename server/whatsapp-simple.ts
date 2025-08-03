@@ -1308,15 +1308,32 @@ export async function processIncomingUserMessage(webhookData: any, storeMapping:
 
     const message = value.messages[0];
     const customerPhone = message.from;
-    const messageText = message.text?.body || '';
-    const messageId = message.id;
-    const messageType = message.type || 'text';
+       const messageId = message.id;
+   const messageType = message.type || 'text';
+let messageText = '';
 
-    // ✅ VALIDAR QUE SEA UN MENSAJE DE TEXTO VÁLIDO
-    if (messageType !== 'text' || (!messageText || messageText.trim() === '')) {
-      console.log(`ℹ️ SKIPPING NON-TEXT MESSAGE - Type: ${messageType}, From: ${customerPhone}`);
-      return;
-    }
+// Extraer texto o acción según el tipo de mensaje
+if (messageType === 'text') {
+  messageText = message.text?.body || '';
+} else if (messageType === 'interactive' && message.interactive?.button_reply) {
+  // Procesar botón presionado
+  const buttonId = message.interactive.button_reply.id;
+  const buttonTitle = message.interactive.button_reply.title;
+  
+  console.log(`🔘 BUTTON PRESSED: ${buttonId} (${buttonTitle})`);
+  
+  // Usar el ID del botón como texto del mensaje
+  messageText = buttonId;
+} else {
+  console.log(`ℹ️ SKIPPING UNSUPPORTED MESSAGE - Type: ${messageType}, From: ${customerPhone}`);
+  return;
+}
+
+// Validar que tenemos contenido para procesar
+if (!messageText || messageText.trim() === '') {
+  console.log(`ℹ️ SKIPPING EMPTY MESSAGE - From: ${customerPhone}`);
+  return;
+}
 
     console.log(`📱 USER MESSAGE RECEIVED - From: ${customerPhone}, Text: "${messageText}"`);
     console.log(`✅ PROCESSING USER MESSAGE - Store: ${safeStoreMapping.storeName} (ID: ${safeStoreMapping.storeId})`);
