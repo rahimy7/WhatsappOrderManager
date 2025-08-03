@@ -738,35 +738,125 @@ async function handleRegistrationFlow(
         break;
 
       case 'confirm_order':
-        // Procesar confirmación final
-        console.log(`✅ PROCESSING ORDER CONFIRMATION`);
-        
-        const confirmLower = messageText.toLowerCase();
-        
-        if (confirmLower.includes('confirmar') || 
-            confirmLower.includes('sí') ||
-            confirmLower.includes('si') ||
-            confirmLower.includes('confirm') ||
-            confirmLower.includes('yes') ||
-            confirmLower.includes('proceder')) {
-          
-          await completeOrderRegistration(customer, registrationFlow, collectedData, storeId, tenantStorage);
-          
-        } else if (confirmLower.includes('modificar') || confirmLower.includes('cambiar') ||
-                  confirmLower.includes('editar')) {
-          
-          await sendWhatsAppMessageDirect(
-            customer.phone,
-            "✏️ ¿Qué deseas modificar?\n\n1️⃣ Nombre\n2️⃣ Dirección\n3️⃣ Contacto\n4️⃣ Método de pago\n5️⃣ Notas",
-            storeId
-          );
-          
-        } else {
-          // Volver a enviar confirmación
-          await generateAndSendOrderConfirmation(customer, registrationFlow, collectedData, storeId, tenantStorage);
-        }
-        break;
+  console.log(`✅ PROCESSING ORDER CONFIRMATION`);
+  
+  const confirmLower = messageText.toLowerCase().trim();
+  
+  if (confirmLower.includes('confirmar') || 
+      confirmLower.includes('sí') ||
+      confirmLower.includes('si') ||
+      confirmLower.includes('confirm') ||
+      confirmLower.includes('yes') ||
+      confirmLower.includes('proceder')) {
+    
+    console.log(`🎉 USER CONFIRMED ORDER - Processing completion...`);
+    
+    try {
+      // ✅ COMPLETAR ORDEN Y FLUJO
+      await completeOrderRegistration(customer, registrationFlow, collectedData, storeId, tenantStorage);
+      
+      console.log(`✅ ORDER COMPLETION SUCCESSFUL - Flow should be marked as completed`);
+      
+      // ✅ VERIFICAR QUE EL FLUJO SE ACTUALIZÓ
+      const updatedFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customer.phone);
+      console.log(`🔍 VERIFICATION - Flow after completion:`, {
+        id: updatedFlow?.id,
+        currentStep: updatedFlow?.currentStep,
+        isCompleted: updatedFlow?.isCompleted,
+        completedAt: updatedFlow?.completedAt
+      });
+      
+      // ✅ SALIR DEL CASE SIN PROCESAR MÁS
+      return; // ⚠️ IMPORTANTE: Salir aquí para evitar loops
+      
+    } catch (error) {
+      console.error(`❌ ERROR COMPLETING ORDER:`, error);
+      
+      // ✅ FALLBACK: Marcar como completado manualmente
+      await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+        currentStep: 'completed',
+        isCompleted: true,
+        completedAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      await sendWhatsAppMessageDirect(
+        customer.phone,
+        "✅ Tu pedido ha sido confirmado. Un agente te contactará pronto con los detalles de entrega.",
+        storeId
+      );
+      
+      return; // ⚠️ IMPORTANTE: Salir aquí también
+    }
+    
+  } else if (confirmLower.includes('modificar') || 
+             confirmLower.includes('cambiar') ||
+             confirmLower.includes('editar')) {
+    
+    console.log(`✏️ USER WANTS TO MODIFY ORDER`);
+    
+    // ✅ ACTUALIZAR PASO A MODIFICACIÓN
+    await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+      currentStep: 'modify_data',
+      updatedAt: new Date()
+    });
+    
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      "✏️ ¿Qué deseas modificar?\n\n1️⃣ Nombre\n2️⃣ Dirección\n3️⃣ Contacto\n4️⃣ Método de pago\n5️⃣ Notas\n\nEscribe el número de la opción:",
+      storeId
+    );
+    
+    return; // ⚠️ IMPORTANTE: Salir sin continuar
+    
+  } else if (confirmLower.includes('cancelar') || 
+             confirmLower.includes('cancel')) {
+    
+    console.log(`❌ USER WANTS TO CANCEL ORDER`);
+    
+    // ✅ CANCELAR ORDEN Y FLUJO
+    if (registrationFlow.orderId) {
+      await tenantStorage.updateOrder(registrationFlow.orderId, {
+        status: 'cancelled',
+        updatedAt: new Date()
+      });
+    }
+    
+    await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+      currentStep: 'cancelled',
+      isCompleted: true,
+      completedAt: new Date(),
+      updatedAt: new Date()
+    });
+    
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      "❌ Pedido cancelado. Si cambias de opinión, puedes hacer un nuevo pedido cuando gustes.",
+      storeId
+    );
+    
+    return; // ⚠️ IMPORTANTE: Salir sin continuar
+    
+  } else {
+    console.log(`❓ UNCLEAR RESPONSE - Re-sending confirmation`);
+    
+    // ✅ RESPUESTA NO CLARA - Volver a enviar confirmación CON INSTRUCCIONES CLARAS
+    const clarificationMessage = `❓ No entendí tu respuesta. 
 
+Para confirmar tu pedido, responde exactamente:
+• *"Confirmar"* ✅
+• *"Modificar"* ✏️  
+• *"Cancelar"* ❌
+
+¿Qué deseas hacer con tu pedido?`;
+
+    await sendWhatsAppMessageDirect(customer.phone, clarificationMessage, storeId);
+    
+    // ✅ NO CAMBIAR EL PASO - Mantener en confirm_order
+    return; // ⚠️ IMPORTANTE: Salir sin continuar
+  }
+  
+  break;
       default:
         console.log(`⚠️ UNKNOWN REGISTRATION STEP: ${currentStep}`);
         // Reiniciar flujo
@@ -914,7 +1004,6 @@ Datos recopilados:
   }
 }
 
-// 🔧 CORRECCIÓN 4: Nueva función para completar registro
 async function completeOrderRegistration(
   customer: any, 
   registrationFlow: any, 
@@ -923,59 +1012,201 @@ async function completeOrderRegistration(
   tenantStorage: any
 ) {
   try {
-    console.log(`✅ COMPLETING ORDER REGISTRATION for customer ${customer.id}`);
+    console.log(`\n🎯 ===== COMPLETING ORDER REGISTRATION =====`);
+    console.log(`👤 Customer ID: ${customer.id}`);
+    console.log(`📦 Order ID: ${registrationFlow.orderId}`);
+    console.log(`📞 WhatsApp: ${customer.phone}`);
+    console.log(`📞 Contact: ${collectedData.contactNumber || 'Same as WhatsApp'}`);
     
-    // Actualizar datos del cliente
-    await tenantStorage.updateCustomer(customer.id, {
-      name: collectedData.customerName || customer.name,
-      address: collectedData.address,
-      notes: collectedData.notes
-    });
-    
-    // Actualizar pedido si existe
-    if (registrationFlow.orderId) {
-      await tenantStorage.updateOrder(registrationFlow.orderId, {
-        status: 'confirmed',
-        paymentMethod: collectedData.paymentMethod,
-        deliveryAddress: collectedData.address,
-        notes: collectedData.notes,
-        contactNumber: collectedData.contactNumber
-      });
+    // ✅ 1. ACTUALIZAR DATOS DEL CLIENTE 
+    if (collectedData.customerName || collectedData.address) {
+      console.log(`📝 Updating customer data...`);
+      
+      const customerUpdates: any = {};
+if (collectedData.customerName) customerUpdates.name = collectedData.customerName;
+if (collectedData.address) customerUpdates.address = collectedData.address;
+      
+      // ⚠️ IMPORTANTE: NO actualizar el teléfono del cliente si es diferente
+      // El phone del cliente debe seguir siendo su WhatsApp
+      
+      await tenantStorage.updateCustomer(customer.id, customerUpdates);
+      console.log(`✅ Customer data updated`);
     }
     
-    // Marcar flujo como completado
-    await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+    // ✅ 2. ACTUALIZAR PEDIDO CON NÚMERO DE CONTACTO ESPECÍFICO
+    if (registrationFlow.orderId) {
+      console.log(`📦 Updating order ${registrationFlow.orderId}...`);
+      
+      // ✅ USAR EL CONTACTO ESPECÍFICO PARA ENTREGA
+      const deliveryContactNumber = collectedData.contactNumber || customer.phone;
+      
+      const orderUpdates = {
+        status: 'confirmed',
+        deliveryAddress: collectedData.address || null,
+        contactNumber: deliveryContactNumber, // ✅ CAMPO ESPECÍFICO PARA ENTREGA
+        paymentMethod: collectedData.paymentMethod || null,
+        paymentStatus: 'pending',
+        lastStatusUpdate: new Date(),
+        customerLastInteraction: new Date(),
+        modificationCount: 1,
+        notes: `Datos confirmados por WhatsApp:
+• Cliente: ${collectedData.customerName || customer.name}
+• WhatsApp: ${customer.phone}
+• Contacto entrega: ${deliveryContactNumber}
+• Dirección: ${collectedData.address || 'No especificada'}
+• Pago: ${collectedData.paymentMethod || 'No especificado'}
+• Notas: ${collectedData.notes || 'Sin notas'}
+• Fecha confirmación: ${new Date().toLocaleString('es-DO')}`,
+        updatedAt: new Date()
+      };
+      
+      console.log(`📝 Order updates:`, {
+        ...orderUpdates,
+        notes: orderUpdates.notes.substring(0, 100) + '...'
+      });
+      
+      await tenantStorage.updateOrder(registrationFlow.orderId, orderUpdates);
+      console.log(`✅ Order ${registrationFlow.orderId} updated successfully`);
+    }
+    
+    // ✅ 3. MARCAR FLUJO COMO COMPLETADO
+    console.log(`🔄 Marking registration flow as completed...`);
+    
+    const flowUpdates = {
       currentStep: 'completed',
       isCompleted: true,
       completedAt: new Date(),
       collectedData: JSON.stringify(collectedData),
       updatedAt: new Date()
-    });
+    };
     
-    // Enviar confirmación final
+    const updateResult = await tenantStorage.updateRegistrationFlowByPhone(customer.phone, flowUpdates);
+    
+    if (updateResult) {
+      console.log(`✅ Registration flow marked as completed`);
+    } else {
+      console.error(`❌ Failed to update registration flow`);
+    }
+    
+    // ✅ 4. CREAR HISTORIAL DE CAMBIO DE ESTADO
+    try {
+      await tenantStorage.addOrderHistory({
+        orderId: registrationFlow.orderId,
+        statusFrom: 'pending',
+        statusTo: 'confirmed',
+        notes: `Pedido confirmado vía WhatsApp por ${collectedData.customerName || customer.name}`,
+        timestamp: new Date()
+      });
+      console.log(`📝 Order history recorded`);
+    } catch (historyError) {
+      console.error('⚠️ Failed to record order history:', historyError);
+    }
+    
+    // ✅ 5. ENVIAR CONFIRMACIÓN FINAL CON CLARIDAD SOBRE LOS NÚMEROS
+    const customerName = collectedData.customerName || customer.name || 'Cliente';
+    const deliveryContact = collectedData.contactNumber || customer.phone;
+    const isDifferentContact = collectedData.contactNumber && collectedData.contactNumber !== customer.phone;
+    
+    let contactInfo = `📞 Te contactaremos al *${deliveryContact}*`;
+    if (isDifferentContact) {
+      contactInfo += `\n📱 (Número diferente al WhatsApp: ${customer.phone})`;
+    }
+    
     const finalMessage = `🎉 *¡PEDIDO CONFIRMADO!*
 
-Gracias ${collectedData.customerName}. Tu pedido ha sido registrado exitosamente.
+Gracias *${customerName}*. Tu pedido ha sido registrado exitosamente.
 
-📞 Te contactaremos pronto al ${collectedData.contactNumber || customer.phone} para coordinar la entrega.
+${contactInfo} para coordinar la entrega.
+
+📍 *Dirección:* ${collectedData.address || 'Por confirmar'}
+💳 *Pago:* ${collectedData.paymentMethod || 'Por confirmar'}
 
 ⏰ Tiempo estimado: 24-48 horas
 
-¿Necesitas algo más?`;
+¿Necesitas algo más? Escribe *"ayuda"* para ver nuestras opciones.`;
 
     await sendWhatsAppMessageDirect(customer.phone, finalMessage, storeId);
     
-    console.log(`✅ ORDER REGISTRATION COMPLETED - Customer: ${customer.id}, Order: ${registrationFlow.orderId}`);
+    console.log(`✅ ===== ORDER REGISTRATION COMPLETED SUCCESSFULLY =====`);
+    console.log(`📊 Summary: Customer ${customerName}, WhatsApp: ${customer.phone}, Contact: ${deliveryContact}`);
+    
+    // ✅ 6. LOG DE AUDITORÍA
+    try {
+      const { getMasterStorage } = await import('./storage/index.js');
+      const storage = getMasterStorage();
+      
+      await storage.addWhatsAppLog({
+        type: 'order_completed',
+        phoneNumber: customer.phone,
+        messageContent: `Order ${registrationFlow.orderId} completed for ${customerName}. Contact: ${deliveryContact}`,
+        storeId: storeId,
+        timestamp: new Date()
+      });
+    } catch (logError) {
+      console.error('⚠️ Failed to create audit log:', logError);
+    }
     
   } catch (error) {
-    console.error('❌ ERROR completing order registration:', error);
+    console.error('❌ ===== ERROR COMPLETING ORDER REGISTRATION =====');
+    console.error('Error details:', error);
     
+    // ⚠️ MENSAJE DE RESPALDO
     await sendWhatsAppMessageDirect(
       customer.phone,
-      "✅ Tu pedido ha sido registrado. Un agente te contactará pronto para confirmar los detalles.",
+      "✅ Tu pedido ha sido registrado. Un agente te contactará pronto para confirmar los detalles finales.",
       storeId
     );
+    
+    // ⚠️ MARCAR COMO COMPLETADO AUNQUE HAYA ERROR
+    try {
+      await tenantStorage.updateRegistrationFlowByPhone(customer.phone, {
+        currentStep: 'completed',
+        isCompleted: true,
+        completedAt: new Date(),
+        updatedAt: new Date()
+      });
+    } catch (fallbackError) {
+      console.error('❌ Even fallback completion failed:', fallbackError);
+    }
+    
+    throw error;
   }
+}
+
+// 🔧 FUNCIÓN AUXILIAR: Validar número de contacto
+function validateContactNumber(phoneNumber: string): { isValid: boolean; cleanPhone: string; message?: string } {
+  // Limpiar el número
+  const cleanPhone = phoneNumber.replace(/[\s\-\(\)\+\.]/g, '');
+  
+  // Validaciones básicas
+  if (cleanPhone.length < 10) {
+    return {
+      isValid: false,
+      cleanPhone,
+      message: "❌ El número debe tener al menos 10 dígitos. Por favor ingresa un número válido:"
+    };
+  }
+  
+  if (cleanPhone.length > 15) {
+    return {
+      isValid: false,
+      cleanPhone,
+      message: "❌ El número es demasiado largo. Por favor ingresa un número válido:"
+    };
+  }
+  
+  if (!/^\d+$/.test(cleanPhone)) {
+    return {
+      isValid: false,
+      cleanPhone,
+      message: "❌ El número solo debe contener dígitos. Por favor ingresa un número válido:"
+    };
+  }
+  
+  return {
+    isValid: true,
+    cleanPhone: cleanPhone
+  };
 }
 
 

@@ -263,19 +263,49 @@ export const products = pgTable("products", {
    storeId: integer("store_id").notNull(),
 });
 
+// 🔧 SCHEMA COMPLETO para la tabla orders
+// Incluye campo específico para número de contacto de entrega
+
 export const orders = pgTable("orders", {
+  // Campos básicos
   id: serial("id").primaryKey(),
   orderNumber: text("order_number").notNull().unique(),
   customerId: integer("customer_id").references(() => customers.id).notNull(),
   assignedUserId: integer("assigned_user_id").references(() => users.id),
+  
+  // Estado y prioridad
   status: text("status").notNull().default("pending"), // 'pending', 'assigned', 'in_progress', 'completed', 'cancelled'
   priority: text("priority").notNull().default("normal"), // 'low', 'normal', 'high', 'urgent'
+  
+  // Información financiera
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  deliveryCost: decimal("delivery_cost", { precision: 10, scale: 2 }).default("0"),
+  
+  // ✅ INFORMACIÓN DE ENTREGA
+  deliveryAddress: text("delivery_address"),
+  contactNumber: text("contact_number"), // ✅ CAMPO ESPECÍFICO PARA CONTACTO DE ENTREGA
+  estimatedDelivery: timestamp("estimated_delivery"),
+  estimatedDeliveryTime: text("estimated_delivery_time"), // VARCHAR field
+  
+  // ✅ INFORMACIÓN DE PAGO  
+  paymentMethod: text("payment_method"),
+  paymentStatus: text("payment_status").default("pending"),
+  
+  // Información adicional
   description: text("description"),
   notes: text("notes"),
+  
+  // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-   storeId: integer("store_id").notNull(),
+  lastStatusUpdate: timestamp("last_status_update").defaultNow(),
+  customerLastInteraction: timestamp("customer_last_interaction"),
+  
+  // Información de modificaciones
+  modificationCount: integer("modification_count").default(0),
+  
+  // Información de la tienda
+  storeId: integer("store_id").notNull(),
 });
 
 export const orderItems = pgTable("order_items", {
