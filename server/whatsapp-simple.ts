@@ -3821,43 +3821,88 @@ async function sendPendingOrdersWelcomeMessage(
     
     welcomeMessage += `\n*¿Qué deseas hacer?*`;
     
-    // ✅ BOTONES CON IDs ESPECÍFICOS Y LABELS DESCRIPTIVOS
+    // ✅ AQUÍ ESTÁ EL CAMBIO PRINCIPAL: BOTONES CON LABELS DESCRIPTIVOS
     const buttons = [
       {
         type: 'reply',
         reply: {
-          id: 'track_orders',              // ✅ ID específico compatible con tu sistema
-          title: '📦 Ver mis órdenes'      // ✅ Label descriptivo y claro
+          id: 'track_orders',           // ✅ ID específico que tu detectOrderActionMessage ya reconoce
+          title: '📦 Ver mis órdenes'   // ✅ CAMBIO: Label descriptivo en lugar de "Opción 1"
         }
       },
       {
         type: 'reply',
         reply: {
-          id: 'new_order',                 // ✅ ID específico compatible
-          title: '🛒 Nueva orden'          // ✅ Label descriptivo y claro
+          id: 'new_order',              // ✅ ID específico que tu detectOrderActionMessage ya reconoce
+          title: '🛒 Nueva orden'       // ✅ CAMBIO: Label descriptivo en lugar de "Opción 2"
         }
       },
       {
         type: 'reply',
         reply: {
-          id: 'support',                   // ✅ ID específico compatible
-          title: '💬 Soporte'              // ✅ Label descriptivo y claro
+          id: 'support',                // ✅ ID específico que tu detectOrderActionMessage ya reconoce
+          title: '💬 Soporte'           // ✅ CAMBIO: Label descriptivo en lugar de "Opción 3"
         }
       }
     ];
     
-    // ✅ USAR TU FUNCIÓN EXISTENTE sendWhatsAppMessageWithButtonsAlternative
+    // ✅ USAR TU FUNCIÓN EXISTENTE (sin cambios)
     console.log(`📤 ATTEMPTING INTERACTIVE BUTTONS for ${customer.phone}`);
     await sendWhatsAppMessageWithButtonsAlternative(customer.phone, welcomeMessage, buttons, storeId);
-    console.log(`✅ Welcome message with buttons sent successfully`);
+    console.log(`✅ Welcome message with descriptive buttons sent successfully`);
     
   } catch (error) {
     console.error('❌ Error sending pending orders welcome with buttons:', error);
     
-    // ✅ FALLBACK USANDO TU FUNCIÓN EXISTENTE sendWhatsAppMessageDirect
-    await sendPendingOrdersFallbackMessage(customer, pendingOrders, storeId, customerName);
+    // ✅ FALLBACK MEJORADO (también con labels descriptivos)
+    await sendPendingOrdersFallback(customer, pendingOrders, storeId, customerName);
   }
 }
+
+/**
+ * 📱 FUNCIÓN NUEVA: Fallback con labels descriptivos
+ * ✅ AGREGAR esta función nueva para fallback coherente
+ */
+async function sendPendingOrdersFallback(
+  customer: any,
+  pendingOrders: any[],
+  storeId: number,
+  customerName: string
+): Promise<void> {
+  
+  console.log(`📱 SENDING FALLBACK MESSAGE WITH DESCRIPTIVE OPTIONS`);
+  
+  const orderCount = pendingOrders.length;
+  const orderWord = orderCount === 1 ? 'orden' : 'órdenes';
+  
+  let fallbackMessage = `¡Hola ${customerName}! 👋\n\n`;
+  fallbackMessage += `Tienes *${orderCount} ${orderWord} pendiente${orderCount > 1 ? 's' : ''}* con nosotros.\n\n`;
+  
+  // ✅ RESUMEN SIMPLE DE ÓRDENES
+  fallbackMessage += `📦 *Resumen:*\n`;
+  pendingOrders.slice(0, 2).forEach((order, index) => {
+    const statusEmoji = getOrderStatusEmoji(order.status);
+    const orderNumber = order.orderNumber || order.id;
+    const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+    
+    fallbackMessage += `${statusEmoji} #${orderNumber} - ${total}\n`;
+  });
+  
+  if (pendingOrders.length > 2) {
+    fallbackMessage += `... y ${pendingOrders.length - 2} más\n`;
+  }
+  
+  // ✅ OPCIONES NUMERADAS CON LABELS DESCRIPTIVOS
+  fallbackMessage += `\n*¿Qué deseas hacer?*\n\n`;
+  fallbackMessage += `*1.* 📦 Ver mis órdenes\n`;
+  fallbackMessage += `*2.* 🛒 Nueva orden\n`;
+  fallbackMessage += `*3.* 💬 Soporte\n\n`;
+  fallbackMessage += `💡 *Responde con el número de la opción que deseas*`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, fallbackMessage, storeId);
+  console.log(`✅ Fallback message with descriptive options sent successfully`);
+}
+
 
 async function sendPendingOrdersFallbackMessage(
   customer: any,
