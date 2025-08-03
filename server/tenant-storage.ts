@@ -1286,14 +1286,45 @@ async createDefaultAutoResponses() {
   }
 },
 
-    async getRegistrationFlowByPhoneNumber(phoneNumber: string): Promise<CustomerRegistrationFlow | null> {
+async getRegistrationFlowByPhoneNumber(phoneNumber: string): Promise<CustomerRegistrationFlow | null> {
   try {
-    const [flow] = await tenantDb.select()
-      .from(schema.customerRegistrationFlows)
-      .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber))
-      .limit(1);
+    console.log(`🔍 Getting registration flow for phone: ${phoneNumber} in store: ${storeId}`);
     
-    return flow || null;
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    
+    try {
+      // Obtener el schema name de la tienda actual
+      const storeResult = await pool.query(`
+        SELECT database_url FROM virtual_stores WHERE id = $1
+      `, [storeId]);
+      
+      if (!storeResult.rows[0]) {
+        throw new Error(`Store ${storeId} not found`);
+      }
+      
+      const schemaMatch = storeResult.rows[0].database_url?.match(/schema=([^&]+)/);
+      const schemaName = schemaMatch ? schemaMatch[1] : 'public';
+      
+      console.log(`🔍 Querying registration flow in schema: ${schemaName}`);
+      
+      // Configurar search_path para esta conexión
+      await pool.query(`SET search_path TO ${schemaName}, public`);
+      
+      // Ejecutar la consulta en el schema correcto
+      const result = await pool.query(`
+        SELECT * FROM customer_registration_flows 
+        WHERE phone_number = $1 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `, [phoneNumber]);
+      
+      const flow = result.rows[0] || null;
+      console.log(`🔍 Registration flow result: ${flow ? 'FOUND' : 'NOT FOUND'}`);
+      
+      return flow;
+    } finally {
+      await pool.end();
+    }
   } catch (error) {
     console.error('Error getting registration flow by phone:', error);
     return null;
@@ -1302,14 +1333,51 @@ async createDefaultAutoResponses() {
 
 async updateRegistrationFlowByPhone(phoneNumber: string, updates: any) {
   try {
-    const [flow] = await tenantDb.update(schema.customerRegistrationFlows)
-      .set({
-        ...updates,
-        updatedAt: new Date()
-      })
-      .where(eq(schema.customerRegistrationFlows.phoneNumber, phoneNumber))
-      .returning();
-    return flow || null;
+    console.log(`🔄 Updating registration flow for phone: ${phoneNumber}`, updates);
+    
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    
+    try {
+      // Obtener el schema name
+      const storeResult = await pool.query(`
+        SELECT database_url FROM virtual_stores WHERE id = $1
+      `, [storeId]);
+      
+      const schemaMatch = storeResult.rows[0]?.database_url?.match(/schema=([^&]+)/);
+      const schemaName = schemaMatch ? schemaMatch[1] : 'public';
+      
+      // Configurar search_path
+      await pool.query(`SET search_path TO ${schemaName}, public`);
+      
+      // Construir query de actualización dinámicamente
+      const setParts = [];
+      const values = [];
+      let paramCounter = 1;
+      
+      Object.keys(updates).forEach(key => {
+        if (updates[key] !== undefined) {
+          // Convertir camelCase a snake_case para nombres de columna
+          const columnName = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+          setParts.push(`${columnName} = $${paramCounter}`);
+          values.push(updates[key]);
+          paramCounter++;
+        }
+      });
+      
+      setParts.push(`updated_at = NOW()`);
+      values.push(phoneNumber);
+      
+      const result = await pool.query(`
+        UPDATE customer_registration_flows 
+        SET ${setParts.join(', ')}
+        WHERE phone_number = $${paramCounter}
+        RETURNING *
+      `, values);
+      
+      return result.rows[0] || null;
+    } finally {
+      await pool.end();
+    }
   } catch (error) {
     console.error('Error updating registration flow by phone:', error);
     return null;
@@ -1334,61 +1402,97 @@ async createOrUpdateRegistrationFlow(flowData: any): Promise<any> {
   console.log(`📦 Order ID: ${flowData.orderId}`);
   
   try {
-    // Verificar si ya existe un flujo para este teléfono
-    const existingFlow = await this.getRegistrationFlowByPhoneNumber(flowData.phoneNumber);
-    console.log(`🔍 Existing flow: ${existingFlow ? 'Found' : 'Not found'}`);
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     
-    if (existingFlow) {
-      console.log(`📝 UPDATING EXISTING FLOW - ID: ${existingFlow.id}`);
+    try {
+      // Obtener el schema name
+      const storeResult = await pool.query(`
+        SELECT database_url FROM virtual_stores WHERE id = $1
+      `, [storeId]);
       
-      // Actualizar flujo existente
-      const [updatedFlow] = await tenantDb.update(schema.customerRegistrationFlows)
-        .set({
-          customerId: flowData.customerId,
-          currentStep: flowData.currentStep,
-          flowType: flowData.flowType || 'order_data_collection',
-          orderId: flowData.orderId,
-          orderNumber: flowData.orderNumber,
-          collectedData: flowData.collectedData || JSON.stringify({}),
-          expiresAt: flowData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
-          isCompleted: flowData.isCompleted || false,
-          updatedAt: new Date()
-        })
-        .where(eq(schema.customerRegistrationFlows.phoneNumber, flowData.phoneNumber))
-        .returning();
+      const schemaMatch = storeResult.rows[0]?.database_url?.match(/schema=([^&]+)/);
+      const schemaName = schemaMatch ? schemaMatch[1] : 'public';
       
-      console.log(`✅ FLOW UPDATED - ID: ${updatedFlow.id}`);
-      return updatedFlow;
-    } else {
-      console.log(`➕ CREATING NEW FLOW`);
+      // Configurar search_path
+      await pool.query(`SET search_path TO ${schemaName}, public`);
       
-      // Crear nuevo flujo
-      const [newFlow] = await tenantDb.insert(schema.customerRegistrationFlows)
-        .values({
-          customerId: flowData.customerId,
-          phoneNumber: flowData.phoneNumber,
-          currentStep: flowData.currentStep,
-          flowType: flowData.flowType || 'order_data_collection',
-          orderId: flowData.orderId,
-          orderNumber: flowData.orderNumber,
-          collectedData: flowData.collectedData || JSON.stringify({}),
-          expiresAt: flowData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
-          isCompleted: flowData.isCompleted || false,
-          completedAt: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          storeId: storeId
-        })
-        .returning();
+      // Verificar si ya existe un flujo para este teléfono
+      const existingResult = await pool.query(`
+        SELECT * FROM customer_registration_flows 
+        WHERE phone_number = $1 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      `, [flowData.phoneNumber]);
       
-      console.log(`✅ NEW FLOW CREATED - ID: ${newFlow.id}`);
-      return newFlow;
+      const existingFlow = existingResult.rows[0];
+      console.log(`🔍 Existing flow: ${existingFlow ? 'Found' : 'Not found'}`);
+      
+      if (existingFlow) {
+        console.log(`📝 UPDATING EXISTING FLOW - ID: ${existingFlow.id}`);
+        
+        // Actualizar flujo existente
+        const result = await pool.query(`
+          UPDATE customer_registration_flows 
+          SET customer_id = $1,
+              current_step = $2,
+              flow_type = $3,
+              order_id = $4,
+              order_number = $5,
+              collected_data = $6,
+              expires_at = $7,
+              is_completed = $8,
+              updated_at = NOW()
+          WHERE phone_number = $9
+          RETURNING *
+        `, [
+          flowData.customerId,
+          flowData.currentStep,
+          flowData.flowType || 'order_data_collection',
+          flowData.orderId,
+          flowData.orderNumber,
+          flowData.collectedData || JSON.stringify({}),
+          flowData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+          flowData.isCompleted || false,
+          flowData.phoneNumber
+        ]);
+        
+        console.log(`✅ FLOW UPDATED - ID: ${result.rows[0].id}`);
+        return result.rows[0];
+      } else {
+        console.log(`➕ CREATING NEW FLOW`);
+        
+        // Crear nuevo flujo
+        const result = await pool.query(`
+          INSERT INTO customer_registration_flows (
+            customer_id, phone_number, current_step, flow_type,
+            order_id, order_number, collected_data, expires_at,
+            is_completed, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          RETURNING *
+        `, [
+          flowData.customerId,
+          flowData.phoneNumber,
+          flowData.currentStep,
+          flowData.flowType || 'order_data_collection',
+          flowData.orderId,
+          flowData.orderNumber,
+          flowData.collectedData || JSON.stringify({}),
+          flowData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+          flowData.isCompleted || false
+        ]);
+        
+        console.log(`✅ NEW FLOW CREATED - ID: ${result.rows[0].id}`);
+        return result.rows[0];
+      }
+    } finally {
+      await pool.end();
     }
   } catch (error) {
     console.error('❌ ERROR in createOrUpdateRegistrationFlow:', error);
     throw error;
   }
 },
+
 
 async cleanupExpiredRegistrationFlows() {
   try {
@@ -1411,9 +1515,75 @@ async cleanupExpiredRegistrationFlows() {
     return 0;
   }
 },
+async ensureRegistrationFlowTableExists(): Promise<void> {
+      try {
+        const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+        
+        try {
+          // Obtener el schema name
+          const storeResult = await pool.query(`
+            SELECT database_url FROM virtual_stores WHERE id = $1
+          `, [storeId]);
+          
+          const schemaMatch = storeResult.rows[0]?.database_url?.match(/schema=([^&]+)/);
+          const schemaName = schemaMatch ? schemaMatch[1] : 'public';
+          
+          console.log(`🔍 Ensuring customer_registration_flows exists in schema: ${schemaName}`);
+          
+          // Verificar si la tabla existe
+          const tableExists = await pool.query(`
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_schema = $1 
+              AND table_name = 'customer_registration_flows'
+            ) as exists
+          `, [schemaName]);
+          
+          if (!tableExists.rows[0].exists) {
+            console.log(`📋 Creating customer_registration_flows in schema ${schemaName}`);
+            
+            // Crear la tabla en el schema específico
+            await pool.query(`
+              CREATE TABLE ${schemaName}.customer_registration_flows (
+                id SERIAL PRIMARY KEY,
+                customer_id INTEGER,
+                phone_number TEXT NOT NULL,
+                current_step TEXT NOT NULL,
+                flow_type TEXT,
+                order_id INTEGER,
+                order_number TEXT,
+                collected_data TEXT,
+                requested_service TEXT,
+                is_completed BOOLEAN DEFAULT false,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+                updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+              );
+            `);
+            
+            // Crear índices
+            await pool.query(`
+              CREATE INDEX IF NOT EXISTS idx_reg_flows_phone_${schemaName.replace(/[^a-zA-Z0-9]/g, '_')} 
+              ON ${schemaName}.customer_registration_flows(phone_number);
+            `);
+            
+            console.log(`✅ customer_registration_flows created in schema ${schemaName}`);
+          } else {
+            console.log(`✅ customer_registration_flows exists in schema ${schemaName}`);
+          }
+        } finally {
+          await pool.end();
+        }
+      } catch (error) {
+        console.error(`❌ Error ensuring table exists:`, error);
+      }
+    }
+
 
     };
-}
+
+
+  }
 
 // En tenant-storage.ts - agregar al final del archivo
 export async function createTenantStorageForStore(storeId: number) {
