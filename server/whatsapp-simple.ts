@@ -3700,6 +3700,22 @@ async function validateCustomerOrdersEarly(
   tenantStorage: any
 ): Promise<{ handled: boolean }> {
   try {
+    
+      const messageAction = detectOrderActionMessage(messageText);
+    
+    if (messageAction.isOrderAction && messageAction.action === 'new_order') {
+      console.log(`🛒 NEW ORDER DETECTED - BYPASSING PENDING ORDERS`);
+      
+      // Enviar catálogo directamente
+      await processAutoResponse("catálogo", customer.phone, storeId, tenantStorage);
+
+    
+      
+      return { handled: true }; // ✅ IMPORTANTE: Terminar aquí
+    }
+    
+    
+    
     console.log(`📦 VALIDATING CUSTOMER ORDERS - Customer ID: ${customer.id}`);
     
     // 1. Obtener órdenes pendientes usando tu método existente
@@ -3720,7 +3736,7 @@ async function validateCustomerOrdersEarly(
     console.log(`📦 FOUND ${pendingOrders.length} PENDING ORDERS - Processing...`);
 
     // 3. Detectar tipo de mensaje
-    const messageAction = detectOrderActionMessage(messageText);
+    await messageAction 
     console.log(`🔍 MESSAGE ACTION DETECTED:`, messageAction);
     
     // 4. ✅ CORREGIDO: Manejar acciones específicas PRIMERO
