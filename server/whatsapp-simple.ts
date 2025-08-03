@@ -57,18 +57,6 @@ interface LocationData {
   formatted_address?: string;
 }
 
-function getStatusEmoji(status) {
-  const statusEmojis = {
-    'pending': '⏳',
-    'confirmed': '✅',
-    'processing': '🔄',
-    'shipped': '🚚',
-    'delivered': '📦',
-    'cancelled': '❌',
-    'completed': '✅'
-  };
-  return statusEmojis[status] || '📋';
-}
 
 function getStatusText(status) {
   const statusTexts = {
@@ -3948,6 +3936,8 @@ async function sendPendingOrdersFallbackMessage(
 /**
  * 🎯 Manejar acciones específicas de órdenes
  */
+// ✅ PASO 1: REEMPLAZAR handleSpecificOrderAction en tu whatsapp-simple.ts
+
 async function handleSpecificOrderAction(
   customer: any,
   action: any,
@@ -3958,68 +3948,168 @@ async function handleSpecificOrderAction(
   try {
     console.log(`🎯 EXECUTING ORDER ACTION: ${action.action} for customer ${customer.id}`);
     
-    // ✅ USAR TU ConversationContextService EXISTENTE
-    const { ConversationContextService } = await import('./conversation-context.js');
-    const contextService = new ConversationContextService(tenantStorage, storeId);
-    
-    // ✅ GUARDAR CONTEXTO USANDO TU SISTEMA EXISTENTE
-    await contextService.saveContext({
-      phoneNumber: customer.phone,
-      customerId: customer.id,
-      currentFlow: 'orders_management',
-      contextData: {
-        lastAction: action.action,
-        pendingOrdersCount: pendingOrders.length,
-        fromPendingOrdersFlow: true,
-        timestamp: new Date()
-      }
-    });
-    
+    // ✅ CORREGIDO: Sin usar ConversationContextService que causaba el error
     switch (action.action) {
       case 'track_orders':
-        console.log(`📋 SHOWING ORDER TRACKING - Using existing auto-response system`);
-        await sendAutoResponseMessage(customer.phone, 'show_order_tracking', storeId, tenantStorage);
+        console.log(`📋 SHOWING ORDER TRACKING INFO`);
+        await sendOrderTrackingInfo(customer, pendingOrders, storeId);
         break;
         
-      case 'order_details':
-        console.log(`📄 SHOWING ORDER DETAILS: ${action.orderNumber}`);
-        if (action.orderNumber) {
-          await showSpecificOrderDetailsCompatible(customer, action.orderNumber, storeId, tenantStorage);
-        } else {
-          // Fallback: usar tu sistema de auto-respuestas
-          await sendAutoResponseMessage(customer.phone, 'show_order_tracking', storeId, tenantStorage);
-        }
+      case 'modify_order':
+        console.log(`✏️ HANDLING ORDER MODIFICATION REQUEST`);
+        await sendOrderModificationOptions(customer, pendingOrders, storeId);
+        break;
+        
+      case 'cancel_order':
+        console.log(`❌ HANDLING ORDER CANCELLATION REQUEST`);
+        await sendOrderCancellationOptions(customer, pendingOrders, storeId);
+        break;
+        
+      case 'contact_support':
+        console.log(`💬 CONNECTING TO SUPPORT`);
+        await sendContactSupportMessage(customer, storeId);
         break;
         
       case 'new_order':
-        console.log(`🛒 HANDLING NEW ORDER REQUEST - Using existing auto-response system`);
-        await sendAutoResponseMessage(customer.phone, 'show_products', storeId, tenantStorage);
-        break;
-        
-      case 'support':
-        console.log(`💬 HANDLING SUPPORT REQUEST - Using existing auto-response system`);
-        await sendAutoResponseMessage(customer.phone, 'show_help', storeId, tenantStorage);
-        break;
+        console.log(`🛒 STARTING NEW ORDER PROCESS`);
+        // Continuar con el flujo normal de nueva orden
+        return;
         
       default:
-        console.log(`⚠️ UNKNOWN ACTION: ${action.action} - Using default order tracking`);
-        await sendAutoResponseMessage(customer.phone, 'show_order_tracking', storeId, tenantStorage);
-        break;
+        console.log(`❓ UNKNOWN ACTION: ${action.action} - Showing general order info`);
+        await sendOrderTrackingInfo(customer, pendingOrders, storeId);
     }
     
-    console.log(`✅ Order action ${action.action} completed successfully`);
+    console.log(`✅ Order action ${action.action} handled successfully`);
     
   } catch (error) {
     console.error(`❌ Error in handleSpecificOrderAction:`, error);
     
-    // ✅ FALLBACK USANDO TU FUNCIÓN EXISTENTE
-    let errorMessage = `❌ Hubo un problema procesando tu solicitud.\n\n`;
-    errorMessage += `Tienes ${pendingOrders.length} órdenes pendientes.\n\n`;
-    errorMessage += `Por favor intenta de nuevo o contacta soporte.`;
-    
-    await sendWhatsAppMessageDirect(customer.phone, errorMessage, storeId);
+    // Mensaje de error fallback
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      "Hubo un problema al procesar tu solicitud. Un agente te contactará pronto para asistirte.",
+      storeId
+    );
   }
 }
+
+async function sendOrderTrackingInfo(customer: any, pendingOrders: any[], storeId: number): Promise<void> {
+  let message = `📦 **Resumen de tus órdenes:**\n\n`;
+  
+  for (let i = 0; i < Math.min(pendingOrders.length, 3); i++) {
+    const order = pendingOrders[i];
+    const orderNumber = order.orderNumber || `WEB-${order.id}`;
+    const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+    const statusEmoji = getStatusEmoji(order.status);
+    
+    message += `${statusEmoji} **Orden #${orderNumber}**\n`;
+    message += `💰 Total: ${total}\n`;
+    message += `📅 ${formatOrderDate(order.createdAt)}\n`;
+    message += `📍 Estado: ${translateOrderStatus(order.status)}\n\n`;
+  }
+  
+  if (pendingOrders.length > 3) {
+    message += `... y ${pendingOrders.length - 3} órdenes más\n\n`;
+  }
+  
+  message += `*¿Necesitas algo más?*\n\n`;
+  message += `🔄 **"Actualizar"** - Estado actual\n`;
+  message += `✏️ **"Modificar"** - Cambiar orden\n`;
+  message += `💬 **"Soporte"** - Hablar con agente`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+}
+
+async function sendOrderModificationOptions(customer: any, pendingOrders: any[], storeId: number): Promise<void> {
+  let message = `✏️ **Modificar orden:**\n\n`;
+  
+  if (pendingOrders.length === 1) {
+    const order = pendingOrders[0];
+    const orderNumber = order.orderNumber || `WEB-${order.id}`;
+    message += `Para modificar la orden #${orderNumber}, contacta a soporte.\n\n`;
+  } else {
+    message += `Tienes ${pendingOrders.length} órdenes. ¿Cuál deseas modificar?\n\n`;
+    
+    for (let i = 0; i < Math.min(pendingOrders.length, 3); i++) {
+      const order = pendingOrders[i];
+      const orderNumber = order.orderNumber || `WEB-${order.id}`;
+      message += `${i + 1}. Orden #${orderNumber}\n`;
+    }
+    message += `\n`;
+  }
+  
+  message += `Un agente te asistirá con los cambios necesarios.\n\n`;
+  message += `💬 **"Soporte"** - Contactar ahora`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+}
+
+async function sendOrderCancellationOptions(customer: any, pendingOrders: any[], storeId: number): Promise<void> {
+  let message = `❌ **Cancelar orden:**\n\n`;
+  message += `Para procesar una cancelación, necesitamos verificar algunos detalles.\n\n`;
+  message += `Un agente te contactará para:\n`;
+  message += `• Confirmar la cancelación\n`;
+  message += `• Procesar el reembolso (si aplica)\n`;
+  message += `• Actualizar el estado\n\n`;
+  message += `💬 **"Soporte"** - Iniciar proceso`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+}
+
+async function sendContactSupportMessage(customer: any, storeId: number): Promise<void> {
+  const message = `💬 **Conectando con soporte...**\n\n` +
+    `Un agente te contactará en breve para asistirte.\n\n` +
+    `**Mientras tanto:**\n` +
+    `📞 También puedes llamarnos directamente\n` +
+    `⏰ Horario: 8:00 AM - 6:00 PM\n\n` +
+    `Gracias por tu paciencia. 🙏`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+}
+
+// ✅ PASO 3: AGREGAR estas funciones auxiliares
+
+function getStatusEmoji(status: string): string {
+  const statusEmojis: { [key: string]: string } = {
+    'pending': '⏳',
+    'created': '📝',
+    'confirmed': '✅',
+    'preparing': '👨‍🍳',
+    'in_transit': '🚚',
+    'delivered': '📦',
+    'cancelled': '❌'
+  };
+  return statusEmojis[status] || '📋';
+}
+
+function translateOrderStatus(status: string): string {
+  const statusTranslations: { [key: string]: string } = {
+    'pending': 'Pendiente',
+    'created': 'Creada',
+    'confirmed': 'Confirmada',
+    'preparing': 'Preparando',
+    'in_transit': 'En tránsito',
+    'delivered': 'Entregada',
+    'cancelled': 'Cancelada'
+  };
+  return statusTranslations[status] || status;
+}
+
+function formatOrderDate(dateString: string | Date | undefined): string {
+  try {
+    if (!dateString) return 'Fecha N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-DO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch {
+    return 'Fecha N/A';
+  }
+}
+
 
 async function showSpecificOrderDetailsCompatible(
   customer: any,
@@ -4494,93 +4584,59 @@ async function sendOrderNotFoundMessage(customer: any, orderNumber: string, stor
 /**
  * 🔍 FUNCIÓN ACTUALIZADA: Detectar botones específicos de órdenes
  */
-function detectOrderActionMessage(messageText: string): {
-  isOrderAction: boolean;
-  action: string;
-  orderNumber?: string;
-  orderId?: string;
-} {
+function detectOrderActionMessage(messageText: string): { isOrderAction: boolean; action: string } {
   const text = messageText.toLowerCase().trim();
   
   console.log(`🔍 ANALYZING MESSAGE: "${text}"`);
   
-  // ✅ PRIORIDAD 1: Botones específicos con IDs exactos (más confiables)
-  if (text === 'track_orders' || text === 'show_order_tracking') {
-    console.log(`✅ EXACT MATCH: track_orders`);
-    return { isOrderAction: true, action: 'track_orders' };
+  // ✅ MAPEO DE BOTONES CORREGIDO
+  const buttonMappings: { [key: string]: string } = {
+    'btn_0': 'track_orders',    // Opción 1 -> Ver órdenes
+    'btn_1': 'new_order',       // Opción 2 -> Nueva orden  
+    'btn_2': 'contact_support', // Opción 3 -> Soporte
+    'track_orders': 'track_orders',
+    'new_order': 'new_order',
+    'contact_support': 'contact_support'
+  };
+  
+  if (buttonMappings[text]) {
+    console.log(`✅ DIRECT BUTTON MAPPING: ${text} -> ${buttonMappings[text]}`);
+    return { isOrderAction: true, action: buttonMappings[text] };
   }
   
-  if (text === 'new_order' || text === 'show_products') {
-    console.log(`✅ EXACT MATCH: new_order`);
-    return { isOrderAction: true, action: 'new_order' };
+  // ✅ MAPEO POR NÚMEROS
+  const numberMappings: { [key: string]: string } = {
+    '1': 'track_orders',
+    '2': 'new_order',
+    '3': 'contact_support'
+  };
+  
+  if (numberMappings[text]) {
+    console.log(`✅ NUMBER MAPPING: ${text} -> ${numberMappings[text]}`);
+    return { isOrderAction: true, action: numberMappings[text] };
   }
   
-  if (text === 'support' || text === 'show_help') {
-    console.log(`✅ EXACT MATCH: support`);
-    return { isOrderAction: true, action: 'support' };
-  }
+  // ✅ PALABRAS CLAVE EXISTENTES (mantener las que ya tienes)
+  const orderKeywords: { [key: string]: string[] } = {
+    'track_orders': ['ver ordenes', 'ver órdenes', 'mis ordenes', 'mis órdenes', 'seguimiento', 'estado', 'tracking'],
+    'modify_order': ['modificar', 'cambiar', 'editar', 'actualizar'],
+    'cancel_order': ['cancelar', 'anular', 'eliminar'],
+    'contact_support': ['soporte', 'ayuda', 'agente', 'hablar', 'contactar'],
+    'new_order': ['nueva orden', 'nuevo pedido', 'ordenar', 'comprar', 'catálogo']
+  };
   
-  // ✅ PRIORIDAD 2: Botones de acciones específicas en órdenes
-  if (text.startsWith('order_')) {
-    const orderNumber = text.replace('order_', '');
-    console.log(`✅ ORDER DETAILS: ${orderNumber}`);
-    return { 
-      isOrderAction: true, 
-      action: 'order_details',
-      orderNumber: orderNumber
-    };
-  }
-  
-  // ✅ PRIORIDAD 3: Botones genéricos con contexto mantenido
-  // Mapean a las mismas acciones que los botones específicos
-  if (text === 'btn_0' || text === '1') {
-    console.log(`✅ GENERIC BUTTON/NUMBER: Option 1 -> track_orders`);
-    return { isOrderAction: true, action: 'track_orders' };
-  }
-  
-  if (text === 'btn_1' || text === '2') {
-    console.log(`✅ GENERIC BUTTON/NUMBER: Option 2 -> new_order`);
-    return { isOrderAction: true, action: 'new_order' };
-  }
-  
-  if (text === 'btn_2' || text === '3') {
-    console.log(`✅ GENERIC BUTTON/NUMBER: Option 3 -> support`);
-    return { isOrderAction: true, action: 'support' };
-  }
-  
-  // ✅ PRIORIDAD 4: Texto libre para compatibilidad
-  if (text.includes('seguimiento') || text.includes('rastrear') || text.includes('track')) {
-    console.log(`✅ TEXT MATCH: tracking keywords`);
-    return { isOrderAction: true, action: 'track_orders' };
-  }
-  
-  if (text.includes('nuevo pedido') || text.includes('nueva orden') || text.includes('comprar')) {
-    console.log(`✅ TEXT MATCH: new order keywords`);
-    return { isOrderAction: true, action: 'new_order' };
-  }
-  
-  if (text.includes('soporte') || text.includes('ayuda') || text.includes('contactar')) {
-    console.log(`✅ TEXT MATCH: support keywords`);
-    return { isOrderAction: true, action: 'support' };
-  }
-  
-  // ✅ PRIORIDAD 5: Detección de números de orden específicos
-  if ((text.includes('orden') || text.includes('order')) && /\d+/.test(text)) {
-    const orderMatch = text.match(/(?:orden|order)[\s#]*(\d+)/);
-    if (orderMatch) {
-      console.log(`✅ ORDER NUMBER DETECTED: ${orderMatch[1]}`);
-      return { 
-        isOrderAction: true, 
-        action: 'order_details',
-        orderNumber: orderMatch[1]
-      };
+  for (const [action, keywords] of Object.entries(orderKeywords)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        console.log(`✅ KEYWORD MATCH: "${keyword}" -> ${action}`);
+        return { isOrderAction: true, action };
+      }
     }
   }
   
   console.log(`❌ NO ORDER ACTION DETECTED`);
   return { isOrderAction: false, action: 'none' };
 }
-
 
 
 
