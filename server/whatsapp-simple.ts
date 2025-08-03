@@ -1080,12 +1080,12 @@ if (collectedData.address) customerUpdates.address = collectedData.address;
       updatedAt: new Date()
     };
     
-    const updateResult = await tenantStorage.updateRegistrationFlowByPhone(customer.phone, flowUpdates);
+       const updateResult = await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
     
     if (updateResult) {
-      console.log(`✅ Registration flow marked as completed`);
+      console.log(`✅ Registration flow marked as deleted successfully`);
     } else {
-      console.error(`❌ Failed to update registration flow`);
+      console.error(`❌ Failed to delete registration flow`);
     }
     
     // ✅ 4. CREAR HISTORIAL DE CAMBIO DE ESTADO
