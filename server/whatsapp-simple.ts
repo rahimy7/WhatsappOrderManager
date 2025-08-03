@@ -1082,14 +1082,14 @@ if (collectedData.address) customerUpdates.address = collectedData.address;
     
        const updateResult = await tenantStorage.deleteRegistrationFlowByPhone(customer.phone);
     
-    if (updateResult) {
+   /*  if (updateResult) {
       console.log(`✅ Registration flow marked as deleted successfully`);
     } else {
       console.error(`❌ Failed to delete registration flow`);
-    }
+    } */
     
     // ✅ 4. CREAR HISTORIAL DE CAMBIO DE ESTADO
-    try {
+   /*  try {
       await tenantStorage.addOrderHistory({
         orderId: registrationFlow.orderId,
         statusFrom: 'pending',
@@ -1100,7 +1100,7 @@ if (collectedData.address) customerUpdates.address = collectedData.address;
       console.log(`📝 Order history recorded`);
     } catch (historyError) {
       console.error('⚠️ Failed to record order history:', historyError);
-    }
+    } */
     
     // ✅ 5. ENVIAR CONFIRMACIÓN FINAL CON CLARIDAD SOBRE LOS NÚMEROS
     const customerName = collectedData.customerName || customer.name || 'Cliente';
@@ -1690,6 +1690,24 @@ export async function processIncomingUserMessage(webhookData: any, storeMapping:
     }
 
     console.log(`👤 CUSTOMER FOUND/CREATED - ID: ${customer.id}, Name: ${customer.name}`);
+
+    // ✅ ===== VALIDACIÓN DE ÓRDENES PENDIENTES TEMPRANA =====
+console.log(`🔍 CHECKING FOR PENDING ORDERS FIRST...`);
+
+const orderValidationResult = await validateCustomerOrdersEarly(
+  customer, 
+  messageText, 
+  safeStoreMapping.storeId, 
+  tenantStorage
+);
+
+if (orderValidationResult.handled) {
+  console.log(`✅ MESSAGE HANDLED BY ORDER VALIDATION - Exiting`);
+  return; // ⚠️ IMPORTANTE: Salir aquí para no procesar auto-respuestas
+}
+
+console.log(`❌ NOT HANDLED BY ORDER VALIDATION - Continuing with normal flow`);
+// ===== FIN DE VALIDACIÓN TEMPRANA =====
 
     // 🔄 VERIFICAR REGISTRATION FLOW
     const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
@@ -3648,6 +3666,558 @@ async function sendSimpleMessage(phoneNumber: string, messageText: string, store
   } catch (error) {
     console.error('Error enviando mensaje simple:', error);
   }
+}
+
+async function validateCustomerOrdersEarly(
+  customer: any,
+  messageText: string,
+  storeId: number,
+  tenantStorage: any
+): Promise<{ handled: boolean }> {
+  try {
+    console.log(`📦 VALIDATING CUSTOMER ORDERS - Customer ID: ${customer.id}`);
+    
+    // 1. Obtener órdenes pendientes usando tu método existente
+    const allOrders = await tenantStorage.getAllOrders();
+    const customerOrders = allOrders.filter(order => order.customerId === customer.id);
+    const pendingOrders = customerOrders.filter(order => 
+      ['pending', 'created', 'confirmed', 'preparing', 'in_transit'].includes(order.status)
+    );
+
+    console.log(`📊 ORDER STATS: Total=${customerOrders.length}, Pending=${pendingOrders.length}`);
+
+    // 2. Si no hay órdenes pendientes, continuar flujo normal
+    if (pendingOrders.length === 0) {
+      console.log(`ℹ️ No pending orders found - continuing normal flow`);
+      return { handled: false };
+    }
+
+    console.log(`📦 FOUND ${pendingOrders.length} PENDING ORDERS - Processing...`);
+
+    // 3. Detectar tipo de mensaje
+    const messageAction = detectOrderActionMessage(messageText);
+    console.log(`🔍 MESSAGE ACTION DETECTED:`, messageAction);
+    
+    // 4. Manejar mensajes de bienvenida con órdenes pendientes
+    if (isWelcomeOrGeneralMessage(messageText)) {
+      console.log(`👋 WELCOME MESSAGE WITH PENDING ORDERS`);
+      await sendPendingOrdersWelcomeMessage(customer, pendingOrders, storeId);
+      return { handled: true };
+    }
+    
+    // 5. Manejar acciones específicas de órdenes
+    if (messageAction.isOrderAction) {
+      console.log(`🎯 ORDER ACTION DETECTED: ${messageAction.action}`);
+      await handleSpecificOrderAction(customer, messageAction, pendingOrders, storeId, tenantStorage);
+      return { handled: true };
+    }
+    
+    // 6. Para otros mensajes, mostrar contexto de órdenes pendientes
+    if (pendingOrders.length > 0) {
+      console.log(`💡 SHOWING ORDER CONTEXT FOR NON-ORDER MESSAGE`);
+      await sendOrderContextMessage(customer, pendingOrders, messageText, storeId);
+      return { handled: true };
+    }
+    
+    return { handled: false };
+    
+  } catch (error) {
+    console.error('❌ Error in validateCustomerOrdersEarly:', error);
+    return { handled: false }; // En caso de error, continuar flujo normal
+  }
+}
+
+/**
+ * 🔍 Detectar si el mensaje es sobre órdenes
+ */
+function detectOrderActionMessage(messageText: string): { 
+  isOrderAction: boolean; 
+  action: string; 
+  orderNumber?: string; 
+} {
+  const text = messageText.toLowerCase().trim();
+  
+  // Botones específicos del flujo (estos vienen de los botones interactivos)
+  if (text === 'track_orders' || text === 'ver_ordenes') {
+    return { isOrderAction: true, action: 'track_orders' };
+  }
+  
+  if (text === 'new_order' || text === 'nueva_orden') {
+    return { isOrderAction: true, action: 'new_order' };
+  }
+  
+  if (text === 'support' || text === 'soporte') {
+    return { isOrderAction: true, action: 'support' };
+  }
+  
+  // Texto relacionado con seguimiento
+  if (text.includes('seguimiento') || text.includes('rastrear') || text.includes('estado') || text.includes('tracking')) {
+    return { isOrderAction: true, action: 'track_orders' };
+  }
+  
+  // Búsqueda de orden específica
+  if ((text.includes('orden') || text.includes('order')) && (text.includes('#') || /\d+/.test(text))) {
+    const orderMatch = text.match(/(?:orden|order)[\s#]*(\d+)/);
+    return { 
+      isOrderAction: true, 
+      action: 'order_details',
+      orderNumber: orderMatch ? orderMatch[1] : undefined
+    };
+  }
+  
+  // Acciones de modificación
+  if (text.includes('modificar') || text.includes('cambiar') || text.includes('editar')) {
+    return { isOrderAction: true, action: 'modify_order' };
+  }
+  
+  // Cancelación
+  if (text.includes('cancelar')) {
+    return { isOrderAction: true, action: 'cancel_order' };
+  }
+  
+  return { isOrderAction: false, action: 'none' };
+}
+
+/**
+ * 👋 Verificar si es mensaje de bienvenida
+ */
+function isWelcomeOrGeneralMessage(messageText: string): boolean {
+  const text = messageText.toLowerCase().trim();
+  
+  const welcomePatterns = [
+    'hola', 'hello', 'hi', 'buenos días', 'buenas tardes', 'buenas noches',
+    'saludos', 'hey', 'start', 'comenzar', 'empezar', 'menu', 'menú',
+    'buen día', 'qué tal', 'como estas', 'cómo estás', 'buenas'
+  ];
+  
+  return welcomePatterns.some(pattern => text.includes(pattern)) || text.length <= 15;
+}
+
+/**
+ * 📦 Enviar mensaje de bienvenida con órdenes pendientes
+ */
+async function sendPendingOrdersWelcomeMessage(
+  customer: any,
+  pendingOrders: any[],
+  storeId: number
+): Promise<void> {
+  try {
+    const customerName = customer.name && customer.name !== customer.phone 
+      ? customer.name 
+      : 'Cliente';
+    
+    const orderCount = pendingOrders.length;
+    const orderWord = orderCount === 1 ? 'orden' : 'órdenes';
+    
+    let welcomeMessage = `¡Hola ${customerName}! 👋\n\n`;
+    welcomeMessage += `Nos da mucho gusto verte de nuevo. `;
+    welcomeMessage += `Veo que tienes *${orderCount} ${orderWord} pendiente${orderCount > 1 ? 's' : ''}* con nosotros.\n\n`;
+    
+    // Mostrar resumen de órdenes
+    welcomeMessage += `📦 *Resumen de tus órdenes:*\n`;
+    
+    pendingOrders.slice(0, 3).forEach((order, index) => {
+      const statusEmoji = getOrderStatusEmoji(order.status);
+      const orderNumber = order.orderNumber || order.id;
+      const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+      
+      welcomeMessage += `${statusEmoji} Orden #${orderNumber} - ${total}\n`;
+    });
+    
+    if (pendingOrders.length > 3) {
+      welcomeMessage += `... y ${pendingOrders.length - 3} más\n`;
+    }
+    
+    welcomeMessage += `\n*¿Qué deseas hacer?*\n\n`;
+    welcomeMessage += `📦 Escribe "*seguimiento*" para ver el estado\n`;
+    welcomeMessage += `🛒 Escribe "*nuevo*" para hacer otro pedido\n`;
+    welcomeMessage += `💬 Escribe "*soporte*" para ayuda\n`;
+    
+    // Enviar usando tu función existente
+    await sendWhatsAppMessageDirect(customer.phone, welcomeMessage, storeId);
+    
+    console.log(`✅ Pending orders welcome sent to ${customer.phone}`);
+    
+  } catch (error) {
+    console.error('❌ Error sending pending orders welcome:', error);
+    
+    // Fallback a mensaje simple
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `¡Hola! Tienes ${pendingOrders.length} órdenes pendientes. Escribe "seguimiento" para verlas.`,
+      storeId
+    );
+  }
+}
+
+/**
+ * 🎯 Manejar acciones específicas de órdenes
+ */
+async function handleSpecificOrderAction(
+  customer: any,
+  action: any,
+  pendingOrders: any[],
+  storeId: number,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    console.log(`🎯 Handling order action: ${action.action}`);
+    
+    switch (action.action) {
+      case 'track_orders':
+        await showOrderTrackingList(customer, pendingOrders, storeId);
+        break;
+        
+      case 'order_details':
+        if (action.orderNumber) {
+          await showSpecificOrderDetails(customer, action.orderNumber, storeId, tenantStorage);
+        } else {
+          await showOrderTrackingList(customer, pendingOrders, storeId);
+        }
+        break;
+        
+      case 'new_order':
+        await handleNewOrderRequest(customer, storeId);
+        break;
+        
+      case 'support':
+        await handleSupportRequest(customer, pendingOrders, storeId);
+        break;
+        
+      case 'modify_order':
+        await handleOrderModificationRequest(customer, pendingOrders, storeId);
+        break;
+        
+      case 'cancel_order':
+        await handleOrderCancellationRequest(customer, pendingOrders, storeId);
+        break;
+        
+      default:
+        console.log(`⚠️ Unknown order action: ${action.action}`);
+        await showOrderTrackingList(customer, pendingOrders, storeId);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error handling order action:', error);
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      '❌ Hubo un problema procesando tu solicitud. Por favor intenta nuevamente.',
+      storeId
+    );
+  }
+}
+
+/**
+ * 📋 Mostrar lista de seguimiento de órdenes
+ */
+async function showOrderTrackingList(
+  customer: any,
+  pendingOrders: any[],
+  storeId: number
+): Promise<void> {
+  try {
+    let message = `📦 *Tus órdenes pendientes:*\n\n`;
+    
+    pendingOrders.forEach((order, index) => {
+      const statusEmoji = getOrderStatusEmoji(order.status);
+      const orderNumber = order.orderNumber || order.id;
+      const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+      const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('es-ES') : 'N/A';
+      
+      message += `${statusEmoji} *Orden #${orderNumber}*\n`;
+      message += `   📅 Fecha: ${date}\n`;
+      message += `   📍 Estado: ${getOrderStatusText(order.status)}\n`;
+      message += `   💰 Total: ${total}\n\n`;
+    });
+    
+    message += `💡 *Para ver detalles*, escribe:\n`;
+    message += `"Orden #${pendingOrders[0].orderNumber || pendingOrders[0].id}"\n\n`;
+    message += `🛒 Escribe "*nuevo*" para hacer otro pedido\n`;
+    message += `💬 Escribe "*soporte*" para ayuda`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    
+  } catch (error) {
+    console.error('❌ Error showing order tracking list:', error);
+    throw error;
+  }
+}
+
+/**
+ * 📄 Mostrar detalles de orden específica
+ */
+async function showSpecificOrderDetails(
+  customer: any,
+  orderNumber: string,
+  storeId: number,
+  tenantStorage: any
+): Promise<void> {
+  try {
+    const allOrders = await tenantStorage.getAllOrders();
+    const order = allOrders.find(o => 
+      o.customerId === customer.id && 
+      (o.orderNumber === orderNumber || o.id.toString() === orderNumber)
+    );
+    
+    if (!order) {
+      await sendWhatsAppMessageDirect(
+        customer.phone,
+        `❌ No encontré la orden #${orderNumber} en tu cuenta.\n\nEscribe "*seguimiento*" para ver todas tus órdenes.`,
+        storeId
+      );
+      return;
+    }
+    
+    const statusEmoji = getOrderStatusEmoji(order.status);
+    const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+    const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('es-ES') : 'N/A';
+    
+    let message = `📋 *Detalles Orden #${order.orderNumber || order.id}*\n\n`;
+    message += `📅 Fecha: ${date}\n`;
+    message += `📍 Estado: ${statusEmoji} ${getOrderStatusText(order.status)}\n`;
+    message += `💰 Total: ${total}\n\n`;
+    
+    // Agregar información de productos si está disponible
+    if (order.collectedData) {
+      try {
+        const data = typeof order.collectedData === 'string' 
+          ? JSON.parse(order.collectedData) 
+          : order.collectedData;
+        
+        if (data.productos && data.productos.length > 0) {
+          message += `📦 *Productos ordenados:*\n`;
+          data.productos.forEach(producto => {
+            message += `• ${producto.nombre} - Cantidad: ${producto.cantidad}\n`;
+            if (producto.precio) {
+              message += `  💰 Precio: $${producto.precio}\n`;
+            }
+          });
+          message += `\n`;
+        }
+        
+        // Agregar dirección si está disponible
+        if (data.direccion) {
+          message += `📍 *Dirección de entrega:*\n${data.direccion}\n\n`;
+        }
+        
+      } catch (e) {
+        console.log('Could not parse order collectedData:', e);
+      }
+    }
+    
+    // Información adicional
+    if (order.notes) {
+      message += `📝 *Notas:* ${order.notes}\n\n`;
+    }
+    
+    message += `❓ *¿Necesitas ayuda?*\n`;
+    message += `💬 Escribe "*soporte*" para contactar un agente\n`;
+    message += `📦 Escribe "*seguimiento*" para ver todas tus órdenes`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    
+  } catch (error) {
+    console.error('❌ Error showing specific order details:', error);
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `❌ Hubo un problema obteniendo los detalles de la orden. Escribe "*soporte*" para ayuda.`,
+      storeId
+    );
+  }
+}
+
+/**
+ * 🛒 Manejar solicitud de nueva orden
+ */
+async function handleNewOrderRequest(customer: any, storeId: number): Promise<void> {
+  try {
+    let message = `🛒 *¡Perfecto! Vamos a crear una nueva orden.*\n\n`;
+    message += `Para hacer un nuevo pedido, puedes:\n\n`;
+    message += `📱 Escribir directamente los productos que deseas\n`;
+    message += `📋 Decir "*catálogo*" para ver productos disponibles\n`;
+    message += `💬 Contactar "*soporte*" para asistencia personalizada\n\n`;
+    message += `💡 *Ejemplo:* "Quiero 2 botellas de agua y 1 pan"\n`;
+    message += `📞 *O simplemente describe lo que necesitas*`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    
+  } catch (error) {
+    console.error('❌ Error handling new order request:', error);
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `Escribe lo que necesitas y te ayudamos con tu pedido.`,
+      storeId
+    );
+  }
+}
+
+/**
+ * 💬 Manejar solicitud de soporte
+ */
+async function handleSupportRequest(customer: any, pendingOrders: any[], storeId: number): Promise<void> {
+  try {
+    let message = `💬 *Soporte al Cliente*\n\n`;
+    message += `¡Estamos aquí para ayudarte!\n\n`;
+    
+    if (pendingOrders.length > 0) {
+      message += `📦 Tienes ${pendingOrders.length} orden(es) pendiente(s):\n`;
+      pendingOrders.slice(0, 2).forEach(order => {
+        message += `• Orden #${order.orderNumber || order.id} - ${getOrderStatusText(order.status)}\n`;
+      });
+      message += `\n`;
+    }
+    
+    message += `❓ *¿En qué podemos ayudarte?*\n\n`;
+    message += `📝 Describe tu consulta y un agente te contactará pronto\n`;
+    message += `📞 O llámanos para atención inmediata\n\n`;
+    message += `⏰ *Horario de atención:* Lunes a Viernes 8AM - 6PM`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+    
+  } catch (error) {
+    console.error('❌ Error handling support request:', error);
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `💬 Un agente te contactará pronto para ayudarte.`,
+      storeId
+    );
+  }
+}
+
+/**
+ * ✏️ Manejar solicitud de modificación
+ */
+async function handleOrderModificationRequest(customer: any, pendingOrders: any[], storeId: number): Promise<void> {
+  const modifiableOrders = pendingOrders.filter(order => 
+    ['pending', 'created'].includes(order.status)
+  );
+  
+  if (modifiableOrders.length === 0) {
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `❌ *No hay órdenes modificables*\n\nTus órdenes ya están en proceso y no se pueden modificar.\n\n💬 Escribe "*soporte*" si necesitas ayuda especial.`,
+      storeId
+    );
+    return;
+  }
+  
+  let message = `✏️ *Órdenes que puedes modificar:*\n\n`;
+  
+  modifiableOrders.forEach(order => {
+    const orderNumber = order.orderNumber || order.id;
+    const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+    message += `• Orden #${orderNumber} - ${total}\n`;
+  });
+  
+  message += `\n💡 *Para modificaciones contacta soporte:*\n`;
+  message += `💬 Escribe "*soporte*" y describe los cambios\n`;
+  message += `📞 O llama para modificaciones inmediatas`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+}
+
+/**
+ * ❌ Manejar solicitud de cancelación
+ */
+async function handleOrderCancellationRequest(customer: any, pendingOrders: any[], storeId: number): Promise<void> {
+  const cancellableOrders = pendingOrders.filter(order => 
+    ['pending', 'created'].includes(order.status)
+  );
+  
+  if (cancellableOrders.length === 0) {
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `❌ *No hay órdenes cancelables*\n\nTus órdenes ya están en proceso y no se pueden cancelar.\n\n💬 Escribe "*soporte*" para casos especiales.`,
+      storeId
+    );
+    return;
+  }
+  
+  let message = `❌ *Órdenes que puedes cancelar:*\n\n`;
+  
+  cancellableOrders.forEach(order => {
+    const orderNumber = order.orderNumber || order.id;
+    const total = order.totalAmount ? `$${parseFloat(order.totalAmount).toFixed(2)}` : 'N/A';
+    message += `• Orden #${orderNumber} - ${total}\n`;
+  });
+  
+  message += `\n⚠️ *Para cancelaciones contacta soporte:*\n`;
+  message += `💬 Escribe "*soporte*" y especifica qué orden cancelar\n`;
+  message += `📞 O llama para cancelaciones inmediatas\n\n`;
+  message += `💡 *Nota:* Las cancelaciones están sujetas a política de la tienda`;
+  
+  await sendWhatsAppMessageDirect(customer.phone, message, storeId);
+}
+
+/**
+ * 💡 Enviar mensaje con contexto de órdenes para mensajes no relacionados
+ */
+async function sendOrderContextMessage(
+  customer: any,
+  pendingOrders: any[],
+  originalMessage: string,
+  storeId: number
+): Promise<void> {
+  try {
+    let contextMessage = `📦 *Recordatorio:* Tienes ${pendingOrders.length} orden(es) pendiente(s)\n\n`;
+    
+    // Agregar una orden como ejemplo
+    const latestOrder = pendingOrders[0];
+    const statusEmoji = getOrderStatusEmoji(latestOrder.status);
+    contextMessage += `${statusEmoji} Orden #${latestOrder.orderNumber || latestOrder.id} - ${getOrderStatusText(latestOrder.status)}\n\n`;
+    
+    contextMessage += `📦 Escribe "*seguimiento*" para ver todas\n`;
+    contextMessage += `💬 Escribe "*soporte*" para ayuda\n\n`;
+    contextMessage += `---\n\n`;
+    contextMessage += `Tu mensaje: "${originalMessage}"\n`;
+    contextMessage += `Un agente revisará tu consulta pronto.`;
+    
+    await sendWhatsAppMessageDirect(customer.phone, contextMessage, storeId);
+    
+  } catch (error) {
+    console.error('❌ Error sending order context message:', error);
+    // Continuar el flujo normal si hay error
+  }
+}
+
+// ==============================================
+// FUNCIONES AUXILIARES
+// ==============================================
+
+/**
+ * 📍 Obtener emoji según estado de orden
+ */
+function getOrderStatusEmoji(status: string): string {
+  const statusMap = {
+    'pending': '🟡',
+    'created': '🟡',
+    'confirmed': '🔵',
+    'preparing': '🟠',
+    'in_transit': '🚚',
+    'delivered': '✅',
+    'cancelled': '❌',
+    'expired': '⚠️'
+  };
+  
+  return statusMap[status?.toLowerCase()] || '❔';
+}
+
+/**
+ * 📝 Obtener texto descriptivo del estado
+ */
+function getOrderStatusText(status: string): string {
+  const statusMap = {
+    'pending': 'Pendiente',
+    'created': 'Creada',
+    'confirmed': 'Confirmada',
+    'preparing': 'En preparación',
+    'in_transit': 'En tránsito',
+    'delivered': 'Entregada',
+    'cancelled': 'Cancelada',
+    'expired': 'Expirada'
+  };
+  
+  return statusMap[status?.toLowerCase()] || 'Estado desconocido';
 }
 
 // Agregar todas las demás funciones del código que me pasaste...
