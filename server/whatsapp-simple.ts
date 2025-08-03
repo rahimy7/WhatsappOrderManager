@@ -2930,15 +2930,50 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
 
     const url = `https://graph.facebook.com/v22.0/${freshConfig.phoneNumberId}/messages`;
     
-    
-    // Preparar botones (máximo 3 botones permitidos por WhatsApp)
-    const buttons = menuOptions.slice(0, 3).map((option, index) => ({
-      type: 'reply',
-      reply: {
-        id: option.action || option.value || `btn_${index}`,
-        title: option.label.substring(0, 20) // WhatsApp limita a 20 caracteres
+    // ✅ PREPARAR BOTONES CON VALIDACIÓN SEGURA
+    const buttons = menuOptions.slice(0, 3).map((option, index) => {
+      // Validar que option existe
+      if (!option || typeof option !== 'object') {
+        console.log(`⚠️ Invalid option at index ${index}:`, option);
+        return {
+          type: 'reply',
+          reply: {
+            id: `btn_${index}`,
+            title: `Opción ${index + 1}`
+          }
+        };
       }
-    }));
+
+      // Extraer label de forma segura
+      let title = 'Opción';
+      if (option.label && typeof option.label === 'string') {
+        title = option.label;
+      } else if (option.title && typeof option.title === 'string') {
+        title = option.title;
+      } else {
+        title = `Opción ${index + 1}`;
+      }
+
+      // Extraer ID de forma segura
+      let buttonId = `btn_${index}`;
+      if (option.action && typeof option.action === 'string') {
+        buttonId = option.action;
+      } else if (option.value && typeof option.value === 'string') {
+        buttonId = option.value;
+      } else if (option.id && typeof option.id === 'string') {
+        buttonId = option.id;
+      }
+
+      return {
+        type: 'reply',
+        reply: {
+          id: buttonId,
+          title: title.substring(0, 20) // ✅ AHORA ES SEGURO porque title siempre es string
+        }
+      };
+    });
+
+    console.log(`📋 PROCESSED BUTTONS:`, buttons);
 
     const data = {
       messaging_product: "whatsapp",
@@ -2955,7 +2990,7 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
       }
     };
 
-   const response = await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${freshConfig.accessToken}`,
