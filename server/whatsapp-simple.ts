@@ -2935,14 +2935,14 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
       }
 
       // Extraer label de forma segura
-      let title = 'Opción';
-      if (option.label && typeof option.label === 'string') {
-        title = option.label;
-      } else if (option.title && typeof option.title === 'string') {
-        title = option.title;
-      } else {
-        title = `Opción ${index + 1}`;
-      }
+      let title = `Opción ${index + 1}`; // Default más claro
+if (option.title && typeof option.title === 'string' && option.title.trim() !== '') {
+  title = option.title.trim();
+  console.log(`✅ USING TITLE: "${title}"`);
+} else if (option.label && typeof option.label === 'string' && option.label.trim() !== '') {
+  title = option.label.trim();
+  console.log(`✅ USING LABEL: "${title}"`);
+}
 
       // Extraer ID de forma segura
       let buttonId = `btn_${index}`;
@@ -3973,7 +3973,8 @@ async function handleSpecificOrderAction(
       case 'new_order':
         console.log(`🛒 STARTING NEW ORDER PROCESS`);
         // Continuar con el flujo normal de nueva orden
-        return;
+        await handleNewOrderCase(customer, storeId, tenantStorage);
+  break;
         
       default:
         console.log(`❓ UNKNOWN ACTION: ${action.action} - Showing general order info`);
@@ -3989,6 +3990,27 @@ async function handleSpecificOrderAction(
     await sendWhatsAppMessageDirect(
       customer.phone,
       "Hubo un problema al procesar tu solicitud. Un agente te contactará pronto para asistirte.",
+      storeId
+    );
+  }
+}
+
+async function handleNewOrderCase(customer: any, storeId: number, tenantStorage: any): Promise<void> {
+  try {
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `🛒 **¡Perfecto!** Iniciemos tu nueva orden.\n\nTe envío nuestro catálogo:`,
+      storeId
+    );
+    
+    // Activar auto-respuesta de catálogo
+    await processAutoResponse("catálogo", customer.phone, storeId, tenantStorage);
+    
+  } catch (error) {
+    console.error(`❌ Error handling new order:`, error);
+    await sendWhatsAppMessageDirect(
+      customer.phone,
+      `🛒 Para ver nuestro catálogo, escribe "menú" o "catálogo"`,
       storeId
     );
   }
