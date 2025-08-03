@@ -4294,16 +4294,26 @@ async function sendOrderNotFoundMessage(customer: any, orderNumber: string, stor
 /**
  * 🔍 FUNCIÓN ACTUALIZADA: Detectar botones específicos de órdenes
  */
-
-function detectOrderActionMessage(messageText: string): { 
-  isOrderAction: boolean; 
-  action: string; 
+function detectOrderActionMessage(messageText: string): {
+  isOrderAction: boolean;
+  action: string;
   orderNumber?: string;
   orderId?: string;
 } {
   const text = messageText.toLowerCase().trim();
   
   console.log(`🔍 ANALYZING MESSAGE: "${text}"`);
+  
+  // ✅ BOTONES GENÉRICOS (btn_0, btn_1, btn_2) - NUEVA LÓGICA
+  if (text === 'btn_0' || text === 'opción 1') {
+    return { isOrderAction: true, action: 'track_orders' };
+  }
+  if (text === 'btn_1' || text === 'opción 2') {
+    return { isOrderAction: true, action: 'new_order' };
+  }
+  if (text === 'btn_2' || text === 'opción 3') {
+    return { isOrderAction: true, action: 'support' };
+  }
   
   // ✅ BOTONES NUMÉRICOS (fallback cuando no hay botones interactivos)
   if (text === '1') {
@@ -4414,6 +4424,9 @@ function detectOrderActionMessage(messageText: string): {
   
   return { isOrderAction: false, action: 'none' };
 }
+
+
+
 /**
  * 📤 FUNCIÓN AUXILIAR: Enviar mensaje con botones
  */
