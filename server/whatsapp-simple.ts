@@ -121,7 +121,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
     const messageTextLower = messageText.toLowerCase();
 
     // Verificar órdenes pendientes del cliente - ✅ CORRECCIÓN
-    const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+   /*  const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
     if (customer) {
       // ✅ Usar getAllOrders y filtrar por customerId
       const allOrders = await tenantStorage.getAllOrders();
@@ -150,7 +150,7 @@ async function processAutoResponse(messageText: string, phoneNumber: string, sto
         await sendWhatsAppMessageDirect(phoneNumber, pendingMessage, storeId);
         return;
       }
-    }
+    } */
 
     // Procesar auto-respuestas normales (menú, catálogo, etc.)
     const responses = await tenantStorage.getAllAutoResponses();
@@ -1679,23 +1679,7 @@ export async function processIncomingUserMessage(webhookData: any, storeMapping:
 
     console.log(`👤 CUSTOMER FOUND/CREATED - ID: ${customer.id}, Name: ${customer.name}`);
 
-    // ✅ ===== VALIDACIÓN DE ÓRDENES PENDIENTES TEMPRANA =====
-console.log(`🔍 CHECKING FOR PENDING ORDERS FIRST...`);
-
-const orderValidationResult = await validateCustomerOrdersEarly(
-  customer, 
-  messageText, 
-  safeStoreMapping.storeId, 
-  tenantStorage
-);
-
-if (orderValidationResult.handled) {
-  console.log(`✅ MESSAGE HANDLED BY ORDER VALIDATION - Exiting`);
-  return; // ⚠️ IMPORTANTE: Salir aquí para no procesar auto-respuestas
-}
-
-console.log(`❌ NOT HANDLED BY ORDER VALIDATION - Continuing with normal flow`);
-// ===== FIN DE VALIDACIÓN TEMPRANA =====
+ 
 
     // 🔄 VERIFICAR REGISTRATION FLOW
     const registrationFlow = await tenantStorage.getRegistrationFlowByPhoneNumber(customerPhone);
@@ -1772,6 +1756,25 @@ console.log(`❌ NOT HANDLED BY ORDER VALIDATION - Continuing with normal flow`)
     } else {
       console.log(`❌ NOT AN ORDER - Processing as regular message`);
     }
+
+
+       // ✅ ===== VALIDACIÓN DE ÓRDENES PENDIENTES TEMPRANA =====
+console.log(`🔍 CHECKING FOR PENDING ORDERS FIRST...`);
+
+const orderValidationResult = await validateCustomerOrdersEarly(
+  customer, 
+  messageText, 
+  safeStoreMapping.storeId, 
+  tenantStorage
+);
+
+if (orderValidationResult.handled) {
+  console.log(`✅ MESSAGE HANDLED BY ORDER VALIDATION - Exiting`);
+  return; // ⚠️ IMPORTANTE: Salir aquí para no procesar auto-respuestas
+}
+
+console.log(`❌ NOT HANDLED BY ORDER VALIDATION - Continuing with normal flow`);
+// ===== FIN DE VALIDACIÓN TEMPRANA =====
 
     // ✅ PROCESAR AUTO-RESPUESTAS (Solo si NO es un pedido)
     console.log(`🤖 PROCESSING AUTO-RESPONSES`);
