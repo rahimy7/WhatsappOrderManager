@@ -2338,27 +2338,64 @@ async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, s
   }
 }
 
+// ✅ REEMPLAZAR ESTA FUNCIÓN COMPLETA:
 async function sendAutoResponseMessage(phoneNumber: string, trigger: string, storeId: number, tenantStorage: any) {
   try {
-    console.log(`📤 SENDING AUTO-RESPONSE MESSAGE - Trigger: ${trigger}, Phone: ${phoneNumber}`);
+    console.log(`📤 SENDING AUTO-RESPONSE (CORRECTED) - Trigger: ${trigger}, Phone: ${phoneNumber}`);
     
-    const autoResponse = await tenantStorage.getAutoResponsesByTrigger(trigger);
+    const responses = await tenantStorage.getAutoResponsesByTrigger(trigger);
     
-    if (!autoResponse || autoResponse.length === 0) {
+    if (!responses || responses.length === 0) {
       console.log(`❌ NO AUTO-RESPONSE FOUND FOR TRIGGER: ${trigger}`);
       return;
     }
     
-    const response = autoResponse[0];
-    let messageText = response.messageText || response.message || '';
+    const autoResponse = responses[0];
+    let messageText = autoResponse.messageText || autoResponse.message || '';
     
-    // ✅ MEJORA: Reemplazar variables en el mensaje
+    // ✅ REEMPLAZAR VARIABLES
     const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
     if (customer) {
-      messageText = messageText.replace('{customerName}', customer.name || 'Cliente');
+      messageText = messageText.replace(/{customerName}/g, customer.name || 'Cliente');
     }
     
-    await sendWhatsAppMessageDirect(phoneNumber, messageText, storeId);
+    // ✅ VERIFICAR BOTONES
+    let menuOptions = null;
+    try {
+      if (autoResponse.menuOptions && typeof autoResponse.menuOptions === 'string') {
+        menuOptions = JSON.parse(autoResponse.menuOptions);
+        console.log(`🔘 FOUND ${menuOptions.length} BUTTONS:`, menuOptions.map(opt => opt.label));
+      } else if (autoResponse.menuOptions) {
+        menuOptions = autoResponse.menuOptions;
+      }
+    } catch (parseError) {
+      console.log(`⚠️ Invalid menu options JSON:`, parseError);
+    }
+
+    // ✅ OBTENER CONFIG DE WHATSAPP
+    const { getMasterStorage } = await import('./storage/index.js');
+    const storage = getMasterStorage();
+    const config = await storage.getWhatsAppConfig(storeId);
+    
+    if (!config) {
+      console.error('❌ WhatsApp config not found');
+      return;
+    }
+
+    const finalConfig = {
+      storeId: storeId,
+      accessToken: config.accessToken,
+      phoneNumberId: config.phoneNumberId
+    };
+
+    // ✅ ENVIAR CON O SIN BOTONES
+    if (menuOptions && Array.isArray(menuOptions) && menuOptions.length > 0) {
+      console.log(`🔘 SENDING INTERACTIVE MESSAGE WITH ${menuOptions.length} BUTTONS`);
+      await sendInteractiveMessage(phoneNumber, messageText, menuOptions, finalConfig);
+    } else {
+      console.log(`📤 SENDING SIMPLE TEXT MESSAGE`);
+      await sendWhatsAppMessageDirect(phoneNumber, messageText, storeId);
+    }
     
     console.log(`✅ AUTO-RESPONSE SENT - Trigger: ${trigger}`);
     
