@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config()
-
+import { getTenantStorageForUser } from './storage/index.js';
 import { StorageFactory } from './storage/storage-factory.js';
 import { MasterStorageService } from './storage/master-storage.js';
 import 'dotenv/config';
@@ -32,13 +32,7 @@ import { SupabaseStorageManager } from './supabase-storage.js';
 const storageFactory = StorageFactory.getInstance();
 const masterStorage = storageFactory.getMasterStorage();
 
-// Helper para obtener tenant storage
-async function getTenantStorageForUser(user: { storeId: number }) {
-  if (!user.storeId) {
-    throw new Error('User does not have a valid store ID');
-  }
-  return await storageFactory.getTenantStorage(user.storeId);
-}
+
 
 async function getTenantStorageForUserFixed(userId: number) {
   try {
@@ -1661,12 +1655,42 @@ apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
 apiRouter.get('/products', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
+    
+    // 🔍 DEBUGGING
+    console.log('🔍 === PRODUCTS ENDPOINT DEBUG ===');
+    console.log('👤 User from JWT:', {
+      id: user.id,
+      username: user.username,
+      storeId: user.storeId,
+      role: user.role
+    });
+    
+    // ✅ Usar la función importada con debugging
+    console.log('🏪 Calling getTenantStorageForUser with storeId:', user.storeId);
     const tenantStorage = await getTenantStorageForUser(user);
+    console.log('✅ Tenant storage obtained successfully');
+    
+    console.log('📦 Calling getAllProducts()...');
     const products = await tenantStorage.getAllProducts();
+    
+    console.log('✅ Products retrieved:', {
+      count: products.length,
+      sampleProduct: products[0] ? {
+        id: products[0].id,
+        name: products[0].name,
+        // Verificar si tiene storeId en los datos
+        hasStoreId: 'storeId' in products[0],
+        storeId: products[0].storeId || 'NO_STORE_ID'
+      } : 'No products found'
+    });
+    
     res.json(products);
   } catch (error) {
-    console.error('Error fetching products:', error);
-    res.status(500).json({ error: 'Failed to fetch products' });
+    console.error('❌ Error in products endpoint:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch products',
+      details: error.message 
+    });
   }
 });
 
@@ -2072,66 +2096,6 @@ apiRouter.get('/dashboard/stats', authenticateToken, async (req, res) => {
   }
 });
 
-// ================================
-// ORDERS ENDPOINTS (TENANT STORAGE)
-// ================================
-
-apiRouter.get('/orders', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const orders = await tenantStorage.getAllOrders();
-    res.json(orders);
-  } catch (error) {
-    console.error('Error fetching orders:', error);
-    res.status(500).json({ error: 'Failed to fetch orders' });
-  }
-});
-
-apiRouter.get('/orders/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    
-    const order = await tenantStorage.getOrderById(id);
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-    
-    res.json(order);
-  } catch (error) {
-    console.error('Error fetching order:', error);
-    res.status(500).json({ error: 'Failed to fetch order' });
-  }
-});
-
-apiRouter.post('/orders', authenticateToken, async (req, res) => {
-  try {
-    const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const { items, ...rest } = req.body as {
-      items: Array<{
-        productId: number;
-        quantity: number;
-        unitPrice: string;
-        totalPrice: string;
-      }>;
-      [key: string]: any;
-    };
-
-    const insertOrder = {
-      ...rest,
-      storeId: user.storeId
-    };
-
-    const order = await tenantStorage.createOrder(insertOrder, items);
-    res.status(201).json(order);
-  } catch (error) {
-    console.error('Error creating order:', error);
-    res.status(500).json({ error: 'Failed to create order' });
-  }
-});
 
 // ================================
 // USERS ENDPOINTS (TENANT STORAGE)

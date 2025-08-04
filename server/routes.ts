@@ -797,6 +797,8 @@ export function setupUserManagementRoutes(app: any) {
       res.status(500).json({ error: 'Failed to fetch user metrics' });
     }
   });
+
+  
 }
 
 // ================================
@@ -1101,21 +1103,160 @@ router.post('/products', authenticateToken, createProductHandler);
   // ORDER ROUTES
   // ================================
 
+// server/routes.ts - Reemplazar la sección ORDER ROUTES (líneas ~42-80)
+
+  // ================================
+  // ORDER ROUTES - MEJORADOS
+  // ================================
+
   router.get('/orders', authenticateToken, async (req: any, res: any) => {
     try {
       const user = req.user as AuthUser;
       const tenantStorage = await getTenantStorageForUser(user);
       
-      // ✅ CORRECCIÓN: getAllOrders() no acepta parámetros según tu tenant-storage.ts
+      console.log('📦 Fetching orders for store:', user.storeId);
+      
+      // Obtener órdenes básicas
       const orders = await tenantStorage.getAllOrders();
       
-      // ✅ Aplicar filtros manualmente si es necesario
-      let filteredOrders = orders;
+      // Enriquecer con información adicional
+      const enrichedOrders = await Promise.all(orders.map(async (order: any) => {
+        try {
+          // Obtener información del cliente
+          let customer = null;
+          if (order.customerId) {
+            customer = await tenantStorage.getCustomerById(order.customerId);
+          }
+          
+          // Obtener información del usuario asignado
+          let assignedUser = null;
+          if (order.assignedUserId) {
+            try {
+              assignedUser = await tenantStorage.getUserById(order.assignedUserId);
+            } catch (err) {
+              console.warn(`⚠️ User ${order.assignedUserId} not found for order ${order.id}`);
+            }
+          }
+          
+          // Obtener items de la orden (si existe la tabla order_items)
+          let items = [];
+          let totalItems = 0;
+          try {
+            // Intentar obtener items - algunos sistemas pueden no tener esta tabla
+            if (tenantStorage.getOrderItems) {
+              items = await tenantStorage.getOrderItems(order.id);
+              totalItems = items.length;
+            }
+          } catch (err) {
+            // Si no existe order_items, continuar sin items
+            console.log(`ℹ️ No items found for order ${order.id} (expected if no order_items table)`);
+          }
+          
+          return {
+            id: order.id,
+            orderNumber: order.orderNumber,
+            customerId: order.customerId,
+            assignedUserId: order.assignedUserId,
+            status: order.status,
+            priority: order.priority || 'normal',
+            totalAmount: order.totalAmount,
+            deliveryCost: order.deliveryCost || '0.00',
+            deliveryAddress: order.deliveryAddress,
+            contactNumber: order.contactNumber,
+            estimatedDelivery: order.estimatedDelivery,
+            estimatedDeliveryTime: order.estimatedDeliveryTime,
+            paymentMethod: order.paymentMethod,
+            paymentStatus: order.paymentStatus,
+            description: order.description,
+            notes: order.notes,
+            createdAt: order.createdAt,
+            updatedAt: order.updatedAt,
+            lastStatusUpdate: order.lastStatusUpdate,
+            customerLastInteraction: order.customerLastInteraction,
+            modificationCount: order.modificationCount || 0,
+            storeId: order.storeId,
+            
+            // Información expandida del cliente
+            customer: customer ? {
+              id: customer.id,
+              name: customer.name || 'Cliente',
+              phone: customer.phone || order.contactNumber,
+              email: customer.email,
+              address: customer.address || order.deliveryAddress
+            } : {
+              id: order.customerId,
+              name: 'Cliente no encontrado',
+              phone: order.contactNumber,
+              email: null,
+              address: order.deliveryAddress
+            },
+            
+            // Usuario asignado
+            assignedUser: assignedUser ? {
+              id: assignedUser.id,
+              name: assignedUser.name,
+              role: assignedUser.role
+            } : null,
+            
+            // Items de la orden
+            items: items.map((item: any) => ({
+              id: item.id,
+              orderId: item.orderId,
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+              installationCost: item.installationCost || '0.00',
+              partsCost: item.partsCost || '0.00',
+              laborHours: item.laborHours || '0',
+              laborRate: item.laborRate || '0.00',
+              deliveryCost: item.deliveryCost || '0.00',
+              deliveryDistance: item.deliveryDistance || '0',
+              notes: item.notes,
+              product: item.product || {
+                id: item.productId,
+                name: 'Producto',
+                description: '',
+                category: '',
+                price: item.unitPrice
+              }
+            })),
+            totalItems
+          };
+        } catch (error) {
+          console.error(`❌ Error enriching order ${order.id}:`, error);
+          // En caso de error, devolver orden básica con estructura mínima
+          return {
+            ...order,
+            customer: {
+              id: order.customerId,
+              name: 'Cliente',
+              phone: order.contactNumber,
+              email: null,
+              address: order.deliveryAddress
+            },
+            assignedUser: null,
+            items: [],
+            totalItems: 0,
+            priority: order.priority || 'normal'
+          };
+        }
+      }));
       
-      const { status, limit, offset } = req.query;
+      // Aplicar filtros de query parameters
+      let filteredOrders = enrichedOrders;
+      const { status, limit, offset, priority, customerId } = req.query;
       
-      if (status) {
-        filteredOrders = filteredOrders.filter(order => order.status === status);
+      if (status && status !== 'all') {
+        filteredOrders = filteredOrders.filter((order: any) => order.status === status);
+      }
+      
+      if (priority && priority !== 'all') {
+        filteredOrders = filteredOrders.filter((order: any) => order.priority === priority);
+      }
+      
+      if (customerId) {
+        filteredOrders = filteredOrders.filter((order: any) => order.customerId === parseInt(customerId));
       }
       
       if (offset) {
@@ -1128,9 +1269,11 @@ router.post('/products', authenticateToken, createProductHandler);
         filteredOrders = filteredOrders.slice(0, limitNum);
       }
       
+      console.log(`✅ Returning ${filteredOrders.length} enriched orders`);
       res.json(filteredOrders);
+      
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error('❌ Error fetching orders:', error);
       res.status(500).json({ error: "Failed to fetch orders" });
     }
   });
@@ -1140,6 +1283,10 @@ router.post('/products', authenticateToken, createProductHandler);
       const id = parseInt(req.params.id);
       const user = req.user as AuthUser;
       
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid order ID' });
+      }
+      
       const tenantStorage = await getTenantStorageForUser(user);
       const order = await tenantStorage.getOrderById(id);
       
@@ -1147,9 +1294,80 @@ router.post('/products', authenticateToken, createProductHandler);
         return res.status(404).json({ error: 'Order not found' });
       }
       
-      res.json(order);
+      // Enriquecer la orden individual con información completa
+      let customer = null;
+      if (order.customerId) {
+        customer = await tenantStorage.getCustomerById(order.customerId);
+      }
+      
+      let assignedUser = null;
+      if (order.assignedUserId) {
+        try {
+          assignedUser = await tenantStorage.getUserById(order.assignedUserId);
+        } catch (err) {
+          console.warn(`⚠️ User ${order.assignedUserId} not found`);
+        }
+      }
+      
+      // Obtener items si existe el método
+      let items = [];
+      try {
+        if (tenantStorage.getOrderItems) {
+          items = await tenantStorage.getOrderItems(order.id);
+        }
+      } catch (err) {
+        console.log(`ℹ️ No items found for order ${order.id}`);
+      }
+      
+      const enrichedOrder = {
+        ...order,
+        customer: customer ? {
+          id: customer.id,
+          name: customer.name || 'Cliente',
+          phone: customer.phone || order.contactNumber,
+          email: customer.email,
+          address: customer.address || order.deliveryAddress
+        } : {
+          id: order.customerId,
+          name: 'Cliente no encontrado',
+          phone: order.contactNumber,
+          email: null,
+          address: order.deliveryAddress
+        },
+        assignedUser: assignedUser ? {
+          id: assignedUser.id,
+          name: assignedUser.name,
+          role: assignedUser.role
+        } : null,
+        items: items.map((item: any) => ({
+          id: item.id,
+          orderId: item.orderId,
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          installationCost: item.installationCost || '0.00',
+          partsCost: item.partsCost || '0.00',
+          laborHours: item.laborHours || '0',
+          laborRate: item.laborRate || '0.00',
+          deliveryCost: item.deliveryCost || '0.00',
+          deliveryDistance: item.deliveryDistance || '0',
+          notes: item.notes,
+          product: item.product || {
+            id: item.productId,
+            name: 'Producto',
+            description: '',
+            category: '',
+            price: item.unitPrice
+          }
+        })),
+        totalItems: items.length,
+        priority: order.priority || 'normal'
+      };
+      
+      res.json(enrichedOrder);
     } catch (error) {
-      console.error('Error fetching order:', error);
+      console.error('❌ Error fetching order:', error);
       res.status(500).json({ error: 'Failed to fetch order' });
     }
   });
@@ -1161,12 +1379,146 @@ router.post('/products', authenticateToken, createProductHandler);
       
       const tenantStorage = await getTenantStorageForUser(user);
       
-      // ✅ CORRECCIÓN: createOrder() solo acepta orderData según tu tenant-storage.ts
+      // Crear la orden
       const order = await tenantStorage.createOrder(orderData);
+      
+      // Si hay items, crearlos también
+      if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
+        try {
+          for (const item of req.body.items) {
+            if (tenantStorage.createOrderItem) {
+              await tenantStorage.createOrderItem({
+                orderId: order.id,
+                ...item
+              });
+            }
+          }
+        } catch (itemError) {
+          console.warn('⚠️ Could not create order items:', itemError);
+        }
+      }
+      
       res.status(201).json(order);
     } catch (error) {
-      console.error('Error creating order:', error);
+      console.error('❌ Error creating order:', error);
       res.status(500).json({ error: "Failed to create order" });
+    }
+  });
+
+  router.put('/orders/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = req.user as AuthUser;
+      
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid order ID' });
+      }
+      
+      const tenantStorage = await getTenantStorageForUser(user);
+      const order = await tenantStorage.updateOrder(id, req.body);
+      
+      if (!order) {
+        return res.status(404).json({ error: 'Order not found' });
+      }
+      
+      res.json(order);
+    } catch (error) {
+      console.error('❌ Error updating order:', error);
+      res.status(500).json({ error: 'Failed to update order' });
+    }
+  });
+
+  router.patch('/orders/:id', authenticateToken, async (req: any, res: any) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = req.user as AuthUser;
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid order ID' });
+    }
+
+    const tenantStorage = await getTenantStorageForUser(user);
+    const order = await tenantStorage.updateOrder(id, req.body);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error('❌ Error updating order (PATCH):', error);
+    res.status(500).json({ error: 'Failed to update order' });
+  }
+});
+
+
+  router.put('/orders/:id/status', authenticateToken, async (req: any, res: any) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status } = req.body;
+      const user = req.user as AuthUser;
+      
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid order ID' });
+      }
+      
+      if (!status) {
+        return res.status(400).json({ error: 'Status is required' });
+      }
+      
+      const tenantStorage = await getTenantStorageForUser(user);
+      
+      const updateData = { 
+        status,
+        lastStatusUpdate: new Date().toISOString()
+      };
+      
+      const order = await tenantStorage.updateOrder(id, updateData);
+      
+      if (!order) {
+        return res.status(404).json({ error: 'Order not found' });
+      }
+      
+      res.json(order);
+    } catch (error) {
+      console.error('❌ Error updating order status:', error);
+      res.status(500).json({ error: 'Failed to update order status' });
+    }
+  });
+
+  router.delete('/orders/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = req.user as AuthUser;
+      
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid order ID' });
+      }
+      
+      const tenantStorage = await getTenantStorageForUser(user);
+      
+      // Verificar que la orden existe
+      const order = await tenantStorage.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({ error: 'Order not found' });
+      }
+      
+      // Eliminar items si existen
+      try {
+        if (tenantStorage.deleteOrderItems) {
+          await tenantStorage.deleteOrderItems(id);
+        }
+      } catch (itemError) {
+        console.warn('⚠️ Could not delete order items:', itemError);
+      }
+      
+      // Eliminar la orden
+      await tenantStorage.deleteOrder(id);
+      
+      res.json({ success: true, message: 'Order deleted successfully' });
+    } catch (error) {
+      console.error('❌ Error deleting order:', error);
+      res.status(500).json({ error: 'Failed to delete order' });
     }
   });
 
@@ -1188,28 +1540,177 @@ router.post('/products', authenticateToken, createProductHandler);
       res.status(500).json({ error: 'Failed to update order' });
     }
   });
-
-  router.put('/orders/:id/status', authenticateToken, async (req: any, res: any) => {
+ // ✅ NUEVO: Endpoint de auto-asignación de órdenes
+  router.post('/orders/:id/auto-assign', authenticateToken, async (req: any, res: any) => {
     try {
-      const id = parseInt(req.params.id);
-      const { status } = req.body;
+      const orderId = parseInt(req.params.id);
       const user = req.user as AuthUser;
+      
+      if (isNaN(orderId)) {
+        return res.status(400).json({ error: 'Invalid order ID' });
+      }
       
       const tenantStorage = await getTenantStorageForUser(user);
       
-      // ✅ CORRECCIÓN: updateOrder() es el método disponible según tenant-storage.ts
-      const order = await tenantStorage.updateOrder(id, { status });
-      
+      // Verificar que la orden existe
+      const order = await tenantStorage.getOrderById(orderId);
       if (!order) {
         return res.status(404).json({ error: 'Order not found' });
       }
       
-      res.json(order);
+      // Si ya está asignada, no hacer nada
+      if (order.assignedUserId) {
+        return res.status(400).json({ 
+          error: 'Order is already assigned',
+          assignedUser: order.assignedUserId
+        });
+      }
+      
+      try {
+        // Obtener todos los usuarios disponibles
+        const users = await tenantStorage.getAllUsers();
+        
+        // Filtrar usuarios que pueden ser asignados (técnicos, especialistas, etc.)
+        const availableUsers = users.filter((u: any) => 
+          ['technician', 'specialist', 'field_worker', 'admin'].includes(u.role?.toLowerCase() || '')
+        );
+        
+        if (availableUsers.length === 0) {
+          return res.status(404).json({ 
+            error: 'No available users for assignment',
+            message: 'No users with appropriate roles found'
+          });
+        }
+        
+        // Algoritmo simple de asignación (se puede mejorar con reglas más complejas)
+        let selectedUser = null;
+        
+        // 1. Buscar usuarios con menos órdenes asignadas
+        const userWorkloads = await Promise.all(
+          availableUsers.map(async (u: any) => {
+            const userOrders = await tenantStorage.getAllOrders();
+            const assignedCount = userOrders.filter((o: any) => 
+              o.assignedUserId === u.id && 
+              ['assigned', 'in_progress', 'preparing'].includes(o.status)
+            ).length;
+            
+            return {
+              user: u,
+              currentWorkload: assignedCount
+            };
+          })
+        );
+        
+        // Ordenar por carga de trabajo (menor a mayor)
+        userWorkloads.sort((a, b) => a.currentWorkload - b.currentWorkload);
+        
+        // 2. Aplicar reglas adicionales si existen
+        // Por ahora, seleccionar el usuario con menor carga de trabajo
+        selectedUser = userWorkloads[0].user;
+        
+        // 3. Asignar la orden
+        const updateData = {
+          assignedUserId: selectedUser.id,
+          status: order.status === 'pending' ? 'assigned' : order.status,
+          lastStatusUpdate: new Date().toISOString()
+        };
+        
+        const updatedOrder = await tenantStorage.updateOrder(orderId, updateData);
+        
+        // 4. Log de la asignación
+        console.log(`✅ Order ${orderId} auto-assigned to user ${selectedUser.id} (${selectedUser.name})`);
+        
+        res.json({
+          success: true,
+          message: `Order assigned to ${selectedUser.name}`,
+          assignedUser: {
+            id: selectedUser.id,
+            name: selectedUser.name,
+            role: selectedUser.role
+          },
+          order: updatedOrder,
+          algorithm: {
+            method: 'workload_balancing',
+            selectedFrom: availableUsers.length,
+            userWorkload: userWorkloads.find(w => w.user.id === selectedUser.id)?.currentWorkload || 0
+          }
+        });
+        
+      } catch (assignmentError) {
+        console.error('❌ Error in assignment algorithm:', assignmentError);
+        return res.status(500).json({ 
+          error: 'Assignment algorithm failed',
+          message: 'Could not determine best user for assignment'
+        });
+      }
+      
     } catch (error) {
-      console.error('Error updating order status:', error);
-      res.status(500).json({ error: 'Failed to update order status' });
+      console.error('❌ Error in auto-assignment:', error);
+      res.status(500).json({ error: 'Failed to auto-assign order' });
     }
   });
+
+  // ✅ NUEVO: Endpoint para obtener estadísticas de asignación
+  router.get('/orders/assignment/stats', authenticateToken, async (req: any, res: any) => {
+    try {
+      const user = req.user as AuthUser;
+      const tenantStorage = await getTenantStorageForUser(user);
+      
+      const [orders, users] = await Promise.all([
+        tenantStorage.getAllOrders(),
+        tenantStorage.getAllUsers()
+      ]);
+      
+      const availableUsers = users.filter((u: any) => 
+        ['technician', 'specialist', 'field_worker', 'admin'].includes(u.role?.toLowerCase() || '')
+      );
+      
+      const assignedOrders = orders.filter((o: any) => o.assignedUserId);
+      const unassignedOrders = orders.filter((o: any) => !o.assignedUserId);
+      
+      // Estadísticas por usuario
+      const userStats = availableUsers.map((u: any) => {
+        const userOrders = orders.filter((o: any) => o.assignedUserId === u.id);
+        const activeOrders = userOrders.filter((o: any) => 
+          ['assigned', 'in_progress', 'preparing'].includes(o.status)
+        );
+        
+        return {
+          userId: u.id,
+          userName: u.name,
+          userRole: u.role,
+          totalOrders: userOrders.length,
+          activeOrders: activeOrders.length,
+          completedOrders: userOrders.filter((o: any) => o.status === 'completed').length
+        };
+      });
+      
+      res.json({
+        summary: {
+          totalOrders: orders.length,
+          assignedOrders: assignedOrders.length,
+          unassignedOrders: unassignedOrders.length,
+          availableUsers: availableUsers.length,
+          assignmentRate: orders.length > 0 ? (assignedOrders.length / orders.length * 100).toFixed(1) : 0
+        },
+        userStats,
+        unassignedOrders: unassignedOrders.map((o: any) => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          status: o.status,
+          priority: o.priority || 'normal',
+          createdAt: o.createdAt,
+          customerName: o.customer?.name || 'Unknown'
+        }))
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching assignment stats:', error);
+      res.status(500).json({ error: 'Failed to fetch assignment statistics' });
+    }
+  });
+      
+
 
   // ================================
   // REGISTRATION FLOW ROUTES
@@ -1401,25 +1902,36 @@ router.post('/products', authenticateToken, createProductHandler);
     }
   });
 
-  router.get("/notifications/:userId", authenticateToken, async (req: any, res: any) => {
-    try {
-      const { userId } = req.params;
-      const { limit = 50, offset = 0 } = req.query;
-      const user = req.user as AuthUser;
-      
-      const tenantStorage = await getTenantStorageForUser(user);
-      const notifications = await tenantStorage.getNotifications(
-        parseInt(userId),
-        parseInt(limit as string),
-        parseInt(offset as string)
-      );
-      
-      res.json(notifications);
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-      res.status(500).json({ error: "Failed to fetch notifications" });
-    }
-  });
+router.get("/notifications/:userId", authenticateToken, async (req: any, res: any) => {
+  try {
+    const { userId } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+    const user = req.user as AuthUser;
+    
+    const tenantStorage = await getTenantStorageForUser(user);
+    
+    // Usar getUserNotifications en lugar de getNotifications
+    const allNotifications = await tenantStorage.getUserNotifications(parseInt(userId));
+    
+    // Aplicar paginación manualmente
+    const startIndex = parseInt(offset as string);
+    const endIndex = startIndex + parseInt(limit as string);
+    const notifications = allNotifications.slice(startIndex, endIndex);
+    
+    res.json({
+      notifications,
+      pagination: {
+        total: allNotifications.length,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        hasMore: endIndex < allNotifications.length
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    res.status(500).json({ error: "Failed to fetch notifications" });
+  }
+});
 
   router.post("/notifications", authenticateToken, async (req: any, res: any) => {
     try {
@@ -1704,6 +2216,161 @@ router.post('/products', authenticateToken, createProductHandler);
       res.status(500).json({ error: 'Failed to check schema status' });
     }
   });
+
+  // ================================
+// STORE-SPECIFIC USER ROUTES
+// ================================
+
+// POST - Crear usuario para una tienda específica
+router.post('/stores/:storeId/users', authenticateToken, async (req: any, res: any) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    const user = req.user as AuthUser;
+    
+    // Verificar permisos: solo super_admin o admin de la misma tienda
+    if (user.role !== 'super_admin' && user.storeId !== storeId) {
+      return res.status(403).json({ error: 'Not authorized to create users for this store' });
+    }
+    
+    // Verificar que la tienda existe
+    const store = await masterStorage.getVirtualStore(storeId);
+    if (!store) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    
+    const userData = { 
+      ...req.body, 
+      storeId: storeId,
+      level: 'store' // Asegurarmos que es un usuario de tienda
+    };
+    
+    // Validar datos requeridos
+    if (!userData.username || !userData.password || !userData.role) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: username, password, role' 
+      });
+    }
+    
+    // Hash de la contraseña si no viene hasheada
+    if (userData.password && !userData.password.startsWith('$2')) {
+      userData.password = await bcrypt.hash(userData.password, 10);
+    }
+    
+    // Crear usuario usando master storage
+    const newUser = await masterStorage.createStoreUser(userData);
+    
+    // Remover contraseña de la respuesta
+    const { password, ...safeUser } = newUser;
+    
+    console.log(`✅ User created for store ${storeId}: ${newUser.username}`);
+    res.status(201).json(safeUser);
+    
+  } catch (error) {
+    console.error("Error creating user for store:", error);
+    
+    if (error instanceof Error && error.message?.includes('already exists')) {
+      return res.status(400).json({ error: 'Username or email already exists' });
+    }
+    
+    res.status(500).json({ error: "Failed to create user" });
+  }
+});
+
+// GET - Listar usuarios de una tienda específica
+router.get('/stores/:storeId/users', authenticateToken, async (req: any, res: any) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    const user = req.user as AuthUser;
+    
+    // Verificar permisos
+    if (user.role !== 'super_admin' && user.storeId !== storeId) {
+      return res.status(403).json({ error: 'Not authorized to view users for this store' });
+    }
+    
+    // Obtener usuarios de la tienda usando master storage
+    const users = await masterStorage.getStoreUsers(storeId);
+    
+    // Remover contraseñas de la respuesta
+    const safeUsers = users.map(user => {
+      const { password, ...safeUser } = user;
+      return safeUser;
+    });
+    
+    res.json(safeUsers);
+    
+  } catch (error) {
+    console.error("Error fetching store users:", error);
+    res.status(500).json({ error: "Failed to fetch store users" });
+  }
+});
+
+// PUT - Actualizar usuario de una tienda específica
+router.put('/stores/:storeId/users/:userId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    const userId = parseInt(req.params.userId);
+    const user = req.user as AuthUser;
+    
+    // Verificar permisos
+    if (user.role !== 'super_admin' && user.storeId !== storeId) {
+      return res.status(403).json({ error: 'Not authorized to update users for this store' });
+    }
+    
+    const updateData = req.body;
+    
+    // Hash contraseña si se está actualizando
+    if (updateData.password && !updateData.password.startsWith('$2')) {
+      updateData.password = await bcrypt.hash(updateData.password, 10);
+    }
+    
+    // Actualizar usuario usando master storage
+    const updatedUser = await masterStorage.updateStoreUser(userId, updateData, storeId);
+    
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Remover contraseña de la respuesta
+    const { password, ...safeUser } = updatedUser;
+    
+    res.json(safeUser);
+    
+  } catch (error) {
+    console.error("Error updating store user:", error);
+    res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+// DELETE - Eliminar usuario de una tienda específica
+router.delete('/stores/:storeId/users/:userId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const storeId = parseInt(req.params.storeId);
+    const userId = parseInt(req.params.userId);
+    const user = req.user as AuthUser;
+    
+    // Verificar permisos
+    if (user.role !== 'super_admin' && user.storeId !== storeId) {
+      return res.status(403).json({ error: 'Not authorized to delete users for this store' });
+    }
+    
+    // No permitir que se elimine a sí mismo
+    if (user.id === userId) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+    
+    const success = await masterStorage.deleteStoreUser(userId, storeId);
+    
+    if (!success) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ success: true, message: 'User deleted successfully' });
+    
+  } catch (error) {
+    console.error("Error deleting store user:", error);
+    res.status(500).json({ error: "Failed to delete user" });
+  }
+});
 
   // ================================
   // REPORTS/ANALYTICS ROUTES

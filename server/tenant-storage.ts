@@ -217,16 +217,46 @@ async getStoreLocation(storeId: number): Promise<any | null> {
 },
 
     // PRODUCTS
-    async getAllProducts() {
-      try {
-        return await tenantDb.select()
-          .from(schema.products)
-          .orderBy(desc(schema.products.createdAt));
-      } catch (error) {
-        console.error('Error getting all products:', error);
-        return [];
-      }
-    },
+ async getAllProducts() {
+  try {
+    console.log('🔍 === getAllProducts DEBUG ===');
+    console.log('🔍 tenantDb connection:', !!tenantDb);
+    console.log('🔍 schema.products:', !!schema.products);
+    console.log('🔍 storeId context:', storeId);
+    
+    // Probar query directa SQL
+    console.log('🔍 Testing direct SQL query...');
+    const sqlResult = await tenantDb.execute(`
+      SELECT COUNT(*) as count 
+      FROM products 
+    `);
+    console.log('🔍 Direct SQL count:', sqlResult.rows[0]);
+    
+    // Probar query con Drizzle
+    console.log('🔍 Testing Drizzle query...');
+    const products = await tenantDb.select()
+      .from(schema.products)
+      .orderBy(desc(schema.products.createdAt));
+      
+    console.log('🔍 Drizzle query result:', {
+      count: products.length,
+      firstProduct: products[0] ? {
+        id: products[0].id,
+        name: products[0].name
+      } : 'No products'
+    });
+    
+    return products;
+  } catch (error) {
+    console.error('❌ Error getting all products:', error);
+    console.error('❌ Error details:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack?.split('\n').slice(0, 3)
+    });
+    return [];
+  }
+},
 
     async getProductById(id: number) {
       try {
@@ -513,23 +543,88 @@ async createOrUpdateCustomer(customerData: any) {
       }
     },
 
-    async getNotificationCounts(userId: number) {
-      try {
-        const allNotifications = await tenantDb.select()
-          .from(schema.notifications)
-          .where(eq(schema.notifications.userId, userId));
+ async getNotificationCounts(userId: number) {
+  try {
+    console.log(`🔔 Getting notification counts for user ${userId}`);
+    
+    // Método 1: Seleccionar solo columnas que sabemos que existen
+    const allNotifications = await tenantDb.select({
+      id: schema.notifications.id,
+      userId: schema.notifications.userId,
+      isRead: schema.notifications.isRead,
+      createdAt: schema.notifications.createdAt,
+    })
+    .from(schema.notifications)
+    .where(eq(schema.notifications.userId, userId));
 
-        const unreadNotifications = allNotifications.filter(n => !n.isRead);
+    const unreadNotifications = allNotifications.filter(n => !n.isRead);
 
-        return {
-          total: allNotifications.length,
-          unread: unreadNotifications.length
-        };
-      } catch (error) {
-        console.error('Error getting notification counts:', error);
+    console.log(`✅ Found ${allNotifications.length} total, ${unreadNotifications.length} unread`);
+    
+    return {
+      total: allNotifications.length,
+      unread: unreadNotifications.length
+    };
+    
+  } catch (error) {
+    console.error('❌ Error getting notification counts:', error);
+    
+    // Fallback: usar query SQL directo si Drizzle falla
+    console.log('🔄 Trying fallback SQL query...');
+    
+    const pool = new Pool({ 
+      connectionString: process.env.DATABASE_URL,
+      max: 1,
+      idleTimeoutMillis: 5000
+    });
+    
+    try {
+      // Obtener el schema name para esta tienda
+      const storeResult = await pool.query(`
+        SELECT database_url FROM virtual_stores WHERE id = $1
+      `, [storeId]);
+      
+      if (!storeResult.rows[0]) {
+        console.error(`❌ Store ${storeId} not found`);
         return { total: 0, unread: 0 };
       }
-    },
+      
+      const schemaMatch = storeResult.rows[0].database_url?.match(/schema=([^&]+)/);
+      const schemaName = schemaMatch ? schemaMatch[1] : 'public';
+      
+      console.log(`🔄 Using fallback query in schema: ${schemaName}`);
+      
+      // Configurar search_path
+      await pool.query(`SET search_path TO ${schemaName}, public`);
+      
+      // Query básico sin columnas problemáticas
+      const result = await pool.query(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE is_read = false) as unread
+        FROM notifications 
+        WHERE user_id = $1
+      `, [userId]);
+      
+      const row = result.rows[0];
+      const counts = {
+        total: parseInt(row.total) || 0,
+        unread: parseInt(row.unread) || 0
+      };
+      
+      console.log(`✅ Fallback successful: ${counts.total} total, ${counts.unread} unread`);
+      return counts;
+      
+    } catch (fallbackError) {
+      console.error('❌ Fallback method also failed:', fallbackError);
+      return { total: 0, unread: 0 };
+    } finally {
+      await pool.end().catch(err => 
+        console.log('⚠️ Pool close warning in getNotificationCounts:', err.message)
+      );
+    }
+  }
+},
 
     async createNotification(notificationData: any) {
       try {
@@ -621,7 +716,355 @@ async createOrUpdateCustomer(customerData: any) {
       }
     },
 
+// ================================
+// EMPLOYEE PROFILES
+// ================================
 
+async getAllEmployeeProfiles() {
+  try {
+    console.log('🔍 Getting all employee profiles for store:', storeId);
+    
+    const employees = await tenantDb.select({
+      // Campos de employee_profiles
+      id: schema.employeeProfiles.id,
+      userId: schema.employeeProfiles.userId,
+      employeeId: schema.employeeProfiles.employeeId,
+      department: schema.employeeProfiles.department,
+      position: schema.employeeProfiles.position,
+      specializations: schema.employeeProfiles.specializations,
+      workSchedule: schema.employeeProfiles.workSchedule,
+      emergencyContact: schema.employeeProfiles.emergencyContact,
+      emergencyPhone: schema.employeeProfiles.emergencyPhone,
+      vehicleInfo: schema.employeeProfiles.vehicleInfo,
+      certifications: schema.employeeProfiles.certifications,
+      salary: schema.employeeProfiles.salary,
+      commissionRate: schema.employeeProfiles.commissionRate,
+      territory: schema.employeeProfiles.territory,
+      baseLatitude: schema.employeeProfiles.baseLatitude,
+      baseLongitude: schema.employeeProfiles.baseLongitude,
+      baseAddress: schema.employeeProfiles.baseAddress,
+      serviceRadius: schema.employeeProfiles.serviceRadius,
+      maxDailyOrders: schema.employeeProfiles.maxDailyOrders,
+      currentOrders: schema.employeeProfiles.currentOrders,
+      availabilityHours: schema.employeeProfiles.availabilityHours,
+      skillLevel: schema.employeeProfiles.skillLevel,
+      notes: schema.employeeProfiles.notes,
+      createdAt: schema.employeeProfiles.createdAt,
+      updatedAt: schema.employeeProfiles.updatedAt,
+      
+      // Campos del usuario relacionado
+      user: {
+        id: schema.users.id,
+        username: schema.users.username,
+        name: schema.users.name,
+        email: schema.users.email,
+        role: schema.users.role,
+        status: schema.users.status,
+        phone: schema.users.phone
+      }
+    })
+    .from(schema.employeeProfiles)
+    .leftJoin(schema.users, eq(schema.employeeProfiles.userId, schema.users.id))
+    .orderBy(desc(schema.employeeProfiles.createdAt));
+
+    console.log(`✅ Retrieved ${employees.length} employee profiles`);
+    return employees;
+  } catch (error) {
+    console.error('Error getting all employee profiles:', error);
+    return [];
+  }
+},
+
+async getEmployeeProfile(userId: number) {
+  try {
+    const [employee] = await tenantDb.select()
+      .from(schema.employeeProfiles)
+      .leftJoin(schema.users, eq(schema.employeeProfiles.userId, schema.users.id))
+      .where(eq(schema.employeeProfiles.userId, userId))
+      .limit(1);
+    return employee || null;
+  } catch (error) {
+    console.error('Error getting employee profile:', error);
+    return null;
+  }
+},
+
+async getEmployeeProfileByEmployeeId(employeeId: string) {
+  try {
+    const [employee] = await tenantDb.select()
+      .from(schema.employeeProfiles)
+      .leftJoin(schema.users, eq(schema.employeeProfiles.userId, schema.users.id))
+      .where(eq(schema.employeeProfiles.employeeId, employeeId))
+      .limit(1);
+    return employee || null;
+  } catch (error) {
+    console.error('Error getting employee profile by employee ID:', error);
+    return null;
+  }
+},
+
+async createEmployeeProfile(profileData: any) {
+  try {
+    console.log('🔄 Creating employee profile:', profileData);
+    
+    const [employee] = await tenantDb.insert(schema.employeeProfiles)
+      .values({
+        ...profileData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+    
+    console.log('✅ Employee profile created:', employee.id);
+    return employee;
+  } catch (error) {
+    console.error('Error creating employee profile:', error);
+    throw error;
+  }
+},
+
+async updateEmployeeProfile(id: number, updates: any) {
+  try {
+    const [employee] = await tenantDb.update(schema.employeeProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.employeeProfiles.id, id))
+      .returning();
+    return employee;
+  } catch (error) {
+    console.error('Error updating employee profile:', error);
+    throw error;
+  }
+},
+
+async deleteEmployeeProfile(id: number) {
+  try {
+    await tenantDb.delete(schema.employeeProfiles)
+      .where(eq(schema.employeeProfiles.id, id));
+    return true;
+  } catch (error) {
+    console.error('Error deleting employee profile:', error);
+    return false;
+  }
+},
+
+async getEmployeesByDepartment(department: string) {
+  try {
+    const employees = await tenantDb.select()
+      .from(schema.employeeProfiles)
+      .leftJoin(schema.users, eq(schema.employeeProfiles.userId, schema.users.id))
+      .where(eq(schema.employeeProfiles.department, department))
+      .orderBy(desc(schema.employeeProfiles.createdAt));
+    return employees;
+  } catch (error) {
+    console.error('Error getting employees by department:', error);
+    return [];
+  }
+},
+
+async generateEmployeeId(department: string) {
+  try {
+    // Obtener el último empleado del departamento para generar ID secuencial
+    const departmentPrefix = {
+      'technical': 'TECH',
+      'sales': 'SALES', 
+      'delivery': 'DEL',
+      'support': 'SUP',
+      'admin': 'ADM'
+    }[department] || 'EMP';
+    
+    const employees = await tenantDb.select()
+      .from(schema.employeeProfiles)
+      .where(eq(schema.employeeProfiles.department, department))
+      .orderBy(desc(schema.employeeProfiles.employeeId));
+    
+    const nextNumber = employees.length + 1;
+    const employeeId = `${departmentPrefix}-${String(nextNumber).padStart(3, '0')}`;
+    
+    return employeeId;
+  } catch (error) {
+    console.error('Error generating employee ID:', error);
+    return `EMP-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+  }
+},
+
+async getAvailableTechnicians(specializations?: string[], maxDistance?: number, customerLocation?: { latitude: string; longitude: string }) {
+  try {
+    // Por ahora, retornar todos los técnicos. La lógica de distancia se puede implementar después.
+    const technicians = await tenantDb.select()
+      .from(schema.employeeProfiles)
+      .leftJoin(schema.users, eq(schema.employeeProfiles.userId, schema.users.id))
+      .where(eq(schema.employeeProfiles.department, 'technical'))
+      .orderBy(desc(schema.employeeProfiles.skillLevel));
+    
+    return technicians;
+  } catch (error) {
+    console.error('Error getting available technicians:', error);
+    return [];
+  }
+},
+
+async getAllRegistrationFlows(): Promise<CustomerRegistrationFlow[]> {
+  try {
+    console.log(`🔍 Getting all registration flows for store: ${storeId}`);
+    
+    // Usar drizzle para obtener todos los registration flows
+    const flows = await tenantDb
+      .select()
+      .from(schema.customerRegistrationFlows)
+      .orderBy(desc(schema.customerRegistrationFlows.createdAt));
+    
+    console.log(`✅ Found ${flows.length} registration flows`);
+    return flows;
+    
+  } catch (error) {
+    console.error('❌ Error getting all registration flows:', error);
+    
+    // Fallback a query directo si drizzle falla
+    console.log('🔄 Trying fallback method...');
+    
+    const pool = new Pool({ 
+      connectionString: process.env.DATABASE_URL,
+      max: 1,
+      idleTimeoutMillis: 5000
+    });
+    
+    try {
+      // Obtener el schema name
+      const storeResult = await pool.query(`
+        SELECT database_url FROM virtual_stores WHERE id = $1
+      `, [storeId]);
+      
+      if (!storeResult.rows[0]) {
+        console.error(`❌ Store ${storeId} not found`);
+        return [];
+      }
+      
+      const schemaMatch = storeResult.rows[0].database_url?.match(/schema=([^&]+)/);
+      const schemaName = schemaMatch ? schemaMatch[1] : 'public';
+      
+      console.log(`🔄 Working in schema: ${schemaName}`);
+      
+      // Configurar search_path
+      await pool.query(`SET search_path TO ${schemaName}, public`);
+      
+      // Obtener todos los flows
+      const result = await pool.query(`
+        SELECT * FROM customer_registration_flows 
+        ORDER BY created_at DESC
+      `);
+      
+      console.log(`✅ Found ${result.rows.length} registration flows (fallback)`);
+      return result.rows.map(row => ({
+        id: row.id,
+        customerId: row.customer_id,
+        phoneNumber: row.phone_number,
+        currentStep: row.current_step,
+        flowType: row.flow_type,
+        orderId: row.order_id,
+        orderNumber: row.order_number,
+        collectedData: row.collected_data,
+        requestedService: row.requested_service,
+        isCompleted: row.is_completed,
+        expiresAt: row.expires_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+      
+    } catch (fallbackError) {
+      console.error('❌ Fallback method also failed:', fallbackError);
+      return [];
+    } finally {
+      await pool.end().catch(err => 
+        console.log('⚠️ Pool close warning in getAllRegistrationFlows:', err.message)
+      );
+    }
+  }
+},
+
+// También necesitas agregar esta función helper si no existe:
+async getRegistrationFlowById(id: number): Promise<CustomerRegistrationFlow | null> {
+  try {
+    console.log(`🔍 Getting registration flow by ID: ${id}`);
+    
+    // Usar drizzle para obtener el flow por ID
+    const [flow] = await tenantDb
+      .select()
+      .from(schema.customerRegistrationFlows)
+      .where(eq(schema.customerRegistrationFlows.id, id))
+      .limit(1);
+    
+    if (flow) {
+      console.log(`✅ Found registration flow: ${flow.phoneNumber}`);
+      return flow;
+    } else {
+      console.log(`❌ Registration flow with ID ${id} not found`);
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('❌ Error getting registration flow by ID:', error);
+    
+    // Fallback a query directo
+    const pool = new Pool({ 
+      connectionString: process.env.DATABASE_URL,
+      max: 1,
+      idleTimeoutMillis: 5000
+    });
+    
+    try {
+      // Obtener el schema name
+      const storeResult = await pool.query(`
+        SELECT database_url FROM virtual_stores WHERE id = $1
+      `, [storeId]);
+      
+      if (!storeResult.rows[0]) {
+        console.error(`❌ Store ${storeId} not found`);
+        return null;
+      }
+      
+      const schemaMatch = storeResult.rows[0].database_url?.match(/schema=([^&]+)/);
+      const schemaName = schemaMatch ? schemaMatch[1] : 'public';
+      
+      // Configurar search_path
+      await pool.query(`SET search_path TO ${schemaName}, public`);
+      
+      // Obtener el flow por ID
+      const result = await pool.query(`
+        SELECT * FROM customer_registration_flows 
+        WHERE id = $1
+      `, [id]);
+      
+      if (result.rows[0]) {
+        const row = result.rows[0];
+        return {
+          id: row.id,
+          customerId: row.customer_id,
+          phoneNumber: row.phone_number,
+          currentStep: row.current_step,
+          flowType: row.flow_type,
+          orderId: row.order_id,
+          orderNumber: row.order_number,
+          collectedData: row.collected_data,
+          requestedService: row.requested_service,
+          isCompleted: row.is_completed,
+          expiresAt: row.expires_at,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at
+        };
+      } else {
+        return null;
+      }
+      
+    } catch (fallbackError) {
+      console.error('❌ Fallback method also failed:', fallbackError);
+      return null;
+    } finally {
+      await pool.end().catch(err => 
+        console.log('⚠️ Pool close warning in getRegistrationFlowById:', err.message)
+      );
+    }
+  }
+},
       // Auto Responses
    
 async getAllAutoResponses() {
