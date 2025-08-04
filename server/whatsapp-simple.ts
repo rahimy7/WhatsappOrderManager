@@ -295,160 +295,135 @@ export async function debugRegistrationFlow(phoneNumber: string, storeId: number
 }
 
 
-// ======================================
-// FUNCIÓN COMPLETA: processConfiguredAutoResponse
-// ======================================
-
 async function processConfiguredAutoResponse(messageText: string, from: string, customer: any, tenantStorage: any, storeMapping: any) {
- console.log(`🎯 PROCESSING CONFIGURED AUTO-RESPONSE - Store ${storeMapping.storeId}`);
+  console.log(`🎯 PROCESSING CONFIGURED AUTO-RESPONSE - Store ${storeMapping.storeId}`);
   console.log(`📝 MESSAGE TEXT: "${messageText}"`);
-  console.log(`📝 MESSAGE LENGTH: ${messageText.length}`);
-  console.log(`📝 FIRST 100 CHARS: "${messageText.substring(0, 100)}"`);
   
-  // ✅ NUEVO: VERIFICAR SI ES UN PEDIDO PRIMERO
+  // ✅ VERIFICAR SI ES UN PEDIDO PRIMERO
   const isOrder = await isOrderMessage(messageText);
   console.log(`🛍️ IS ORDER MESSAGE: ${isOrder}`);
   if (isOrder) {
     console.log(`🛍️ ORDER DETECTED - Processing catalog order`);
-    console.log(`📋 CALLING processWebCatalogOrderSimple...`);
     try {
-    await processWebCatalogOrderSimple(
-      customer, 
-      from, 
-      messageText, 
-      storeMapping.storeId, 
-      storeMapping.phoneNumberId, 
-      tenantStorage
-    );
-    console.log(`✅ processWebCatalogOrderSimple COMPLETED`);
-     } catch (orderError) {
+      await processWebCatalogOrderSimple(
+        customer, 
+        from, 
+        messageText, 
+        storeMapping.storeId, 
+        storeMapping.phoneNumberId, 
+        tenantStorage
+      );
+      console.log(`✅ processWebCatalogOrderSimple COMPLETED`);
+    } catch (orderError) {
       console.error(`❌ ERROR IN processWebCatalogOrderSimple:`, orderError);
     }
     return; // ✅ IMPORTANTE: Salir aquí para no procesar auto-respuestas
-     } else {
-    console.log(`❌ NOT AN ORDER - Processing as regular message`);
-    }
+  }
 
-  // CRITICAL: Use only tenant schema for store-specific auto-responses
+  // ✅ OBTENER AUTO-RESPUESTAS DE LA TIENDA
   let autoResponse = null;
   const messageTextLower = messageText.toLowerCase().trim();
   
-  // Get auto-responses ONLY from tenant schema (store-specific)
   const autoResponses = await tenantStorage.getAllAutoResponses();
   console.log(`🔍 STORE-SPECIFIC AUTO-RESPONSE VALIDATION - Store ${storeMapping.storeId}: Found ${autoResponses.length} tenant auto-responses`);
 
   if (!autoResponses || autoResponses.length === 0) {
-    console.log(`❌ NO AUTO-RESPONSES CONFIGURED - Store ${storeMapping.storeId}: No responses found in tenant database`);
+    console.log(`❌ NO AUTO-RESPONSES CONFIGURED - Store ${storeMapping.storeId}`);
     return;
   }
 
-  // 1. Buscar respuesta específica por trigger
-  autoResponse = autoResponses.find((resp: any) => {
-    if (!resp.isActive) return false;
-    
-    const triggers = resp.triggers ? 
-      (typeof resp.triggers === 'string' ? JSON.parse(resp.triggers) : resp.triggers) : 
-      [resp.trigger];
-    
-    return triggers.some((trigger: string) => 
-      messageTextLower.includes(trigger.toLowerCase())
-    );
-  });
+  // ✅ PASO 1: MAPEO DIRECTO DE ACCIONES DE BOTONES A TRIGGERS
+  const actionToTriggerMap: { [key: string]: string } = {
+    'show_products': 'show_products',
+    'ver_productos': 'show_products', 
+    'products': 'show_products',
+    'productos': 'show_products',
+    'show_services': 'show_services',
+    'ver_servicios': 'show_services',
+    'services': 'show_services', 
+    'servicios': 'show_services',
+    'new_order': 'show_products',     // ✅ Nueva orden = mostrar productos
+    'catalogo': 'show_products',      // ✅ Catálogo = mostrar productos
+    'catálogo': 'show_products',
+    'catalog': 'show_products',
+    'show_help': 'show_help',
+    'help': 'help',
+    'ayuda': 'ayuda'
+  };
 
-  // 2. Si no encuentra respuesta específica, usar respuesta de bienvenida
-  if (!autoResponse) {
-    console.log(`🔄 NO SPECIFIC MATCH - Using default welcome auto-response`);
-    autoResponse = autoResponses.find((resp: any) => 
-      resp.isActive && (resp.trigger === 'welcome' || resp.name?.includes('Bienvenida'))
+  // ✅ BUSCAR POR MAPEO DIRECTO PRIMERO
+  if (actionToTriggerMap[messageTextLower]) {
+    const targetTrigger = actionToTriggerMap[messageTextLower];
+    console.log(`🎯 DIRECT ACTION MAPPING: "${messageTextLower}" -> trigger: "${targetTrigger}"`);
+    
+    const directResponse = autoResponses.find(response => 
+      response.isActive && response.trigger === targetTrigger
     );
+    
+    if (directResponse) {
+      console.log(`✅ FOUND DIRECT MAPPED AUTO-RESPONSE: ${directResponse.name}`);
+      autoResponse = directResponse;
+    }
   }
 
+  // ✅ PASO 2: BÚSQUEDA POR COINCIDENCIA EXACTA DE TRIGGER
   if (!autoResponse) {
-    console.log(`❌ NO WELCOME RESPONSE FOUND - Store ${storeMapping.storeId}: No welcome response configured`);
-    return;
+    autoResponse = autoResponses.find(response => 
+      response.isActive && response.trigger && 
+      response.trigger.toLowerCase() === messageTextLower
+    );
+    
+    if (autoResponse) {
+      console.log(`✅ FOUND EXACT TRIGGER MATCH: ${autoResponse.name}`);
+    }
   }
 
-  console.log(`✅ AUTO-RESPONSE FOUND - Store ${storeMapping.storeId}: "${autoResponse.name}" (ID: ${autoResponse.id})`);
+  // ✅ PASO 3: BÚSQUEDA POR PALABRAS CLAVE EN TRIGGER
+  if (!autoResponse) {
+    const keywordMappings = [
+      { keywords: ['productos', 'product', 'catalogo', 'catalog', 'ver productos'], trigger: 'show_products' },
+      { keywords: ['servicios', 'service', 'ver servicios'], trigger: 'show_services' },
+      { keywords: ['ayuda', 'help'], trigger: 'show_help' },
+      { keywords: ['hola', 'hello', 'hi', 'buenos días', 'buenas'], trigger: 'welcome' },
+      { keywords: ['menu', 'menú', 'opciones'], trigger: 'menu' }
+    ];
 
-  try {
-    // ✅ CORRECCIÓN: Obtener configuración de WhatsApp desde MASTER STORAGE
-    const { getMasterStorage } = await import('./storage/index.js');
-    const storage = getMasterStorage();
-    const globalConfig = await storage.getWhatsAppConfig(storeMapping.storeId); // ✅ Pass storeId parameter
-    
-    if (!globalConfig || !globalConfig.accessToken || !globalConfig.phoneNumberId) {
-        console.log(`❌ WHATSAPP CONFIG INCOMPLETE - Store ${storeMapping.storeId}: Missing access token or phone number ID`);
-        return;
-    }
-
-    console.log(`✅ WHATSAPP CONFIG FOUND - Store ${storeMapping.storeId}: phoneNumberId ${globalConfig.phoneNumberId}`);
-
-    const finalConfig = {
-      accessToken: globalConfig.accessToken,
-      phoneNumberId: globalConfig.phoneNumberId
-    };
-
-    console.log(`✅ GLOBAL WHATSAPP CONFIG LOADED - Store ${storeMapping.storeId}: phoneNumberId ${finalConfig.phoneNumberId}`);
-
-    // Prepare message text
-    let messageText = autoResponse.messageText;
-    
-    // Replace store name placeholder
-    if (messageText.includes('{storeName}')) {
-      messageText = messageText.replace(/{storeName}/g, storeMapping.storeName);
-    }
-
-    console.log(`📝 USING CONFIGURED MESSAGE: "${messageText.substring(0, 50)}..."`);
-
-    // Check if response has interactive buttons
-    let menuOptions = null;
-    try {
-      if (autoResponse.menuOptions && typeof autoResponse.menuOptions === 'string') {
-        menuOptions = JSON.parse(autoResponse.menuOptions);
-      } else if (autoResponse.menuOptions) {
-        menuOptions = autoResponse.menuOptions;
+    for (const mapping of keywordMappings) {
+      if (mapping.keywords.some(keyword => messageTextLower.includes(keyword))) {
+        const keywordResponse = autoResponses.find(response => 
+          response.isActive && response.trigger === mapping.trigger
+        );
+        
+        if (keywordResponse) {
+          console.log(`✅ FOUND KEYWORD MATCH: "${mapping.trigger}" for message: "${messageTextLower}"`);
+          autoResponse = keywordResponse;
+          break;
+        }
       }
-    } catch (parseError) {
-      console.log(`⚠️ INVALID MENU OPTIONS JSON - Store ${storeMapping.storeId}: ${parseError}`);
     }
+  }
 
-    if (menuOptions && Array.isArray(menuOptions) && menuOptions.length > 0) {
-      console.log(`🔘 INTERACTIVE BUTTONS DETECTED - Store ${storeMapping.storeId}: ${menuOptions.length} buttons configured`);
-      
-      // Send interactive message with buttons
-      console.log(`📤 SENDING INTERACTIVE MESSAGE - Store ${storeMapping.storeId}: ${menuOptions.length} buttons`);
-      await sendInteractiveMessage(from, messageText, menuOptions, finalConfig);
-    } else {
-      // Send regular text message
-      console.log(`📤 SENDING MESSAGE WITH GLOBAL CONFIG - Store ${storeMapping.storeId} phoneNumberId: ${finalConfig.phoneNumberId}`);
-      await sendWhatsAppMessage(from, messageText, finalConfig);
-    }
+  // ✅ PASO 4: FALLBACK - MENSAJE DE BIENVENIDA
+  if (!autoResponse) {
+    console.log(`🔍 NO SPECIFIC MATCH - Looking for welcome message`);
+    autoResponse = autoResponses.find(response => 
+      response.isActive && (response.trigger === 'welcome' || response.trigger === 'menu')
+    );
+  }
 
-    // Check for button interactions in the incoming message
-    await checkButtonInteractions(messageText, from, customer, tenantStorage, storeMapping, autoResponses);
-
-    // Execute next action if configured
-    if (autoResponse.nextAction) {
-      await executeNextAction(autoResponse, customer, tenantStorage, storeMapping.storeId);
-    }
-
-  } catch (error: any) {
-    console.error(`❌ ERROR IN AUTO-RESPONSE - Store ${storeMapping.storeId}:`, error);
-    
-    const masterStorage = getMasterStorage();
-    await masterStorage.addWhatsAppLog({
-      type: 'error',
-      phoneNumber: from,
-      messageContent: `Error procesando auto-respuesta para tienda ${storeMapping.storeId}`,
-      status: 'error',
-      errorMessage: error.message || 'Unknown error',
-      rawData: JSON.stringify({ messageText, error: error instanceof Error ? error.stack : error })
-    });
-    
-    throw error;
+  // ✅ ENVIAR AUTO-RESPUESTA ENCONTRADA
+  if (autoResponse) {
+    console.log(`✅ MATCHED AUTO-RESPONSE: ${autoResponse.name} (Trigger: ${autoResponse.trigger})`);
+    await sendAutoResponse(autoResponse, from, storeMapping.storeId, storeMapping.phoneNumberId);
+  } else {
+    console.log(`❌ NO AUTO-RESPONSE FOUND - Sending default message`);
+    await sendWhatsAppMessageDirect(
+      from, 
+      "¡Hola! Gracias por contactarnos. ¿En qué podemos ayudarte?", 
+      storeMapping.storeId
+    );
   }
 }
-
 
 // ======================================
 // FUNCIÓN AUXILIAR: s   endWhatsAppMessageDirect
@@ -2835,6 +2810,58 @@ async function sendWhatsAppMessageDirect(phoneNumber: string, message: string, s
   }
 }
 
+async function sendAutoResponse(autoResponse: any, phoneNumber: string, storeId: number, phoneNumberId: string) {
+  try {
+    console.log(`📤 SENDING AUTO-RESPONSE: "${autoResponse.name}" to ${phoneNumber}`);
+    
+    const message = autoResponse.messageText || autoResponse.message || "Mensaje no disponible";
+    
+    // ✅ VERIFICAR SI TIENE OPCIONES DE MENÚ
+    if (autoResponse.menuOptions) {
+      let menuOptions;
+      try {
+        menuOptions = typeof autoResponse.menuOptions === 'string' 
+          ? JSON.parse(autoResponse.menuOptions) 
+          : autoResponse.menuOptions;
+        
+        console.log(`📋 PARSED MENU OPTIONS:`, JSON.stringify(menuOptions, null, 2));
+      } catch (e) {
+        console.log('⚠️ Could not parse menuOptions, sending as text');
+        menuOptions = null;
+      }
+      
+      if (Array.isArray(menuOptions) && menuOptions.length > 0) {
+        console.log(`🔘 SENDING INTERACTIVE MESSAGE WITH ${menuOptions.length} BUTTONS`);
+        
+        // ✅ USAR LA FUNCIÓN SENDINTERACTIVEMESSAGE MODIFICADA
+        try {
+          await sendInteractiveMessage(phoneNumber, message, menuOptions, { storeId, phoneNumberId });
+          console.log(`✅ Interactive auto-response sent successfully`);
+          return;
+        } catch (interactiveError) {
+          console.error('❌ Error sending interactive message:', interactiveError);
+          // Continuar con fallback
+        }
+      }
+    }
+    
+    // ✅ FALLBACK: ENVIAR COMO MENSAJE SIMPLE
+    console.log(`📤 SENDING AS SIMPLE MESSAGE`);
+    await sendWhatsAppMessageDirect(phoneNumber, message, storeId);
+    console.log(`✅ Simple auto-response sent successfully`);
+    
+  } catch (error) {
+    console.error(`❌ ERROR SENDING AUTO-RESPONSE:`, error);
+    
+    // Último fallback
+    await sendWhatsAppMessageDirect(
+      phoneNumber, 
+      "Hubo un problema enviando la información. Por favor intenta de nuevo.", 
+      storeId
+    );
+  }
+}
+
 // ✅ REEMPLAZAR ESTA FUNCIÓN COMPLETA:
 async function sendAutoResponseMessage(phoneNumber: string, trigger: string, storeId: number, tenantStorage: any) {
   try {
@@ -3778,26 +3805,36 @@ async function validateCustomerOrdersEarly(
   tenantStorage: any
 ): Promise<{ handled: boolean }> {
   try {
+    console.log(`\n🔍 ===== VALIDATING CUSTOMER ORDERS (BYPASS FIXED) =====`);
+    console.log(`👤 Customer: ${customer.name || customer.phone} (ID: ${customer.id})`);
+    console.log(`💬 Message: "${messageText}"`);
     
-      const messageAction = detectOrderActionMessage(messageText);
+    // ✅ PASO 1: DETECTAR ACCIONES QUE DEBEN BYPASEAR LA VALIDACIÓN DE ÓRDENES
+    const messageAction = detectOrderActionMessage(messageText);
+    console.log(`🔍 MESSAGE ACTION DETECTED:`, messageAction);
     
-    if (messageAction.isOrderAction && messageAction.action === 'new_order') {
-      console.log(`🛒 NEW ORDER DETECTED - BYPASSING PENDING ORDERS`);
-      
-      // Enviar catálogo directamente
-      await processAutoResponse("catálogo", customer.phone, storeId, tenantStorage);
-      
-
+    // ✅ LISTA DE ACCIONES QUE BYPASEAN LA VALIDACIÓN DE ÓRDENES PENDIENTES
+    const bypassActions = [
+      'new_order',        // Nueva orden
+      'show_products',    // Ver productos 
+      'show_services',    // Ver servicios
+      'catalogo',         // Catálogo directo
+      'catalog',          // Catalog directo
+      'productos'         // Productos directo
+    ];
     
+    if (messageAction.isOrderAction && bypassActions.includes(messageAction.action)) {
+      console.log(`🚀 BYPASS DETECTED - Action: ${messageAction.action}`);
+      console.log(`🛒 PROCEEDING DIRECTLY TO CATALOG/AUTO-RESPONSE`);
       
-      return { handled: true }; // ✅ IMPORTANTE: Terminar aquí
+      // ✅ NO VALIDAR ÓRDENES PENDIENTES, PERMITIR QUE CONTINÚE AL FLUJO NORMAL
+      return { handled: false }; // ✅ FALSE = Continuar al processAutoResponse
     }
     
+    // ✅ PASO 2: SOLO VALIDAR ÓRDENES PENDIENTES SI NO ES UNA ACCIÓN DE BYPASS
+    console.log(`🔍 CHECKING FOR PENDING ORDERS...`);
     
-    
-    console.log(`📦 VALIDATING CUSTOMER ORDERS - Customer ID: ${customer.id}`);
-    
-    // 1. Obtener órdenes pendientes usando tu método existente
+    // Obtener órdenes pendientes usando tu método existente
     const allOrders = await tenantStorage.getAllOrders();
     const customerOrders = allOrders.filter(order => order.customerId === customer.id);
     const pendingOrders = customerOrders.filter(order => 
@@ -3806,33 +3843,29 @@ async function validateCustomerOrdersEarly(
 
     console.log(`📊 ORDER STATS: Total=${customerOrders.length}, Pending=${pendingOrders.length}`);
 
-    // 2. Si no hay órdenes pendientes, continuar flujo normal
+    // ✅ PASO 3: SI NO HAY ÓRDENES PENDIENTES, CONTINUAR FLUJO NORMAL
     if (pendingOrders.length === 0) {
       console.log(`ℹ️ No pending orders found - continuing normal flow`);
       return { handled: false };
     }
 
     console.log(`📦 FOUND ${pendingOrders.length} PENDING ORDERS - Processing...`);
-
-    // 3. Detectar tipo de mensaje
-    await messageAction 
-    console.log(`🔍 MESSAGE ACTION DETECTED:`, messageAction);
     
-    // 4. ✅ CORREGIDO: Manejar acciones específicas PRIMERO
-    if (messageAction.isOrderAction) {
-      console.log(`🎯 PROCESSING ORDER ACTION: ${messageAction.action}`);
+    // ✅ PASO 4: MANEJAR ACCIONES ESPECÍFICAS DE ÓRDENES (NO DE CATÁLOGO)
+    if (messageAction.isOrderAction && !bypassActions.includes(messageAction.action)) {
+      console.log(`🎯 PROCESSING ORDER-SPECIFIC ACTION: ${messageAction.action}`);
       await handleSpecificOrderAction(customer, messageAction, pendingOrders, storeId, tenantStorage);
       return { handled: true };
     }
     
-    // 5. ✅ CORREGIDO: Solo si NO es acción específica Y es mensaje de bienvenida
+    // ✅ PASO 5: SOLO SI NO ES ACCIÓN ESPECÍFICA Y ES MENSAJE DE BIENVENIDA
     if (isWelcomeOrGeneralMessage(messageText)) {
       console.log(`👋 WELCOME MESSAGE WITH PENDING ORDERS`);
       await sendPendingOrdersWelcomeMessage(customer, pendingOrders, storeId);
       return { handled: true };
     }
     
-    // 6. Para otros mensajes, mostrar contexto de órdenes pendientes pero continuar flujo
+    // ✅ PASO 6: PARA OTROS MENSAJES, MOSTRAR CONTEXTO
     console.log(`💡 SHOWING ORDER CONTEXT FOR NON-ORDER MESSAGE`);
     await sendOrderContextMessage(customer, pendingOrders, messageText, storeId);
     return { handled: true };
@@ -4768,7 +4801,6 @@ function detectOrderActionMessage(messageText: string): { isOrderAction: boolean
   console.log(`🔍 ANALYZING MESSAGE: "${text}"`);
   
   // ✅ DETECTAR NÚMEROS DE ORDEN ESPECÍFICOS
-  // Patrones: "#123", "orden 123", "order 123", "123"
   const orderNumberPatterns = [
     /^#?(\d+)$/,                    // "#123" o "123"
     /^orden\s+#?(\d+)$/,           // "orden 123" o "orden #123"
@@ -4791,23 +4823,27 @@ function detectOrderActionMessage(messageText: string): { isOrderAction: boolean
   const buttonMappings: { [key: string]: string } = {
     // IDs de botones de WhatsApp
     'track_orders': 'track_orders',
-    'new_order': 'new_order',           // ✅ ESTE ES EL QUE NOS INTERESA
+    'new_order': 'new_order',           // ✅ BYPASS ACTION
     'contact_support': 'contact_support',
     'support': 'contact_support',
     
     // IDs de botones genéricos (fallback)
     'btn_0': 'track_orders',
-    'btn_1': 'new_order',               // ✅ MAPEO PARA "Opción 2"
+    'btn_1': 'new_order',               // ✅ BYPASS ACTION
     'btn_2': 'contact_support',
     
-    // Valores alternativos
-    'show_products': 'new_order',       // ✅ ACCIÓN ALTERNATIVA
-    'ver_productos': 'new_order',
-    'products': 'new_order',
-    'productos': 'new_order',
-    'catalogo': 'new_order',
-    'catálogo': 'new_order',
-    'catalog': 'new_order'
+    // ✅ ACCIONES DE CATÁLOGO/PRODUCTOS (BYPASS)
+    'show_products': 'show_products',   // ✅ BYPASS ACTION
+    'ver_productos': 'show_products',   // ✅ BYPASS ACTION
+    'show_services': 'show_services',   // ✅ BYPASS ACTION
+    'ver_servicios': 'show_services',   // ✅ BYPASS ACTION
+    'products': 'show_products',        // ✅ BYPASS ACTION
+    'productos': 'productos',           // ✅ BYPASS ACTION
+    'catalogo': 'catalogo',             // ✅ BYPASS ACTION
+    'catálogo': 'catalogo',             // ✅ BYPASS ACTION
+    'catalog': 'catalog',               // ✅ BYPASS ACTION
+    'servicios': 'show_services',       // ✅ BYPASS ACTION
+    'services': 'show_services'         // ✅ BYPASS ACTION
   };
   
   if (buttonMappings[text]) {
@@ -4818,7 +4854,7 @@ function detectOrderActionMessage(messageText: string): { isOrderAction: boolean
   // ✅ MAPEO POR NÚMEROS (para usuarios que escriben números)
   const numberMappings: { [key: string]: string } = {
     '1': 'track_orders',     // "Ver mis órdenes"
-    '2': 'new_order',        // ✅ "Nueva orden" - ESTO ACTIVARÁ EL CATÁLOGO
+    '2': 'new_order',        // ✅ "Nueva orden" - BYPASS ACTION
     '3': 'contact_support'   // "Soporte"
   };
   
@@ -4845,13 +4881,22 @@ function detectOrderActionMessage(messageText: string): { isOrderAction: boolean
     'contact_support': [
       'soporte', 'ayuda', 'agente', 'hablar', 'contactar', 'asistencia'
     ],
+    // ✅ ACCIONES DE BYPASS (CATÁLOGO/PRODUCTOS)
+    'show_products': [
+      'ver productos', 'mostrar productos', 'productos disponibles',
+      'que productos tienen', 'lista de productos', 'product list'
+    ],
+    'show_services': [
+      'ver servicios', 'mostrar servicios', 'servicios disponibles',
+      'que servicios tienen', 'lista de servicios', 'service list'
+    ],
+    'catalogo': [
+      'catálogo', 'catalogo', 'catalog', 'carta', 'menu', 'menú',
+      'que tienen', 'que venden', 'productos y servicios'
+    ],
     'new_order': [
-      // ✅ PALABRAS CLAVE PARA NUEVA ORDEN/CATÁLOGO
       'nueva orden', 'nuevo pedido', 'ordenar', 'comprar', 
-      'catálogo', 'catalogo', 'productos', 'product', 'products',
-      'ver productos', 'mostrar productos', 'menu', 'menú',
-      'carta', 'lista de productos', 'que tienen', 'que venden',
-      'shop', 'store', 'tienda'
+      'quiero comprar', 'quiero ordenar', 'hacer pedido'
     ]
   };
   
