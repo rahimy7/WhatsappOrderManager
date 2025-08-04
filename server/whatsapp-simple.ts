@@ -4050,14 +4050,14 @@ async function handleSpecificOrderAction(
         break;
         
       case 'new_order':
-        console.log(`🛒 Processing new order request with catalog`);
+        // ✅ AQUÍ SE ACTIVA EL CATÁLOGO
+        console.log(`🛒 Processing new order request - SENDING CATALOG`);
         await handleNewOrderRequest(customer, storeId, tenantStorage);
         break;
         
       case 'view_order':
         console.log(`👁️ Processing view specific order request`);
         if (messageAction.orderId) {
-          // ✅ AQUÍ ES DONDE SE LLAMA TU FUNCIÓN!
           await showSpecificOrderDetailsCompatible(customer, messageAction.orderId, storeId, tenantStorage);
         } else {
           await sendWhatsAppMessageDirect(
@@ -4090,17 +4090,14 @@ async function handleSpecificOrderAction(
         console.log(`⚠️ UNKNOWN ORDER ACTION: ${messageAction.action}`);
         await sendWhatsAppMessageDirect(
           customer.phone,
-          `🤔 No entiendo esa opción. Usa uno de los botones disponibles.`,
+          `🤔 No entiendo esa opción. Usa el menú de botones o escribe "ayuda" para más información.`,
           storeId
         );
         break;
     }
     
-    console.log(`✅ Order action ${messageAction.action} processed successfully`);
-    
   } catch (error) {
-    console.error(`❌ Error handling order action ${messageAction.action}:`, error);
-    
+    console.error('❌ Error handling specific order action:', error);
     await sendWhatsAppMessageDirect(
       customer.phone,
       `❌ Hubo un problema procesando tu solicitud. Por favor intenta de nuevo.`,
@@ -4763,12 +4760,14 @@ async function sendOrderNotFoundMessage(customer: any, orderNumber: string, stor
  * 🔍 FUNCIÓN ACTUALIZADA: Detectar botones específicos de órdenes
  */
 
-// ✅ PASO 1: Actualizar detectOrderActionMessage para detectar números de orden
+/**
+ * 🔍 Detectar acciones específicas de órdenes (ACTUALIZADA)
+ */
 function detectOrderActionMessage(messageText: string): { isOrderAction: boolean; action: string; orderId?: string } {
   const text = messageText.toLowerCase().trim();
   console.log(`🔍 ANALYZING MESSAGE: "${text}"`);
   
-  // ✅ DETECTAR NÚMEROS DE ORDEN (NUEVO)
+  // ✅ DETECTAR NÚMEROS DE ORDEN ESPECÍFICOS
   // Patrones: "#123", "orden 123", "order 123", "123"
   const orderNumberPatterns = [
     /^#?(\d+)$/,                    // "#123" o "123"
@@ -4788,42 +4787,72 @@ function detectOrderActionMessage(messageText: string): { isOrderAction: boolean
     }
   }
   
-  // ✅ MAPEO DE BOTONES DIRECTO (mantener existente)
+  // ✅ MAPEO DE BOTONES DIRECTO (IDs exactos de WhatsApp)
   const buttonMappings: { [key: string]: string } = {
+    // IDs de botones de WhatsApp
     'track_orders': 'track_orders',
-    'new_order': 'new_order',
+    'new_order': 'new_order',           // ✅ ESTE ES EL QUE NOS INTERESA
     'contact_support': 'contact_support',
     'support': 'contact_support',
+    
+    // IDs de botones genéricos (fallback)
     'btn_0': 'track_orders',
-    'btn_1': 'new_order',
-    'btn_2': 'contact_support'
+    'btn_1': 'new_order',               // ✅ MAPEO PARA "Opción 2"
+    'btn_2': 'contact_support',
+    
+    // Valores alternativos
+    'show_products': 'new_order',       // ✅ ACCIÓN ALTERNATIVA
+    'ver_productos': 'new_order',
+    'products': 'new_order',
+    'productos': 'new_order',
+    'catalogo': 'new_order',
+    'catálogo': 'new_order',
+    'catalog': 'new_order'
   };
   
   if (buttonMappings[text]) {
-    console.log(`✅ DIRECT BUTTON MAPPING: ${text} -> ${buttonMappings[text]}`);
+    console.log(`✅ DIRECT BUTTON MAPPING: "${text}" -> ${buttonMappings[text]}`);
     return { isOrderAction: true, action: buttonMappings[text] };
   }
   
-  // ✅ MAPEO POR NÚMEROS (mantener existente)
+  // ✅ MAPEO POR NÚMEROS (para usuarios que escriben números)
   const numberMappings: { [key: string]: string } = {
-    '1': 'track_orders',
-    '2': 'new_order',
-    '3': 'contact_support'
+    '1': 'track_orders',     // "Ver mis órdenes"
+    '2': 'new_order',        // ✅ "Nueva orden" - ESTO ACTIVARÁ EL CATÁLOGO
+    '3': 'contact_support'   // "Soporte"
   };
   
   if (numberMappings[text]) {
-    console.log(`✅ NUMBER MAPPING: ${text} -> ${numberMappings[text]}`);
+    console.log(`✅ NUMBER MAPPING: "${text}" -> ${numberMappings[text]}`);
     return { isOrderAction: true, action: numberMappings[text] };
   }
   
-  // ✅ PALABRAS CLAVE (mantener existente)
+  // ✅ PALABRAS CLAVE ESPECÍFICAS
   const orderKeywords: { [key: string]: string[] } = {
-    'track_orders': ['ver ordenes', 'ver órdenes', 'mis ordenes', 'mis órdenes', 'seguimiento', 'estado', 'tracking'],
-    'view_order': ['detalles', 'detalle', 'info orden', 'información orden', 'ver orden'],
-    'modify_order': ['modificar', 'cambiar', 'editar', 'actualizar'],
-    'cancel_order': ['cancelar', 'anular', 'eliminar'],
-    'contact_support': ['soporte', 'ayuda', 'agente', 'hablar', 'contactar'],
-    'new_order': ['nueva orden', 'nuevo pedido', 'ordenar', 'comprar', 'catálogo']
+    'track_orders': [
+      'ver ordenes', 'ver órdenes', 'mis ordenes', 'mis órdenes', 
+      'seguimiento', 'estado', 'tracking', 'rastrear'
+    ],
+    'view_order': [
+      'detalles', 'detalle', 'info orden', 'información orden', 'ver orden'
+    ],
+    'modify_order': [
+      'modificar', 'cambiar', 'editar', 'actualizar'
+    ],
+    'cancel_order': [
+      'cancelar', 'anular', 'eliminar'
+    ],
+    'contact_support': [
+      'soporte', 'ayuda', 'agente', 'hablar', 'contactar', 'asistencia'
+    ],
+    'new_order': [
+      // ✅ PALABRAS CLAVE PARA NUEVA ORDEN/CATÁLOGO
+      'nueva orden', 'nuevo pedido', 'ordenar', 'comprar', 
+      'catálogo', 'catalogo', 'productos', 'product', 'products',
+      'ver productos', 'mostrar productos', 'menu', 'menú',
+      'carta', 'lista de productos', 'que tienen', 'que venden',
+      'shop', 'store', 'tienda'
+    ]
   };
   
   for (const [action, keywords] of Object.entries(orderKeywords)) {
@@ -4835,9 +4864,10 @@ function detectOrderActionMessage(messageText: string): { isOrderAction: boolean
     }
   }
   
-  console.log(`❌ NO ORDER ACTION DETECTED`);
+  console.log(`❌ NO ORDER ACTION DETECTED for: "${text}"`);
   return { isOrderAction: false, action: 'none' };
 }
+
 
 
 /**
@@ -4903,29 +4933,32 @@ async function sendWhatsAppMessageWithButtonsAlternative(
  */
 async function handleNewOrderRequest(customer: any, storeId: number, tenantStorage: any): Promise<void> {
   try {
-    console.log(`🛒 PROCESSING NEW ORDER REQUEST for customer ${customer.id} - Store ${storeId}`);
+    console.log(`🛒 PROCESSING NEW ORDER REQUEST for customer ${customer.id}`);
     
-    // ✅ PASO 1: Buscar mensaje de catálogo en auto-responses
+    // ✅ PASO 1: Buscar auto-respuesta del catálogo
     const catalogResponse = await findCatalogAutoResponse(storeId, tenantStorage);
     
     if (catalogResponse) {
-      console.log(`📋 FOUND CATALOG RESPONSE: "${catalogResponse.trigger}"`);
+      console.log(`✅ FOUND CATALOG AUTO-RESPONSE: "${catalogResponse.name}" (Trigger: ${catalogResponse.trigger})`);
+      
+      // ✅ PASO 2: Enviar catálogo usando la auto-respuesta encontrada
       await sendCatalogFromAutoResponse(customer.phone, catalogResponse, storeId);
+      console.log(`✅ Catalog sent successfully using auto-response`);
+      
     } else {
-      console.log(`⚠️ NO CATALOG AUTO-RESPONSE FOUND - Using default`);
+      console.log(`⚠️ NO CATALOG AUTO-RESPONSE FOUND - Sending default catalog`);
+      
+      // ✅ PASO 3: Fallback - enviar catálogo por defecto
       await sendDefaultCatalogMessage(customer.phone, storeId);
     }
     
-    console.log(`✅ Catalog sent successfully to ${customer.phone}`);
-    
   } catch (error) {
-    console.error('❌ Error in handleNewOrderRequest:', error);
+    console.error('❌ Error handling new order request:', error);
     
-    // Fallback absoluto
+    // ✅ PASO 4: Mensaje de error como último recurso
     await sendWhatsAppMessageDirect(
-      customer.phone, 
-      `🛒 *¡Perfecto! Aquí tienes nuestro catálogo:*\n\n` +
-      `Por favor, revisa nuestros productos y dime cuál te interesa.`, 
+      customer.phone,
+      `❌ Hubo un problema cargando el catálogo. Por favor intenta de nuevo o contacta soporte.`,
       storeId
     );
   }
@@ -4933,19 +4966,20 @@ async function handleNewOrderRequest(customer: any, storeId: number, tenantStora
 
 async function findCatalogAutoResponse(storeId: number, tenantStorage: any): Promise<any> {
   try {
-    const autoResponses = await tenantStorage.getAutoResponses();
+    const autoResponses = await tenantStorage.getAllAutoResponses();
     console.log(`🔍 SEARCHING CATALOG in ${autoResponses.length} auto-responses`);
     
-    // ✅ BUSCAR POR TRIGGER ESPECÍFICO (prioridad alta)
+    // ✅ PRIORIDAD 1: Buscar por triggers específicos de catálogo
     const catalogTriggers = [
       'catalogo', 'catálogo', 'catalog',
       'productos', 'products', 'product',
       'menu', 'menú', 'carta',
-      'nueva orden', 'nuevo pedido', 'new order'
+      'nueva orden', 'nuevo pedido', 'new order',
+      'show_products', 'ver productos'
     ];
     
     for (const response of autoResponses) {
-      if (response.storeId === storeId && response.trigger) {
+      if (response.isActive && response.trigger) {
         const trigger = response.trigger.toLowerCase().trim();
         
         // Buscar coincidencia exacta o que contenga las palabras clave
@@ -4958,13 +4992,13 @@ async function findCatalogAutoResponse(storeId: number, tenantStorage: any): Pro
       }
     }
     
-    // ✅ BUSCAR POR KEYWORDS EN EL MENSAJE (prioridad media)
+    // ✅ PRIORIDAD 2: Buscar por keywords en el mensaje
+    const productKeywords = ['producto', 'catálogo', 'menú', 'comprar', 'precio', 'disponible'];
     for (const response of autoResponses) {
-      if (response.storeId === storeId && response.message) {
-        const message = response.message.toLowerCase();
+      if (response.isActive && response.messageText) {
+        const message = response.messageText.toLowerCase();
         
         // Si el mensaje contiene palabras relacionadas con productos
-        const productKeywords = ['producto', 'catálogo', 'menú', 'comprar', 'precio'];
         if (productKeywords.some(keyword => message.includes(keyword))) {
           console.log(`✅ FOUND CATALOG BY MESSAGE CONTENT: "${response.trigger}"`);
           return response;
@@ -4972,17 +5006,30 @@ async function findCatalogAutoResponse(storeId: number, tenantStorage: any): Pro
       }
     }
     
-    // ✅ BUSCAR CUALQUIER AUTO-RESPONSE QUE TENGA OPCIONES DE MENÚ (prioridad baja)
+    // ✅ PRIORIDAD 3: Buscar auto-response con opciones de menú de productos
     for (const response of autoResponses) {
-      if (response.storeId === storeId && response.menuOptions) {
+      if (response.isActive && response.menuOptions) {
         try {
           const menuOptions = typeof response.menuOptions === 'string' 
             ? JSON.parse(response.menuOptions) 
             : response.menuOptions;
           
           if (Array.isArray(menuOptions) && menuOptions.length > 0) {
-            console.log(`✅ FOUND CATALOG BY MENU OPTIONS: "${response.trigger}"`);
-            return response;
+            // Verificar si alguna opción del menú es sobre productos
+            const hasProductOptions = menuOptions.some(option => {
+              const label = (option.label || '').toLowerCase();
+              const value = (option.value || '').toLowerCase();
+              const action = (option.action || '').toLowerCase();
+              
+              return label.includes('producto') || label.includes('catálogo') ||
+                     value.includes('product') || value.includes('catalog') ||
+                     action.includes('show_products') || action.includes('products');
+            });
+            
+            if (hasProductOptions) {
+              console.log(`✅ FOUND CATALOG BY MENU OPTIONS: "${response.trigger}"`);
+              return response;
+            }
           }
         } catch (e) {
           // Ignorar errores de parsing
@@ -5004,9 +5051,10 @@ async function findCatalogAutoResponse(storeId: number, tenantStorage: any): Pro
  */
 async function sendCatalogFromAutoResponse(phoneNumber: string, catalogResponse: any, storeId: number): Promise<void> {
   try {
-    console.log(`📤 SENDING CATALOG FROM AUTO-RESPONSE`);
+    console.log(`📤 SENDING CATALOG FROM AUTO-RESPONSE: "${catalogResponse.name}"`);
     
-    const message = catalogResponse.message || 'Aquí tienes nuestro catálogo:';
+    // ✅ Usar messageText o message como contenido
+    const message = catalogResponse.messageText || catalogResponse.message || 'Aquí tienes nuestro catálogo:';
     
     // ✅ VERIFICAR SI TIENE OPCIONES DE MENÚ
     if (catalogResponse.menuOptions) {
@@ -5023,27 +5071,34 @@ async function sendCatalogFromAutoResponse(phoneNumber: string, catalogResponse:
       if (Array.isArray(menuOptions) && menuOptions.length > 0) {
         console.log(`📋 SENDING CATALOG WITH ${menuOptions.length} MENU OPTIONS`);
         
-        // Convertir a estructura de botones de WhatsApp
-        const buttons = menuOptions.slice(0, 3).map((option, index) => ({
-          type: 'reply',
+        // ✅ USAR LA FUNCIÓN SENDINTERACTIVEMESSAGE QUE YA TIENES
+        // Convertir menuOptions al formato que espera sendInteractiveMessage
+        const formattedOptions = menuOptions.map((option, index) => ({
           reply: {
             id: option.value || option.action || `catalog_${index}`,
             title: (option.label || `Opción ${index + 1}`).substring(0, 20)
           }
         }));
         
-        await sendWhatsAppMessageWithButtonsAlternative(phoneNumber, message, buttons, storeId);
+        console.log(`🔄 Formatted options:`, JSON.stringify(formattedOptions, null, 2));
+        
+        await sendInteractiveMessage(phoneNumber, message, formattedOptions, { storeId });
+        console.log(`✅ Interactive catalog message sent successfully`);
         return;
       }
     }
     
-    // Sin opciones de menú, enviar como mensaje simple
+    // ✅ Sin opciones de menú, enviar como mensaje simple
     console.log(`📤 SENDING CATALOG AS SIMPLE MESSAGE`);
     await sendWhatsAppMessageDirect(phoneNumber, message, storeId);
+    console.log(`✅ Simple catalog message sent successfully`);
     
   } catch (error) {
     console.error('❌ Error sending catalog from auto-response:', error);
-    await sendWhatsAppMessageDirect(phoneNumber, catalogResponse.message || 'Error enviando catálogo', storeId);
+    
+    // Fallback en caso de error
+    const fallbackMessage = catalogResponse.messageText || catalogResponse.message || 'Error enviando catálogo';
+    await sendWhatsAppMessageDirect(phoneNumber, fallbackMessage, storeId);
   }
 }
 
@@ -5051,13 +5106,21 @@ async function sendCatalogFromAutoResponse(phoneNumber: string, catalogResponse:
  * 📋 Enviar mensaje de catálogo por defecto
  */
 async function sendDefaultCatalogMessage(phoneNumber: string, storeId: number): Promise<void> {
-  const defaultMessage = `🛍️ *¡Bienvenido a nuestro catálogo!*\n\n` +
-    `📱 Aquí puedes ver todos nuestros productos disponibles.\n\n` +
-    `💡 *¿Cómo ordenar?*\n` +
-    `Simplemente dime qué producto te interesa y te ayudo con tu pedido.\n\n` +
-    `¿Qué te gustaría ordenar hoy?`;
-  
-  await sendWhatsAppMessageDirect(phoneNumber, defaultMessage, storeId);
+  try {
+    console.log(`📋 SENDING DEFAULT CATALOG MESSAGE`);
+    
+    const defaultMessage = `🛍️ *¡Bienvenido a nuestro catálogo!*\n\n` +
+      `📱 Aquí puedes ver todos nuestros productos disponibles.\n\n` +
+      `💡 *¿Cómo ordenar?*\n` +
+      `Simplemente dime qué producto te interesa y te ayudo con tu pedido.\n\n` +
+      `¿Qué te gustaría ordenar hoy?`;
+    
+    await sendWhatsAppMessageDirect(phoneNumber, defaultMessage, storeId);
+    console.log(`✅ Default catalog message sent successfully`);
+    
+  } catch (error) {
+    console.error('❌ Error sending default catalog message:', error);
+  }
 }
 /**
  * 💬 Manejar solicitud de soporte
