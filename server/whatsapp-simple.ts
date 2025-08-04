@@ -2906,6 +2906,7 @@ async function sendAutoResponseMessage(phoneNumber: string, trigger: string, sto
 // ========================================
 
 // ✅ FUNCIÓN 1: sendInteractiveMessage
+
 async function sendInteractiveMessage(phoneNumber: string, messageText: string, menuOptions: any[], config: any): Promise<void> {
   try {
     console.log(`📤 SENDING INTERACTIVE MESSAGE - To: ${phoneNumber}, Buttons: ${menuOptions.length}`);
@@ -2923,7 +2924,11 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
 
     const url = `https://graph.facebook.com/v22.0/${freshConfig.phoneNumberId}/messages`;
     
-    // ✅ PREPARAR BOTONES CON VALIDACIÓN SEGURA
+    // ✅ DETECTAR SI ES FLUJO DE ÓRDENES PENDIENTES
+    const isOrderFlow = await detectOrderFlow(phoneNumber, messageText, config);
+    console.log(`🔍 Order flow detected: ${isOrderFlow}`);
+    
+    // ✅ PREPARAR BOTONES CON VALIDACIÓN SEGURA Y LÓGICA MEJORADA
     const buttons = menuOptions.slice(0, 3).map((option, index) => {
       // Validar que option existe
       if (!option || typeof option !== 'object') {
@@ -2937,31 +2942,61 @@ async function sendInteractiveMessage(phoneNumber: string, messageText: string, 
         };
       }
 
-      // Extraer label de forma segura
-      let title = `Opción ${index + 1}`; // Default más claro
-if (option.title && typeof option.title === 'string' && option.title.trim() !== '') {
-  title = option.title.trim();
-  console.log(`✅ USING TITLE: "${title}"`);
-} else if (option.label && typeof option.label === 'string' && option.label.trim() !== '') {
-  title = option.label.trim();
-  console.log(`✅ USING LABEL: "${title}"`);
-}
+      console.log(`🔍 PROCESSING BUTTON ${index}:`, JSON.stringify(option, null, 2));
+
+      // ✅ NUEVA LÓGICA: Buscar el título en el orden correcto según el contexto
+      let title = `Opción ${index + 1}`; // Default fallback
+
+      // 1. Primero buscar en reply.title (estructura de WhatsApp)
+      if (option.reply && option.reply.title && typeof option.reply.title === 'string' && option.reply.title.trim() !== '') {
+        title = option.reply.title.trim();
+        console.log(`✅ USING reply.title: "${title}"`);
+      }
+      // 2. Luego buscar en title directo
+      else if (option.title && typeof option.title === 'string' && option.title.trim() !== '') {
+        title = option.title.trim();
+        console.log(`✅ USING title: "${title}"`);
+      }
+      // 3. Después buscar en label
+      else if (option.label && typeof option.label === 'string' && option.label.trim() !== '') {
+        title = option.label.trim();
+        console.log(`✅ USING label: "${title}"`);
+      }
+      // 4. Finalmente description
+      else if (option.description && typeof option.description === 'string' && option.description.trim() !== '') {
+        title = option.description.trim();
+        console.log(`✅ USING description: "${title}"`);
+      }
+      // 5. Para órdenes específicas, generar título descriptivo
+      else if (isOrderFlow) {
+        if (option.orderNumber) {
+          title = `Pedido #${option.orderNumber}`;
+        } else if (option.value && option.value.includes('order_')) {
+          const orderId = option.value.replace('order_', '');
+          title = `Pedido #${orderId}`;
+        }
+        console.log(`✅ ORDER FLOW - GENERATED TITLE: "${title}"`);
+      }
 
       // Extraer ID de forma segura
       let buttonId = `btn_${index}`;
-      if (option.action && typeof option.action === 'string') {
-        buttonId = option.action;
-      } else if (option.value && typeof option.value === 'string') {
-        buttonId = option.value;
+      if (option.reply && option.reply.id && typeof option.reply.id === 'string') {
+        buttonId = option.reply.id;
       } else if (option.id && typeof option.id === 'string') {
         buttonId = option.id;
+      } else if (option.value && typeof option.value === 'string') {
+        buttonId = option.value;
+      } else if (option.action && typeof option.action === 'string') {
+        buttonId = option.action;
       }
+
+      console.log(`✅ FINAL BUTTON: ID="${buttonId}", TITLE="${title}"`);
 
       return {
         type: 'reply',
         reply: {
           id: buttonId,
-          title: title.substring(0, 20) // ✅ AHORA ES SEGURO porque title siempre es string
+          title: title.substring(0, 20) // WhatsApp límite de 20 caracteres
         }
       };
     });
@@ -3015,6 +3050,46 @@ if (option.title && typeof option.title === 'string' && option.title.trim() !== 
     } catch (fallbackError) {
       console.error('❌ FALLBACK ALSO FAILED:', fallbackError);
     }
+  }
+}
+
+async function detectOrderFlow(phoneNumber: string, messageText: string, config: any): Promise<boolean> {
+  try {
+    // 1. Verificar si el mensaje contiene palabras clave de órdenes
+    const orderKeywords = [
+      'pedido', 'orden', 'seguimiento', 'tracking', 'estado',
+      'pendiente', 'proceso', 'detalles', 'modificar', 'cancelar'
+    ];
+    
+    const messageTextLower = messageText.toLowerCase();
+    const hasOrderKeywords = orderKeywords.some(keyword => 
+      messageTextLower.includes(keyword)
+    );
+
+    // 2. Verificar si hay órdenes pendientes para este cliente
+    if (config.storeId) {
+     const { storageFactory } = await import('./storage/index.js');
+const tenantStorage = await storageFactory.getTenantStorage(config.storeId);
+      
+      if (tenantStorage) {
+        const customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+        if (customer) {
+          const allOrders = await tenantStorage.getAllOrders();
+          const customerOrders = allOrders.filter(order => order.customerId === customer.id);
+          const pendingOrders = customerOrders.filter(order => 
+            ['pending', 'created', 'confirmed', 'preparing', 'in_transit'].includes(order.status)
+          );
+          
+          // Es flujo de órdenes si tiene órdenes pendientes Y menciona palabras clave
+          return pendingOrders.length > 0 && hasOrderKeywords;
+        }
+      }
+    }
+
+    return hasOrderKeywords;
+  } catch (error) {
+    console.error('❌ Error detecting order flow:', error);
+    return false;
   }
 }
 
