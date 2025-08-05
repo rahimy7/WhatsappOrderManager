@@ -1574,19 +1574,56 @@ async createDefaultAutoResponses() {
         throw error;
       }
     },
-
-    async updateConversation(id: number, updates: any) {
-      try {
-        const [conversation] = await tenantDb.update(schema.conversations)
-          .set({ ...updates, updatedAt: new Date() })
-          .where(eq(schema.conversations.id, id))
-          .returning();
-        return conversation;
-      } catch (error) {
-        console.error('Error updating conversation:', error);
-        throw error;
-      }
-    },
+async updateConversation(id: number, updates: any) {
+  try {
+    console.log(`🔄 Updating conversation ${id} with:`, Object.keys(updates));
+    
+    const [conversation] = await tenantDb.update(schema.conversations)
+      .set({ 
+        ...updates, 
+        updatedAt: new Date() 
+      })
+      .where(eq(schema.conversations.id, id))
+      .returning();
+      
+    if (conversation) {
+      console.log(`✅ Conversation ${id} updated successfully`);
+    } else {
+      console.log(`⚠️ Conversation ${id} not found for update`);
+    }
+    
+    return conversation;
+  } catch (error) {
+    console.error('❌ Error updating conversation:', error);
+    throw error;
+  }
+},
+ async getConversationWithCustomer(conversationId: number) {
+  try {
+    const [result] = await tenantDb.select({
+      // Campos de conversación
+      id: schema.conversations.id,
+      customerId: schema.conversations.customerId,
+      status: schema.conversations.status,
+      lastMessageAt: schema.conversations.lastMessageAt,
+      createdAt: schema.conversations.createdAt,
+      
+      // Información del cliente
+      customerPhone: schema.customers.phone,
+      customerName: schema.customers.name,
+      customerAddress: schema.customers.address
+    })
+    .from(schema.conversations)
+    .leftJoin(schema.customers, eq(schema.conversations.customerId, schema.customers.id))
+    .where(eq(schema.conversations.id, conversationId))
+    .limit(1);
+    
+    return result || null;
+  } catch (error) {
+    console.error('Error getting conversation with customer:', error);
+    return null;
+  }
+},
      async getAllMessages() {
       try {
         return await tenantDb.select()
@@ -1610,38 +1647,57 @@ async createDefaultAutoResponses() {
       }
     },
 
-    async createMessage(messageData: any) {
-      try {
-        console.log('📝 CREATING MESSAGE - Data:', messageData);
+ async createMessage(messageData: any) {
+  try {
+    console.log('📝 CREATING MESSAGE - Data:', {
+      conversationId: messageData.conversationId,
+      content: messageData.content ? messageData.content.substring(0, 50) + '...' : 'No content',
+      isFromCustomer: messageData.isFromCustomer,
+      whatsappMessageId: messageData.whatsappMessageId
+    });
 
-        const messageToInsert = {
-          conversationId: messageData.conversationId,
-          senderId: messageData.senderId || null,
-          senderType: messageData.senderType,
-          content: messageData.content,
-          messageType: messageData.messageType || 'text',
-          whatsappMessageId: messageData.whatsappMessageId || null,
-          isRead: messageData.isRead || false,
-          sentAt: new Date(),
-          createdAt: new Date()
-        };
+    // ✅ MAPEAR CORRECTAMENTE LOS CAMPOS
+    const messageToInsert = {
+      conversationId: messageData.conversationId,
+      senderId: messageData.senderId || null,
+      content: messageData.content,
+      messageType: messageData.messageType || 'text',
+      whatsappMessageId: messageData.whatsappMessageId || null,
+      isFromCustomer: messageData.isFromCustomer || false,
+      isRead: messageData.isRead || false,
+      sentAt: new Date(),
+      createdAt: new Date()
+    };
 
-        const [message] = await tenantDb.insert(schema.messages)
-          .values(messageToInsert)
-          .returning();
+    const [message] = await tenantDb.insert(schema.messages)
+      .values(messageToInsert)
+      .returning();
 
-        // ✅ Actualizar lastMessageAt de la conversación
-        await tenantDb.update(schema.conversations)
-          .set({ lastMessageAt: new Date() })
-          .where(eq(schema.conversations.id, messageData.conversationId));
+    // ✅ ACTUALIZAR lastMessageAt de la conversación
+    if (messageData.conversationId) {
+      await tenantDb.update(schema.conversations)
+        .set({ 
+          lastMessageAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(schema.conversations.id, messageData.conversationId));
+    }
 
-        console.log('✅ MESSAGE CREATED - ID:', message.id);
-        return message;
-      } catch (error) {
-        console.error('❌ ERROR CREATING MESSAGE:', error);
-        throw error;
-      }
-    },
+    console.log('✅ MESSAGE CREATED - ID:', message.id);
+    return message;
+  } catch (error) {
+    console.error('❌ ERROR CREATING MESSAGE:', error);
+    
+    // ✅ LOGGING DETALLADO DEL ERROR
+    if (error.code === '23503') {
+      console.error('   → Foreign key violation - conversationId might not exist');
+    } else if (error.code === '23505') {
+      console.error('   → Duplicate key - whatsappMessageId might already exist'); 
+    }
+    
+    throw error;
+  }
+},
 
     async updateMessage(id: number, updates: any) {
       try {
@@ -1679,27 +1735,29 @@ async createDefaultAutoResponses() {
       }
     },
 
-    // ✅ HELPERS
-    async getOrCreateConversationByPhone(phone: string, storeId: number) {
-      try {
-        // 1. Buscar conversación existente
-        let conversation = await this.getConversationByCustomerPhone(phone);
-        
-        if (conversation) {
-          console.log('✅ EXISTING CONVERSATION FOUND - ID:', conversation.id);
-          return conversation;
-        }
-        
-        // 2. Si no existe, buscar o crear cliente
-        let customer = await this.getCustomerByPhone(phone);
+
+async getOrCreateConversationByPhone(phone: string, storeId: number) {
+  try {
+    console.log(`🔍 GETTING OR CREATING CONVERSATION for phone: ${phone}`);
+    
+    // 1. Buscar conversación existente
+    let conversation = await this.getConversationByCustomerPhone(phone);
+    
+    if (conversation) {
+      console.log(`✅ EXISTING CONVERSATION FOUND - ID: ${conversation.id}`);
+      return conversation;
+    }
+    
+    // 2. Si no existe, buscar o crear cliente
+    let customer = await this.getCustomerByPhone(phone);
+    
     if (!customer) {
-      console.log('➕ CREATING NEW CUSTOMER FOR CONVERSATION');
+      console.log(`➕ CREATING NEW CUSTOMER for phone: ${phone}`);
       
-      // ✅ CORRECCIÓN: Usar los campos correctos
       customer = await this.createCustomer({
         name: `Cliente ${phone.slice(-4)}`,
-        phone: phone,                   // ✅ CORRECTO: "phone" no "phoneNumber"  
-        storeId: storeId,              // ✅ AGREGAR: storeId requerido
+        phone: phone,
+        storeId: storeId,
         whatsappId: phone,
         address: null,
         latitude: null,
@@ -1711,21 +1769,131 @@ async createDefaultAutoResponses() {
         isVip: false,
         notes: 'Cliente creado automáticamente desde WhatsApp'
       });
+      
+      console.log(`✅ NEW CUSTOMER CREATED - ID: ${customer.id}`);
+    } else {
+      console.log(`✅ EXISTING CUSTOMER FOUND - ID: ${customer.id}`);
     }
-        
-        // 3. Crear nueva conversación
-        console.log('➕ CREATING NEW CONVERSATION');
+    
+    // 3. Crear nueva conversación
+    console.log(`➕ CREATING NEW CONVERSATION for customer: ${customer.id}`);
+    
     conversation = await this.createConversation({
       customerId: customer.id,
-      conversationType: 'initial',
+      conversationType: 'whatsapp',
       status: 'active',
-      storeId: storeId
+      storeId: storeId,
+      lastMessageAt: new Date()
     });
     
+    console.log(`✅ NEW CONVERSATION CREATED - ID: ${conversation.id}`);
     return conversation;
+    
   } catch (error) {
-    console.error('Error getting or creating conversation by phone:', error);
+    console.error('❌ Error getting or creating conversation by phone:', error);
     throw error;
+  }
+},
+
+// 🔧 FUNCIÓN DE VERIFICACIÓN DE SALUD
+async verifyConversationHealth(): Promise<{
+  isHealthy: boolean;
+  issues: string[];
+  stats: any;
+}> {
+  try {
+    const issues: string[] = [];
+    
+    // Contar conversaciones sin cliente
+    const orphanConversations = await tenantDb.select({ count: count() })
+      .from(schema.conversations)
+      .leftJoin(schema.customers, eq(schema.conversations.customerId, schema.customers.id))
+      .where(eq(schema.customers.id, null));
+    
+    if (orphanConversations[0].count > 0) {
+      issues.push(`${orphanConversations[0].count} conversaciones sin cliente válido`);
+    }
+    
+    // Contar mensajes sin conversación
+    const orphanMessages = await tenantDb.select({ count: count() })
+      .from(schema.messages)
+      .leftJoin(schema.conversations, eq(schema.messages.conversationId, schema.conversations.id))
+      .where(eq(schema.conversations.id, null));
+    
+    if (orphanMessages[0].count > 0) {
+      issues.push(`${orphanMessages[0].count} mensajes sin conversación válida`);
+    }
+    
+    // Stats generales
+    const totalConversations = await tenantDb.select({ count: count() })
+      .from(schema.conversations);
+    
+    const totalMessages = await tenantDb.select({ count: count() })
+      .from(schema.messages);
+    
+    const totalCustomers = await tenantDb.select({ count: count() })
+      .from(schema.customers);
+    
+    const stats = {
+      totalConversations: totalConversations[0].count,
+      totalMessages: totalMessages[0].count,
+      totalCustomers: totalCustomers[0].count,
+      orphanConversations: orphanConversations[0].count,
+      orphanMessages: orphanMessages[0].count
+    };
+    
+    return {
+      isHealthy: issues.length === 0,
+      issues,
+      stats
+    };
+    
+  } catch (error) {
+    console.error('Error verifying conversation health:', error);
+    return {
+      isHealthy: false,
+      issues: [`Error verificando salud: ${error.message}`],
+      stats: {}
+    };
+  }
+},
+
+// 🧹 FUNCIÓN DE LIMPIEZA
+async cleanupOrphanData(): Promise<{
+  conversationsFixed: number;
+  messagesFixed: number;
+}> {
+  try {
+    console.log('🧹 CLEANING UP ORPHAN DATA...');
+    
+    let conversationsFixed = 0;
+    let messagesFixed = 0;
+    
+    // Eliminar conversaciones sin cliente válido
+    const deletedConversations = await tenantDb.delete(schema.conversations)
+      .where(
+        sql`customer_id NOT IN (SELECT id FROM ${schema.customers})`
+      )
+      .returning();
+    
+    conversationsFixed = deletedConversations.length;
+    
+    // Eliminar mensajes sin conversación válida  
+    const deletedMessages = await tenantDb.delete(schema.messages)
+      .where(
+        sql`conversation_id NOT IN (SELECT id FROM ${schema.conversations})`
+      )
+      .returning();
+    
+    messagesFixed = deletedMessages.length;
+    
+    console.log(`✅ CLEANUP COMPLETED: ${conversationsFixed} conversations, ${messagesFixed} messages`);
+    
+    return { conversationsFixed, messagesFixed };
+    
+  } catch (error) {
+    console.error('❌ Error cleaning up orphan data:', error);
+    return { conversationsFixed: 0, messagesFixed: 0 };
   }
 },
 

@@ -1554,7 +1554,7 @@ async function processAutoResponseResilient(
   }
 }
 
-export async function processIncomingUserMessage(webhookData: any, storeMapping: any): Promise<void> {
+/* export async function processIncomingUserMessage(webhookData: any, storeMapping: any): Promise<void> {
   try {
     console.log('📱 Processing incoming user message - FIXED VERSION');
     
@@ -1781,10 +1781,241 @@ console.log(`❌ NOT HANDLED BY ORDER VALIDATION - Continuing with normal flow`)
     
     throw error;
   }
+} */
+
+export async function processIncomingUserMessage(webhookData: any, storeMapping: any): Promise<void> {
+  try {
+    console.log('\n📱 ===== PROCESANDO MENSAJE ENTRANTE - VERSIÓN MEJORADA =====');
+    
+    const entry = webhookData.entry?.[0];
+    if (!entry) {
+      throw new Error('NO ENTRY FOUND in webhook data');
+    }
+
+    const changes = entry.changes?.[0];
+    if (!changes) {
+      throw new Error('NO CHANGES FOUND in webhook data');
+    }
+
+    const value = changes.value;
+    if (!value?.messages || !Array.isArray(value.messages)) {
+      console.log('⚠️ No messages in webhook data');
+      return;
+    }
+
+    const tenantStorage = await getTenantStorage(storeMapping.storeId);
+    
+    // 🔄 PROCESAR CADA MENSAJE
+    for (const message of value.messages) {
+      try {
+        console.log(`\n📩 ===== PROCESANDO MENSAJE INDIVIDUAL =====`);
+        console.log(`📞 From: ${message.from}`);
+        console.log(`💬 Content: ${message.text?.body?.substring(0, 100) || 'No text content'}...`);
+        console.log(`🆔 WhatsApp ID: ${message.id}`);
+        console.log(`📦 Type: ${message.type}`);
+        
+        // 🚨 PASO CRÍTICO: GARANTIZAR CONVERSACIÓN Y GUARDAR MENSAJE
+        const { conversationId, messageId } = await ensureConversationAndSaveMessage(
+          message,
+          storeMapping.storeId,
+          tenantStorage
+        );
+        
+        console.log(`✅ MENSAJE GUARDADO:`);
+        console.log(`   - DB Message ID: ${messageId}`);
+        console.log(`   - Conversation ID: ${conversationId}`);
+
+        // ✅ REGISTRAR EN LOGS DE WHATSAPP (sistema central)
+        const masterStorage = getMasterStorage();
+        await masterStorage.addWhatsAppLog({
+          type: 'incoming',
+          phoneNumber: message.from,
+          messageContent: message.text?.body || 'Mensaje multimedia',
+          messageId: message.id,
+          status: 'received',
+          rawData: JSON.stringify(message),
+          storeId: storeMapping.storeId
+        });
+
+        // 🤖 PROCESAR AUTO-RESPUESTAS (tu lógica existente)
+        const messageText = message.text?.body || '';
+        
+        if (messageText.trim()) {
+          console.log(`🤖 Procesando auto-respuestas para: "${messageText}"`);
+          
+          try {
+            await processAutoResponse(messageText, message.from, storeMapping.storeId, tenantStorage);
+            console.log(`✅ Auto-respuestas procesadas`);
+          } catch (autoResponseError) {
+            console.error('❌ Error en auto-respuestas:', autoResponseError);
+            // No fallar por errores de auto-respuesta
+          }
+        }
+
+        console.log(`✅ Mensaje ${message.id} procesado completamente`);
+
+      } catch (messageError) {
+        console.error(`❌ Error procesando mensaje individual ${message.id}:`, messageError);
+        
+        // ✅ INTENTAR GUARDAR SOLO EL LOG DEL ERROR
+        try {
+          const masterStorage = getMasterStorage();
+          await masterStorage.addWhatsAppLog({
+            type: 'error',
+            phoneNumber: message.from || 'UNKNOWN',
+            messageContent: `Error procesando mensaje: ${messageError.message}`,
+            messageId: message.id,
+            errorMessage: messageError.message,
+            rawData: JSON.stringify({ error: messageError.message, message }),
+            storeId: storeMapping.storeId
+          });
+        } catch (logError) {
+          console.error('❌ Error logging individual message error:', logError);
+        }
+        
+        // Continuar con el siguiente mensaje
+      }
+    }
+    
+    console.log('✅ ===== TODOS LOS MENSAJES PROCESADOS =====\n');
+
+  } catch (error: any) {
+    console.error('💥 ERROR CRÍTICO EN processIncomingUserMessage:', error);
+    
+    // Log del error crítico
+    try {
+      const masterStorage = getMasterStorage();
+      await masterStorage.addWhatsAppLog({
+        type: 'error',
+        phoneNumber: 'PROCESSING_ERROR',
+        messageContent: `Error crítico procesando mensajes: ${error.message}`,
+        errorMessage: error.message,
+        rawData: JSON.stringify({ error: error.message, webhookData }),
+        storeId: storeMapping.storeId
+      });
+    } catch (logError) {
+      console.error('❌ Error logging crítico:', logError);
+    }
+    
+    throw error;
+  }
 }
 
+async function ensureConversationAndSaveMessage(
+  message: any,
+  storeId: number,
+  tenantStorage: any
+): Promise<{ conversationId: number; messageId: number }> {
+  try {
+    const phoneNumber = message.from;
+    const messageText = message.text?.body || message.text || '';
+    const messageId = message.id;
+    const messageType = message.type || 'text';
 
+    console.log(`📝 GUARDANDO MENSAJE: "${messageText.substring(0, 50)}..." de ${phoneNumber}`);
 
+    // 🔍 PASO 1: Obtener o crear conversación (usa tu método mejorado)
+    const conversation = await tenantStorage.getOrCreateConversationByPhone(phoneNumber, storeId);
+    
+    if (!conversation) {
+      throw new Error(`No se pudo obtener o crear conversación para ${phoneNumber}`);
+    }
+
+    console.log(`💬 Conversación obtenida/creada: ${conversation.id}`);
+
+    // 🔍 PASO 2: Guardar mensaje en la conversación
+    const savedMessage = await tenantStorage.createMessage({
+      conversationId: conversation.id,
+      whatsappMessageId: messageId,
+      senderId: null, // null porque es del cliente
+      content: messageText,
+      messageType: messageType,
+      isFromCustomer: true,
+      isRead: false,
+      storeId: storeId
+    });
+
+    console.log(`✅ MENSAJE GUARDADO EXITOSAMENTE:`);
+    console.log(`   - DB ID: ${savedMessage.id}`);
+    console.log(`   - Conversación: ${conversation.id}`);
+    console.log(`   - WhatsApp ID: ${messageId}`);
+
+    return {
+      conversationId: conversation.id,
+      messageId: savedMessage.id
+    };
+
+  } catch (error) {
+    console.error('❌ ERROR GUARDANDO MENSAJE Y CONVERSACIÓN:', error);
+    
+    // ✅ LOGGING DETALLADO PARA DEBUGGING
+    console.error('❌ Error details:', {
+      messageId: message.id,
+      phoneNumber: message.from,
+      errorCode: error.code,
+      errorMessage: error.message
+    });
+    
+    throw error;
+  }
+}
+
+export async function testWhatsAppMessageSaving(storeId: number): Promise<void> {
+  try {
+    console.log(`\n🧪 ===== PROBANDO SISTEMA COMPLETO DE GUARDADO =====`);
+    console.log(`🏪 Store ID: ${storeId}`);
+    
+    // 1. Verificar tenantStorage
+    const tenantStorage = await getTenantStorage(storeId);
+    console.log(`✅ TenantStorage obtenido`);
+    
+    // 2. Verificar métodos requeridos
+    const requiredMethods = [
+      'getCustomerByPhone',
+      'createCustomer', 
+      'getActiveConversationByCustomer',
+      'createConversation',
+      'createMessage',
+      'updateConversation',
+      'getOrCreateConversationByPhone'
+    ];
+    
+    for (const method of requiredMethods) {
+      if (typeof tenantStorage[method] !== 'function') {
+        throw new Error(`❌ Método ${method} no existe en tenantStorage`);
+      }
+      console.log(`✅ Método ${method} existe`);
+    }
+    
+    
+    // 4. Simular mensaje de prueba
+    const testMessage = {
+      id: 'test_msg_' + Date.now(),
+      from: '18091234567',
+      text: { body: 'Hola, mensaje de prueba para verificar guardado' },
+      type: 'text'
+    };
+    
+    console.log(`🧪 Simulando mensaje de prueba...`);
+    
+    const result = await ensureConversationAndSaveMessage(
+      testMessage,
+      storeId,
+      tenantStorage
+    );
+    
+    console.log(`✅ ===== PRUEBA EXITOSA =====`);
+    console.log(`📞 Conversación: ${result.conversationId}`);
+    console.log(`💬 Mensaje: ${result.messageId}`);
+    console.log(`✅ ===== SISTEMA FUNCIONANDO CORRECTAMENTE =====\n`);
+    
+  } catch (error) {
+    console.error('❌ ===== ERROR EN PRUEBA =====');
+    console.error('❌ Error:', error.message);
+    console.error('❌ ===== SISTEMA REQUIERE REPARACIÓN =====\n');
+    throw error;
+  }
+}
 /**
  * 📊 FUNCIÓN HELPER CORREGIDA - Procesa estados de mensaje
  */
@@ -5352,6 +5583,78 @@ function getOrderStatusText(status: string): string {
   
   return statusMap[status] || 'Desconocido';
 }
+
+
+async function saveIncomingMessageAndConversation(
+  message: any,
+  storeId: number,
+  tenantStorage: any
+): Promise<{ conversationId: number; messageId: number }> {
+  try {
+    const phoneNumber = message.from;
+    const messageText = message.text?.body || message.text || '';
+    const messageId = message.id;
+    const messageType = message.type || 'text';
+
+    console.log(`📝 GUARDANDO MENSAJE: "${messageText}" de ${phoneNumber}`);
+
+    // 🔍 PASO 1: Buscar o crear cliente
+    let customer = await tenantStorage.getCustomerByPhone(phoneNumber);
+    
+    if (!customer) {
+      console.log(`👤 Creando nuevo cliente para ${phoneNumber}`);
+      customer = await tenantStorage.createCustomer({
+        phone: phoneNumber,
+        name: `Cliente ${phoneNumber.slice(-4)}`,
+        storeId: storeId
+      });
+    }
+
+    // 🔍 PASO 2: Buscar conversación activa existente
+    let conversation = await tenantStorage.getActiveConversationByCustomer(customer.id);
+    
+    if (!conversation) {
+      console.log(`💬 Creando nueva conversación para cliente ${customer.id}`);
+      conversation = await tenantStorage.createConversation({
+        customerId: customer.id,
+        storeId: storeId,
+        status: 'active',
+        lastMessageAt: new Date()
+      });
+    }
+
+    // 🔍 PASO 3: Guardar mensaje en la conversación
+    const savedMessage = await tenantStorage.createMessage({
+      conversationId: conversation.id,
+      whatsappMessageId: messageId,
+      senderId: null, // null porque es del cliente
+      content: messageText,
+      messageType: messageType,
+      isFromCustomer: true,
+      isRead: false,
+      storeId: storeId
+    });
+
+    // 🔍 PASO 4: Actualizar última actividad de la conversación
+    await tenantStorage.updateConversation(conversation.id, {
+      lastMessageAt: new Date(),
+      status: 'active'
+    });
+
+    console.log(`✅ MENSAJE GUARDADO: ID ${savedMessage.id} en conversación ${conversation.id}`);
+
+    return {
+      conversationId: conversation.id,
+      messageId: savedMessage.id
+    };
+
+  } catch (error) {
+    console.error('❌ ERROR GUARDANDO MENSAJE:', error);
+    throw error;
+  }
+}
+
+
 
 // Agregar todas las demás funciones del código que me pasaste...
 

@@ -348,6 +348,7 @@ export const conversations = pgTable("conversations", {
   status: text("status").notNull().default("active"), // 'active', 'closed'
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
    storeId: integer("store_id").notNull(),
+   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 export const messages = pgTable("messages", {
