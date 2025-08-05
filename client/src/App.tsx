@@ -1,6 +1,7 @@
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+
+import ConversationsTest from './components/ConversationsTest';import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -204,7 +205,8 @@ function AppWithAuth() {
         ) : (
           <AppLayout>
             <Router />
-          </AppLayout>
+          
+                <Route path="/test-conversations" element={<ConversationsTest />} /></AppLayout>
         )}
       </Route>
     </Switch>

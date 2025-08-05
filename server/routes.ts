@@ -1051,18 +1051,26 @@ router.post('/products', authenticateToken, createProductHandler);
   });
 
   // ================================
-  // CONVERSATION ROUTES
+    // ================================
+  // CONVERSATION ROUTES - CORREGIDOS ✅
   // ================================
 
   router.get('/conversations', authenticateToken, async (req: any, res: any) => {
     try {
       const user = req.user as AuthUser;
+      console.log('📞 [GET /conversations] User store:', user.storeId);
+      
       const tenantStorage = await getTenantStorageForUser(user);
       const conversations = await tenantStorage.getAllConversations();
+      
+      console.log('✅ [GET /conversations] Found:', conversations.length, 'conversations');
       res.json(conversations);
     } catch (error) {
-      console.error('Error fetching conversations:', error);
-      res.status(500).json({ error: "Failed to fetch conversations" });
+      console.error('❌ [GET /conversations] Error:', error);
+      res.status(500).json({ 
+        error: "Failed to fetch conversations",
+        details: error.message 
+      });
     }
   });
 
@@ -1071,36 +1079,142 @@ router.post('/products', authenticateToken, createProductHandler);
       const id = parseInt(req.params.id);
       const user = req.user as AuthUser;
       
+      console.log('📞 [GET /conversations/:id] ID:', id, 'User store:', user.storeId);
+      
       const tenantStorage = await getTenantStorageForUser(user);
       const conversation = await tenantStorage.getConversationById(id);
       
       if (!conversation) {
+        console.log('⚠️ [GET /conversations/:id] Not found:', id);
         return res.status(404).json({ error: 'Conversation not found' });
       }
       
-      res.json(conversation);
+      // También obtener los mensajes
+      const messages = await tenantStorage.getMessagesByConversation(id);
+      
+      const result = {
+        ...conversation,
+        messages: messages || []
+      };
+      
+      console.log('✅ [GET /conversations/:id] Success:', id, 'with', messages?.length || 0, 'messages');
+      res.json(result);
     } catch (error) {
-      console.error('Error fetching conversation:', error);
-      res.status(500).json({ error: 'Failed to fetch conversation' });
+      console.error('❌ [GET /conversations/:id] Error:', error);
+      res.status(500).json({ 
+        error: 'Failed to fetch conversation',
+        details: error.message 
+      });
     }
   });
 
   router.post('/conversations', authenticateToken, async (req: any, res: any) => {
     try {
       const user = req.user as AuthUser;
-      const conversationData = { ...req.body, storeId: user.storeId };
+      console.log('📞 [POST /conversations] Creating:', req.body);
+      
+      const conversationData = { 
+        ...req.body, 
+        storeId: user.storeId,
+        createdAt: new Date(),
+        lastMessageAt: new Date()
+      };
       
       const tenantStorage = await getTenantStorageForUser(user);
       const conversation = await tenantStorage.createConversation(conversationData);
+      
+      console.log('✅ [POST /conversations] Created:', conversation.id);
       res.status(201).json(conversation);
     } catch (error) {
-      console.error('Error creating conversation:', error);
-      res.status(500).json({ error: "Failed to create conversation" });
+      console.error('❌ [POST /conversations] Error:', error);
+      res.status(500).json({ 
+        error: "Failed to create conversation",
+        details: error.message 
+      });
     }
   });
 
-  // ================================
-  // ORDER ROUTES
+  router.put('/conversations/:id', authenticateToken, async (req: any, res: any) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = req.user as AuthUser;
+      
+      console.log('📞 [PUT /conversations/:id] Updating:', id, req.body);
+      
+      const tenantStorage = await getTenantStorageForUser(user);
+      const conversation = await tenantStorage.updateConversation(id, {
+        ...req.body,
+        updatedAt: new Date()
+      });
+      
+      if (!conversation) {
+        console.log('⚠️ [PUT /conversations/:id] Not found:', id);
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+      
+      console.log('✅ [PUT /conversations/:id] Updated:', id);
+      res.json(conversation);
+    } catch (error) {
+      console.error('❌ [PUT /conversations/:id] Error:', error);
+      res.status(500).json({ 
+        error: "Failed to update conversation",
+        details: error.message 
+      });
+    }
+  });
+
+  router.get('/conversations/:id/messages', authenticateToken, async (req: any, res: any) => {
+    try {
+      const conversationId = parseInt(req.params.id);
+      const user = req.user as AuthUser;
+      
+      console.log('💬 [GET /conversations/:id/messages] Conversation:', conversationId);
+      
+      const tenantStorage = await getTenantStorageForUser(user);
+      const messages = await tenantStorage.getMessagesByConversation(conversationId);
+      
+      console.log('✅ [GET /conversations/:id/messages] Found:', messages.length, 'messages');
+      res.json(messages);
+    } catch (error) {
+      console.error('❌ [GET /conversations/:id/messages] Error:', error);
+      res.status(500).json({ 
+        error: "Failed to fetch messages",
+        details: error.message 
+      });
+    }
+  });
+
+  router.post('/conversations/:id/messages', authenticateToken, async (req: any, res: any) => {
+    try {
+      const conversationId = parseInt(req.params.id);
+      const user = req.user as AuthUser;
+      
+      console.log('💬 [POST /conversations/:id/messages] Creating message for conversation:', conversationId);
+      
+      const messageData = {
+        ...req.body,
+        conversationId: conversationId,
+        senderType: req.body.senderType || 'agent',
+        senderId: user.id,
+        createdAt: new Date(),
+        sentAt: new Date()
+      };
+      
+      const tenantStorage = await getTenantStorageForUser(user);
+      const message = await tenantStorage.createMessage(messageData);
+      
+      console.log('✅ [POST /conversations/:id/messages] Created message:', message.id);
+      res.status(201).json(message);
+    } catch (error) {
+      console.error('❌ [POST /conversations/:id/messages] Error:', error);
+      res.status(500).json({ 
+        error: "Failed to create message",
+        details: error.message 
+      });
+    }
+  });
+
+// ORDER ROUTES
   // ================================
 
 // server/routes.ts - Reemplazar la sección ORDER ROUTES (líneas ~42-80)

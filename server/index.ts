@@ -1235,11 +1235,15 @@ apiRouter.delete('/employees/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
     
     const tenantStorage = await getTenantStorageForUser(user);
-    const success = await tenantStorage.deleteEmployeeProfile(id);
     
-    if (!success) {
+    // Verificar si el empleado existe antes de eliminarlo
+    const employee = await tenantStorage.getEmployeeProfile(id);
+    if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
+    
+    // Eliminar el empleado (método void)
+    await tenantStorage.deleteEmployeeProfile(id);
     
     res.json({ success: true });
   } catch (error) {
@@ -1621,8 +1625,9 @@ apiRouter.delete('/whatsapp/logs/cleanup', authenticateToken, async (req, res) =
 // CONVERSATIONS ENDPOINTS (MASTER STORAGE)
 // ================================
 
-apiRouter.get('/conversations', authenticateToken, async (req, res) => {
-  try {
+// MOVED TO routes.ts - Endpoint moved to avoid conflicts
+  // apiRouter.get('/conversations', authenticateToken, async (req, res) => {
+/*   try {
     const user = (req as any).user;
     const conversations = await masterStorage.getAllConversations(user.storeId);
     res.json(conversations);
@@ -1630,10 +1635,11 @@ apiRouter.get('/conversations', authenticateToken, async (req, res) => {
     console.error('Error fetching conversations:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });
   }
-});
+}); */
 
-apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
-  try {
+// MOVED TO routes.ts - Endpoint moved to avoid conflicts
+  // apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
+/*   try {
     const id = parseInt(req.params.id);
     const conversation = await masterStorage.getConversation(id);
     
@@ -1646,7 +1652,7 @@ apiRouter.get('/conversations/:id', authenticateToken, async (req, res) => {
     console.error('Error fetching conversation:', error);
     res.status(500).json({ error: 'Failed to fetch conversation' });
   }
-});
+}); */
 
 // ================================
 // PRODUCTS ENDPOINTS (TENANT STORAGE)
@@ -1774,12 +1780,13 @@ apiRouter.post('/products', authenticateToken, async (req, res) => {
       tags: req.body.tags || null,
       salePrice: req.body.salePrice || null,
       isPromoted: Boolean(req.body.isPromoted),
+      storeId: user.storeId,
       promotionText: req.body.promotionText || null
     };
 
     console.log('📋 Processed product data:', JSON.stringify(productData, null, 2));
 
-    const product = await tenantStorage.createProduct(productData, user.storeId);
+    const product = await tenantStorage.createProduct(productData);
     
     console.log('✅ Product created successfully:', product);
     res.status(201).json(product);
@@ -2149,9 +2156,15 @@ apiRouter.get('/notifications/count', authenticateToken, async (req, res) => {
 apiRouter.get('/settings', authenticateToken, async (req, res) => {
   try {
     const user = (req as any).user;
-    const tenantStorage = await getTenantStorageForUser(user);
-    const settings = await tenantStorage.getStoreConfig();
-    res.json(settings);
+    
+    // Usar master storage para obtener configuración de la tienda
+    const storeSettings = await masterStorage.getVirtualStore(user.storeId);
+    
+    if (!storeSettings) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    
+    res.json(storeSettings);
   } catch (error) {
     console.error('Error fetching settings:', error);
     res.status(500).json({ error: 'Failed to fetch settings' });
