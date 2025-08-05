@@ -97,6 +97,8 @@ const upload = multer({
   }
 });
 
+
+
 // ================================
 // MIDDLEWARE DE LOGGING PARA DEBUG
 // ================================
@@ -104,6 +106,8 @@ app.use((req, res, next) => {
   console.log(`📝 ${req.method} ${req.path} - ${new Date().toISOString()}`);
   next();
 });
+
+
 
 // ================================
 // CORS CONFIGURATION
@@ -149,7 +153,12 @@ app.use(express.urlencoded({ extended: true }));
 // ================================
 // API ROUTER SETUP
 // ================================
+registerRoutes(app);
+
 const apiRouter = express.Router();
+
+// ✅ REGISTRAR EL apiRouter PARA ENDPOINTS ADICIONALES
+app.use('/api', apiRouter);
 
 // ================================
 // HEALTH & DEBUG ENDPOINTS

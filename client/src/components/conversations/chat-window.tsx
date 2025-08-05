@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiGet, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,38 +14,53 @@ interface ChatWindowProps {
   conversation: ConversationWithDetails | null;
 }
 
+interface CustomerDetails {
+  isVip: boolean;
+  totalOrders: number;
+}
+
 export default function ChatWindow({ conversation }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState("");
   const [showSendModal, setShowSendModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Fetch messages for the current conversation
-  const { data: messages = [], isLoading } = useQuery({
+  // Fetch messages
+  const { data: messages = [], isLoading } = useQuery<Message[]>({
     queryKey: ["/api/conversations", conversation?.id, "messages"],
-    queryFn: () => conversation?.id ? fetch(`/api/conversations/${conversation.id}/messages`).then(res => res.json()) : [],
+    queryFn: () =>
+      conversation?.id
+        ? apiGet<Message[]>(`/api/conversations/${conversation.id}/messages`)
+        : Promise.resolve([]),
     enabled: !!conversation?.id,
   });
 
-  // Fetch customer details with history
-  const { data: customerDetails } = useQuery({
+  // Fetch customer details
+  const { data: customerDetails } = useQuery<CustomerDetails | null>({
     queryKey: ["/api/customers", conversation?.customer.id, "details"],
-    queryFn: () => conversation?.customer.id ? fetch(`/api/customers/${conversation.customer.id}/details`).then(res => res.json()) : null,
+    queryFn: () =>
+      conversation?.customer.id
+        ? apiGet<CustomerDetails>(
+            `/api/customers/${conversation.customer.id}/details`
+          )
+        : Promise.resolve(null),
     enabled: !!conversation?.customer.id,
   });
 
-  // Send message mutation
+  // Send message
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!conversation) throw new Error("No conversation selected");
       return apiRequest("POST", `/api/conversations/${conversation.id}/messages`, {
         content,
         senderType: "staff",
-        messageType: "text"
+        messageType: "text",
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversation?.id, "messages"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/conversations", conversation?.id, "messages"],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setNewMessage("");
       toast({
@@ -62,7 +77,7 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
     },
   });
 
-  // Mark messages as read when conversation changes
+  // Mark as read
   useEffect(() => {
     if (conversation?.id) {
       apiRequest("POST", `/api/conversations/${conversation.id}/mark-read`, {});
@@ -70,7 +85,7 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
     }
   }, [conversation?.id]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Scroll bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -83,9 +98,9 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
   };
 
   const formatMessageTime = (date: string | Date) => {
-    return new Date(date).toLocaleTimeString('es-MX', {
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Date(date).toLocaleTimeString("es-MX", {
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -110,18 +125,16 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
   return (
     <div>
       <Card className="h-full flex flex-col">
-        {/* Chat Header - WhatsApp Style */}
+        {/* Header */}
         <CardHeader className="bg-green-50 border-b border-green-100 pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              {/* Customer Avatar */}
               <div className="relative">
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
                   <User className="text-white h-6 w-6" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
               </div>
-              
               <div className="flex-1">
                 <div className="flex items-center space-x-2 mb-1">
                   <CardTitle className="text-lg font-semibold text-gray-900">
@@ -135,27 +148,36 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
                 </div>
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
                   <Phone className="h-3 w-3" />
-                  <span className="font-medium">{conversation.customer.phone}</span>
+                  <span className="font-medium">
+                    {conversation.customer.phone}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <div className="flex items-center space-x-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs text-green-600 font-medium">En línea</span>
+                    <span className="text-xs text-green-600 font-medium">
+                      En línea
+                    </span>
                   </div>
                   {conversation.order && (
-                    <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 border-blue-200">
+                    <Badge
+                      variant="secondary"
+                      className="text-xs bg-blue-100 text-blue-700 border-blue-200"
+                    >
                       {conversation.order.orderNumber}
                     </Badge>
                   )}
                   {customerDetails && customerDetails.totalOrders > 0 && (
-                    <Badge variant="outline" className="text-xs border-gray-300 text-gray-600">
+                    <Badge
+                      variant="outline"
+                      className="text-xs border-gray-300 text-gray-600"
+                    >
                       📊 {customerDetails.totalOrders} pedidos
                     </Badge>
                   )}
                 </div>
               </div>
             </div>
-            
             <div className="flex items-center space-x-2">
               <Button
                 variant="outline"
@@ -170,7 +192,7 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
           </div>
         </CardHeader>
 
-        {/* Messages Area - WhatsApp Style Background */}
+        {/* Messages */}
         <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900">
           {isLoading ? (
             <div className="space-y-4">
@@ -184,27 +206,30 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
                 </div>
               ))}
             </div>
-          ) : messages && Array.isArray(messages) && messages.length > 0 ? (
+          ) : messages.length > 0 ? (
             <div className="space-y-3">
-              {messages.map((message: Message, index: number) => {
+              {messages.map((message, index) => {
                 const isFromCustomer = message.senderType === "customer";
-                const showAvatar = index === 0 || messages[index - 1]?.senderType !== message.senderType;
-                
+                const showAvatar =
+                  index === 0 ||
+                  messages[index - 1]?.senderType !== message.senderType;
+
                 return (
                   <div
                     key={message.id}
-                    className={`flex items-end gap-2 ${isFromCustomer ? "justify-start" : "justify-end"}`}
+                    className={`flex items-end gap-2 ${
+                      isFromCustomer ? "justify-start" : "justify-end"
+                    }`}
                   >
-                    {/* Avatar for customer messages */}
                     {isFromCustomer && (
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        showAvatar ? 'bg-blue-500' : 'invisible'
-                      }`}>
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          showAvatar ? "bg-blue-500" : "invisible"
+                        }`}
+                      >
                         {showAvatar && <User className="text-white h-4 w-4" />}
                       </div>
                     )}
-                    
-                    {/* Message Bubble */}
                     <div
                       className={`relative max-w-xs lg:max-w-md px-4 py-3 rounded-2xl shadow-sm ${
                         isFromCustomer
@@ -212,43 +237,24 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
                           : "bg-green-500 text-white"
                       }`}
                       style={{
-                        borderRadius: isFromCustomer 
-                          ? "18px 18px 18px 4px" 
-                          : "18px 18px 4px 18px"
+                        borderRadius: isFromCustomer
+                          ? "18px 18px 18px 4px"
+                          : "18px 18px 4px 18px",
                       }}
                     >
-                      {/* Message tail */}
-                      <div 
-                        className={`absolute bottom-0 w-0 h-0 ${
-                          isFromCustomer 
-                            ? "left-0 -ml-2 border-r-8 border-r-white border-t-8 border-t-transparent" 
-                            : "right-0 -mr-2 border-l-8 border-l-green-500 border-t-8 border-t-transparent"
+                      <p className="text-sm leading-relaxed break-words">
+                        {message.content}
+                      </p>
+                      <div
+                        className={`flex items-center justify-end gap-1 mt-2 ${
+                          isFromCustomer ? "text-gray-500" : "text-green-100"
                         }`}
-                      />
-                      
-                      <p className="text-sm leading-relaxed break-words">{message.content}</p>
-                      
-                      {/* Time and status */}
-                      <div className={`flex items-center justify-end gap-1 mt-2 ${
-                        isFromCustomer ? "text-gray-500" : "text-green-100"
-                      }`}>
+                      >
                         <span className="text-xs">
                           {formatMessageTime(message.sentAt)}
                         </span>
-                        {!isFromCustomer && (
-                          <div className="flex gap-0.5">
-                            <div className={`w-1 h-1 rounded-full ${
-                              message.whatsappMessageId ? 'bg-blue-300' : 'bg-gray-300'
-                            }`} />
-                            <div className={`w-1 h-1 rounded-full ${
-                              message.whatsappMessageId ? 'bg-blue-300' : 'bg-gray-300'
-                            }`} />
-                          </div>
-                        )}
                       </div>
                     </div>
-                    
-                    {/* Staff avatar placeholder */}
                     {!isFromCustomer && (
                       <div className="w-8 h-8 invisible flex-shrink-0" />
                     )}
@@ -259,13 +265,15 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
           ) : (
             <div className="text-center py-8">
               <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">No hay mensajes en esta conversación</p>
+              <p className="text-gray-500">
+                No hay mensajes en esta conversación
+              </p>
             </div>
           )}
           <div ref={messagesEndRef} />
         </CardContent>
 
-        {/* Message Input - WhatsApp Style */}
+        {/* Input */}
         <div className="bg-gray-50 border-t border-gray-200 p-4">
           <form onSubmit={handleSendMessage} className="flex items-end space-x-3">
             <div className="flex-1 relative">
@@ -275,12 +283,6 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
                 placeholder="Escribe un mensaje..."
                 className="rounded-full py-3 px-4 pr-12 resize-none border-gray-300 focus:border-green-500 focus:ring-green-500 bg-white shadow-sm"
                 disabled={sendMessageMutation.isPending}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage(e);
-                  }
-                }}
               />
             </div>
             <Button
@@ -301,8 +303,8 @@ export default function ChatWindow({ conversation }: ChatWindowProps) {
           </p>
         </div>
       </Card>
-      
-      {/* Send WhatsApp Message Modal */}
+
+      {/* Modal */}
       <SendMessageModal
         isOpen={showSendModal}
         onClose={() => setShowSendModal(false)}

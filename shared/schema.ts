@@ -368,7 +368,7 @@ export const messages = pgTable("messages", {
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(), // ✅ Agregar
   sentAt: timestamp("sent_at").defaultNow().notNull(),
-  isFromCustomer: boolean("is_from_customer").default(false), // ✅ Agregar
+  isFromCustomer: boolean("isFromCustomer").default(false), // ✅ Agregar
 });
 
 export const whatsappSettings = pgTable("whatsapp_settings", {
