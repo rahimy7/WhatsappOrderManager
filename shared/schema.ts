@@ -2,6 +2,7 @@ import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb } fr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { makeInsertSchema } from "./schema.utils";
+import e from "express";
 
 // ================================
 // SISTEMA MULTI-TENANT - TIENDAS VIRTUALES
@@ -204,6 +205,7 @@ export const customers = pgTable("customers", {
   notes: text("notes"),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  email: text("email").unique().notNull(),
 });
 
 
@@ -340,15 +342,16 @@ export const orderHistory = pgTable("order_history", {
 });
 
 export const conversations = pgTable("conversations", {
-  
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => customers.id).notNull(),
   orderId: integer("order_id").references(() => orders.id),
   conversationType: text("conversation_type").notNull().default("initial"), // 'initial', 'tracking', 'support'
   status: text("status").notNull().default("active"), // 'active', 'closed'
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
-   storeId: integer("store_id").notNull(),
-   createdAt: timestamp('created_at').notNull().defaultNow(),
+  storeId: integer("store_id").notNull(),
+  // ✅ Agregar campos faltantes
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const messages = pgTable("messages", {
@@ -365,6 +368,7 @@ export const messages = pgTable("messages", {
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(), // ✅ Agregar
   sentAt: timestamp("sent_at").defaultNow().notNull(),
+  isFromCustomer: boolean("is_from_customer").default(false), // ✅ Agregar
 });
 
 export const whatsappSettings = pgTable("whatsapp_settings", {

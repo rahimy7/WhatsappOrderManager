@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "../shared/schema.js";
 import { eq, desc, and, or, count, sql, ilike, asc, like, lt } from "drizzle-orm";
 import { getTenantDb } from "./multi-tenant-db.js";
-import { CustomerRegistrationFlow } from "../shared/schema.js";
+import { ConversationWithDetails, CustomerRegistrationFlow } from "../shared/schema.js";
 
 export function createTenantStorage(tenantDb: any, storeId: number) {
   return {
@@ -1511,18 +1511,179 @@ async createDefaultAutoResponses() {
   }
 },
 
+// ✅ Agregar este método en tenant-storage.ts
 
+async getAllConversations(): Promise<ConversationWithDetails[]> {
+  try {
+    console.log('📞 GETTING ALL CONVERSATIONS...');
+    
+    // ✅ Query principal con JOIN para obtener conversaciones con detalles de cliente
+    const conversationsWithCustomers = await tenantDb
+      .select({
+        // Campos de la conversación (después de la migración)
+        id: schema.conversations.id,
+        customerId: schema.conversations.customerId,
+        orderId: schema.conversations.orderId, 
+        conversationType: schema.conversations.conversationType,
+        status: schema.conversations.status,
+        lastMessageAt: schema.conversations.lastMessageAt,
+        storeId: schema.conversations.storeId,
+        createdAt: schema.conversations.createdAt,
+        updatedAt: schema.conversations.updatedAt,
+        
+        // Campos del cliente
+        customer: {
+          id: schema.customers.id,
+          name: schema.customers.name,
+          phone: schema.customers.phone,
+          email: schema.customers.email,
+          address: schema.customers.address,
+          whatsappId: schema.customers.whatsappId,
+          isVip: schema.customers.isVip,
+          totalOrders: schema.customers.totalOrders,
+          totalSpent: schema.customers.totalSpent,
+          lastContact: schema.customers.lastContact,
+          registrationDate: schema.customers.registrationDate,
+          storeId: schema.customers.storeId,
+          createdAt: schema.customers.createdAt,
+          updatedAt: schema.customers.updatedAt,
+        }
+      })
+      .from(schema.conversations)
+      .leftJoin(schema.customers, eq(schema.conversations.customerId, schema.customers.id))
+      .orderBy(desc(schema.conversations.lastMessageAt));
+
+    console.log(`✅ Found ${conversationsWithCustomers.length} conversations`);
+
+    // ✅ Enriquecer cada conversación con datos adicionales
+    const enrichedConversations = await Promise.all(
+      conversationsWithCustomers.map(async (conv) => {
+        try {
+          // Obtener el último mensaje
+          const [lastMessage] = await tenantDb
+            .select()
+            .from(schema.messages)
+            .where(eq(schema.messages.conversationId, conv.id))
+            .orderBy(desc(schema.messages.sentAt))
+            .limit(1);
+
+          // Contar mensajes no leídos del cliente
+          const [unreadResult] = await tenantDb
+            .select({ count: count() })
+            .from(schema.messages)
+            .where(
+              and(
+                eq(schema.messages.conversationId, conv.id),
+                eq(schema.messages.isFromCustomer, true),
+                eq(schema.messages.isRead, false)
+              )
+            );
+
+          // Buscar orden asociada (opcional)
+          let associatedOrder = null;
+          if (conv.customer?.id) {
+            const [order] = await tenantDb
+              .select()
+              .from(schema.orders)
+              .where(eq(schema.orders.customerId, conv.customer.id))
+              .orderBy(desc(schema.orders.createdAt))
+              .limit(1);
+            
+            associatedOrder = order || null;
+          }
+
+          // ✅ Construir el objeto ConversationWithDetails
+          const conversationWithDetails: ConversationWithDetails = {
+            // Campos base de la conversación
+            id: conv.id,
+            customerId: conv.customerId,
+            orderId: conv.orderId || null,
+            conversationType: conv.conversationType || 'whatsapp',
+            status: conv.status || 'active',
+            lastMessageAt: conv.lastMessageAt,
+            storeId: conv.storeId,
+            createdAt: conv.createdAt,
+            updatedAt: conv.updatedAt,
+            
+            // Cliente (requerido por el tipo)
+            customer: conv.customer || {
+              id: 0,
+              name: 'Cliente Desconocido',
+              phone: 'No disponible',
+              email: null,
+              address: null,
+              whatsappId: null,
+              isVip: false,
+              totalOrders: 0,
+              totalSpent: '0.00',
+              lastContact: new Date(),
+              registrationDate: new Date(),
+              storeId: conv.storeId,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              latitude: null,
+              longitude: null,
+              notes: null
+            },
+            
+            // Datos adicionales
+            lastMessage: lastMessage || undefined,
+            unreadCount: unreadResult?.count || 0,
+            order: associatedOrder || undefined,
+          };
+
+          return conversationWithDetails;
+        } catch (enrichError) {
+          console.error(`❌ Error enriching conversation ${conv.id}:`, enrichError);
+          
+          // ✅ Retornar conversación básica en caso de error
+          return {
+            id: conv.id,
+            customerId: conv.customerId,
+            orderId: conv.orderId || null,
+            conversationType: conv.conversationType || 'whatsapp',
+            status: conv.status || 'active',
+            lastMessageAt: conv.lastMessageAt,
+            storeId: conv.storeId,
+            createdAt: conv.createdAt,
+            updatedAt: conv.updatedAt,
+            customer: conv.customer || {
+              id: 0,
+              name: 'Cliente Desconocido',
+              phone: 'No disponible',
+              email: null,
+              address: null,
+              whatsappId: null,
+              isVip: false,
+              totalOrders: 0,
+              totalSpent: '0.00',
+              lastContact: new Date(),
+              registrationDate: new Date(),
+              storeId: conv.storeId,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              latitude: null,
+              longitude: null,
+              notes: null
+            },
+            unreadCount: 0,
+          } as ConversationWithDetails;
+        }
+      })
+    );
+
+    console.log(`✅ CONVERSATIONS ENRICHED: ${enrichedConversations.length} total`);
+    return enrichedConversations;
+
+  } catch (error) {
+    console.error('❌ ERROR GETTING ALL CONVERSATIONS:', error);
+    
+    // ✅ En caso de error crítico, retornar array vacío
+    return [];
+  }
+},
     // CONVERSATIONS
-    async getAllConversations() {
-      try {
-        return await tenantDb.select()
-          .from(schema.conversations)
-          .orderBy(desc(schema.conversations.lastMessageAt));
-      } catch (error) {
-        console.error('Error getting all conversations:', error);
-        return [];
-      }
-    },
+
 
     async getConversationById(id: number) {
       try {
