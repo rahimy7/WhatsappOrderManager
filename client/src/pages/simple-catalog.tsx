@@ -138,6 +138,8 @@ export default function OptimizedCatalog() {
     toast({
       title: "✅ Producto agregado",
       description: `${product.name} se agregó al carrito`,
+      // Configuración para aparecer en la parte superior
+      className: "top-0 right-0 flex fixed md:max-w-[420px] md:top-4 md:right-4",
     });
   };
 
@@ -170,6 +172,7 @@ export default function OptimizedCatalog() {
         title: "⚠️ Carrito vacío",
         description: "Agrega productos antes de enviar el pedido",
         variant: "destructive",
+        className: "top-0 right-0 flex fixed md:max-w-[420px] md:top-4 md:right-4",
       });
       return;
     }
@@ -180,6 +183,7 @@ export default function OptimizedCatalog() {
         title: "❌ Error",
         description: "No se encontró número de WhatsApp de la tienda",
         variant: "destructive",
+        className: "top-0 right-0 flex fixed md:max-w-[420px] md:top-4 md:right-4",
       });
       return;
     }
@@ -187,15 +191,15 @@ export default function OptimizedCatalog() {
     let message = `🛍️ *NUEVO PEDIDO - ${storeInfo?.name || 'Catálogo'}*\n\n`;
     
     cart.forEach((item, index) => {
-      message += `${index + 1}. *${item.name}*\n`;
+      message += `${index + 1}. *${item.name}*`;
+      message += `[ID:${item.id}]\n`;
       message += `   Cantidad: ${item.quantity}\n`;
       message += `   Precio unitario: $${formatCurrency(item.price)}\n`;
       message += `   Subtotal: $${formatCurrency(parseFloat(item.price) * item.quantity)}\n\n`;
     });
 
     message += `💰 *TOTAL: $${formatCurrency(getTotalPrice())}*\n\n`;
-    message += `📝 Por favor confirma la disponibilidad y tiempo de entrega.\n`;
-    message += `¡Gracias por tu preferencia! 😊`;
+ 
 
     const encodedMessage = encodeURIComponent(message);
     const cleanPhone = whatsappNumber.replace(/\D/g, '');
@@ -209,6 +213,7 @@ export default function OptimizedCatalog() {
     toast({
       title: "✅ ¡Pedido enviado!",
       description: "El carrito se vaciará la próxima vez que abras el catálogo",
+      className: "top-0 right-0 flex fixed md:max-w-[420px] md:top-4 md:right-4",
     });
   };
 
@@ -284,7 +289,7 @@ export default function OptimizedCatalog() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative">
       {/* Header */}
       <div className="bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -302,19 +307,6 @@ export default function OptimizedCatalog() {
                 <div className="text-sm text-emerald-100 bg-white/20 px-3 py-1 rounded-full">
                   {filteredProducts.length} productos
                 </div>
-                <Button
-                  onClick={() => setIsCartOpen(true)}
-                  className="bg-white/20 hover:bg-white/30 text-white border-white/30 relative"
-                  variant="outline"
-                >
-                  <ShoppingCart className="w-5 h-5 mr-2" />
-                  Carrito
-                  {getTotalItems() > 0 && (
-                    <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-6 h-6 rounded-full flex items-center justify-center">
-                      {getTotalItems()}
-                    </Badge>
-                  )}
-                </Button>
               </div>
             </div>
 
@@ -349,7 +341,7 @@ export default function OptimizedCatalog() {
       </div>
 
       {/* Grid de productos */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProducts.map((product: any) => (
             <Card key={product.id} className="group hover:shadow-xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm hover:bg-white/95">
@@ -414,6 +406,22 @@ export default function OptimizedCatalog() {
             </Card>
           ))}
         </div>
+      </div>
+
+      {/* 🚀 BOTÓN FLOTANTE DEL CARRITO */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={() => setIsCartOpen(true)}
+          className="relative bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white shadow-2xl hover:shadow-3xl transition-all duration-300 rounded-full w-16 h-16 p-0 transform hover:scale-110"
+          size="lg"
+        >
+          <ShoppingCart className="w-6 h-6" />
+          {getTotalItems() > 0 && (
+            <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-pulse shadow-lg">
+              {getTotalItems()}
+            </div>
+          )}
+        </Button>
       </div>
 
       {/* Modal de carrito */}

@@ -211,6 +211,7 @@ export default function PublicCatalogFixed() {
     
     cart.forEach((item, index) => {
       message += `${index + 1}. ${item.name}\n`;
+       message += `  [*${item.id}*]\n`;
       message += `   Cantidad: ${item.quantity}\n`;
       message += `   Precio unitario: $${formatCurrency(item.price)}\n`;
       message += `   Subtotal: $${formatCurrency(item.price * item.quantity)}\n\n`;
@@ -354,7 +355,7 @@ export default function PublicCatalogFixed() {
               src={product.images[0]}
               alt={product.name}
               className="w-full h-full object-cover"
-              crossOrigin="anonymous"            {/* ← evita 403 canvas */}
+              crossOrigin="anonymous"         
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
                 const stub = (e.target as HTMLElement)
