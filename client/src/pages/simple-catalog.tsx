@@ -187,7 +187,8 @@ export default function OptimizedCatalog() {
     let message = `🛍️ *NUEVO PEDIDO - ${storeInfo?.name || 'Catálogo'}*\n\n`;
     
     cart.forEach((item, index) => {
-      message += `${index + 1}. *${item.name}*\n`;
+      message += `${index + 1}. *${item.name}*`;
+      message += `[ID:$${item.id}]\n`;
       message += `   Cantidad: ${item.quantity}\n`;
       message += `   Precio unitario: $${formatCurrency(item.price)}\n`;
       message += `   Subtotal: $${formatCurrency(parseFloat(item.price) * item.quantity)}\n\n`;
