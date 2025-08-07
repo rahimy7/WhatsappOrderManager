@@ -188,15 +188,14 @@ export default function OptimizedCatalog() {
     
     cart.forEach((item, index) => {
       message += `${index + 1}. *${item.name}*`;
-      message += `[ID:$${item.id}]\n`;
+      message += `[ID:${item.id}]\n`;
       message += `   Cantidad: ${item.quantity}\n`;
       message += `   Precio unitario: $${formatCurrency(item.price)}\n`;
       message += `   Subtotal: $${formatCurrency(parseFloat(item.price) * item.quantity)}\n\n`;
     });
 
     message += `💰 *TOTAL: $${formatCurrency(getTotalPrice())}*\n\n`;
-    message += `📝 Por favor confirma la disponibilidad y tiempo de entrega.\n`;
-    message += `¡Gracias por tu preferencia! 😊`;
+ 
 
     const encodedMessage = encodeURIComponent(message);
     const cleanPhone = whatsappNumber.replace(/\D/g, '');
